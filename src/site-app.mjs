@@ -34,7 +34,8 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'database';
     const database = openDatabase(databaseUrl);
     stage = 'desk';
-    const desk = createTenderDesk({ database, dataset, founderToken, backtest: backtestFromJson(backtestJson, dataset) });
+    const desk = createTenderDesk({ database, dataset, founderToken, backtest: backtestFromJson(backtestJson, dataset),
+      connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } });
     return {
       console: createConsoleHandler({ founder: desk.founder, founderToken, auth, dataset, basePath: publicBase, secureCookies: true }),
       mcp: createMcpWebHandler({ authenticate: (token) => desk.agent(token) }),

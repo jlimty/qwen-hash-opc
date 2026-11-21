@@ -28,7 +28,8 @@ try {
   const founderToken = await loadFounderToken(founderTokenPath);
   const consolePort = Number(process.env.TENDER_DESK_CONSOLE_PORT ?? 8789);
   if (!Number.isInteger(consolePort) || consolePort < 0 || consolePort > 65535) throw new Error('TENDER_DESK_CONSOLE_PORT must be an integer from 0 to 65535.');
-  const desk = createTenderDesk({ database, dataset, founderToken });
+  const desk = createTenderDesk({ database, dataset, founderToken,
+    connector: { url: `http://127.0.0.1:${port}/mcp`, origin: `http://127.0.0.1:${port}`, timeout: 60 } });
   const tokenDir = join(stateDir, 'agent-tokens');
 
   server = createTenderDeskServer({ authenticate: desk.agent });

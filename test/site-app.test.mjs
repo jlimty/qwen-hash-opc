@@ -26,7 +26,7 @@ const resetRequests = [];
 const validResetToken = 'valid-reset-token-000000';
 const openDatabase = (url) => createPgDatabase(connectPg(postgres, url, { max: 1, ssl: false }));
 const openFast = (url) => createPgDatabase(connectPg(postgres, url, { max: 1, ssl: false, connect_timeout: 2 }));
-let pglite; let socket; let authServer; let app; let clientToken; let databaseUrl; let authUrl; let backtestJson;
+let pglite; let socket; let authServer; let app; let clientToken; let intakeToken; let databaseUrl; let authUrl; let backtestJson;
 
 before(async () => {
   authServer = createServer(async (req, res) => {
@@ -66,6 +66,7 @@ before(async () => {
   const seedFounder = createTenderDesk({ database: seedSql, dataset, founderToken: capability }).founder(capability);
   const client = await seedFounder.createClient({ name: 'Edge Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project' }] });
   clientToken = (await seedFounder.issueAgentCredential({ role: 'client', client_id: client.client_id })).token;
+  intakeToken = (await seedFounder.issueAgentCredential({ role: 'intake' })).token;
   await seedSql.close();
   backtestJson = backtestToJson(buildBacktest(dataset), dataset);
   const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: founder.id };
@@ -169,6 +170,16 @@ test('the MCP endpoint works through the same app with the same governance, and 
   const incoming = await (await rpc('tools/call', { name: 'get_incoming_tenders', arguments: {} })).json();
   assert.doesNotMatch(JSON.stringify(incoming), /Zebra Secret|9876543/);
   assert.equal((await call('/mcp', { method: 'GET', headers: { Authorization: `Bearer ${clientToken}` } })).status, 405);
+});
+
+test('intake through the site returns a connector pointing at this site', async () => {
+  const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'create_client', arguments: { name: 'Site Signup Events', capabilities: 'Events', categories: ['events-community'], team_size: 2, max_contract_cents: 1000000 } } };
+  const response = await call('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${intakeToken}` }, body: JSON.stringify(body) });
+  const created = JSON.parse((await response.json()).result.content[0].text);
+  const server = created.connector_config.mcpServers[created.connector_name];
+  assert.equal(server.url, `${origin}${publicBase}/mcp`);
+  assert.equal(server.headers.Origin, origin);
+  assert.equal(server.timeout, 60);
 });
 
 test('auth or database outages become safe responses without leaking details', async () => {

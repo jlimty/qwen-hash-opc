@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
+import { connectorSlug } from '../src/connector-config.mjs';
 
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = parseTenderCsv(header + [
@@ -80,6 +81,54 @@ test('intake can create a client but cannot verify projects or access client wor
   assert.equal(denied.rule_id, 'G3');
   assert.equal((await intake.invoke('get_client_context', {})).outcome, 'blocked');
   assert.equal((await intake.invoke('request_pricing', { tender_no: 'NEW-1' })).outcome, 'blocked');
+});
+
+test('intake create_client returns a working connector bound to the new client', async () => {
+  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const name = `Cedar Markets ${randomUUID().slice(0, 8)}`;
+  const created = await intake.invoke('create_client', profile(name));
+  assert.equal(created.outcome, 'allowed');
+  assert.match(created.client_reference, /^CLI\d{5,}$/);
+  const server = created.connector_config.mcpServers[created.connector_name];
+  assert.match(created.connector_name, /^tender-desk-cedar-markets-/);
+  assert.deepEqual(Object.keys(server).sort(), ['headers', 'timeout', 'url']);
+  assert.match(server.headers.Authorization, /^Bearer [a-f0-9]{64}$/);
+  const agent = await desk.agent(server.headers.Authorization.slice(7));
+  assert.equal((await agent.invoke('get_client_context', {})).client.name, name);
+});
+
+test('the connector token never reaches the audit log', async () => {
+  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const created = await intake.invoke('create_client', profile(`Token Audit ${randomUUID()}`));
+  const token = created.connector_config.mcpServers[created.connector_name].headers.Authorization.slice(7);
+  const { rows } = await db.query('SELECT * FROM tender_desk.audit_log');
+  assert.doesNotMatch(JSON.stringify(rows), new RegExp(token));
+  const row = rows.find((r) => r.action === 'create_client' && r.client_id === created.client_id);
+  assert.equal(row.summary.client_reference, created.client_reference);
+});
+
+test('a GeBIZ tender number given at intake is stored on the project', async () => {
+  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const input = profile(`GeBIZ Intake ${randomUUID()}`);
+  input.past_projects[0].gebiz_tender_no = 'OLD-1';
+  const created = await intake.invoke('create_client', input);
+  const { rows } = await db.query('SELECT gebiz_tender_no FROM tender_desk.projects WHERE client_id=$1', [created.client_id]);
+  assert.equal(rows[0].gebiz_tender_no, 'OLD-1');
+});
+
+test('a duplicate company name gets a neutral message', async () => {
+  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const name = `Twin Events ${randomUUID()}`;
+  await intake.invoke('create_client', profile(name));
+  const again = await intake.invoke('create_client', profile(name.toUpperCase()));
+  assert.equal(again.outcome, 'blocked');
+  assert.equal(again.reason, 'That company name is not available. If this is your company, contact Tender Desk.');
+});
+
+test('connectorSlug makes a safe bounded name', () => {
+  assert.equal(connectorSlug('Cedar Markets Pte. Ltd.'), 'tender-desk-cedar-markets-pte-ltd');
+  assert.equal(connectorSlug('***'), 'tender-desk-client');
+  assert.ok(connectorSlug('x'.repeat(200)).length <= 'tender-desk-'.length + 40);
 });
 
 test('agent catalogs contain neither founder tools nor an ungated pricing path', async () => {

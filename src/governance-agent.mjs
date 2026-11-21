@@ -1,4 +1,7 @@
+import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
+import { connectorConfig, connectorSlug } from './connector-config.mjs';
+import { referenceCode } from './references.mjs';
 import { tenderCategories } from './tender-data.mjs';
 import { getIncomingTenders, historicalFilterSchema, searchHistoricalTenders } from './tender-catalog.mjs';
 import { buildStatsSnapshot } from './tender-stats.mjs';
@@ -13,23 +16,43 @@ const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
 export const clientProfileSchema = z.strictObject({
   name: text(150), capabilities: text(4000), categories: z.array(z.enum(tenderCategories)).min(1).max(8),
   team_size: z.number().int().min(1).max(100000), max_contract_cents: cents,
-  past_projects: z.array(z.strictObject({ title: text(250), agency: text(250).optional(), value_cents: cents.optional() })).max(30).default([]),
+  past_projects: z.array(z.strictObject({ title: text(250), agency: text(250).optional(), value_cents: cents.optional(),
+    gebiz_tender_no: text(100).optional() })).max(30).default([]),
 });
 
 export async function createClient(tx, input) {
   const { rows } = await tx.query(`INSERT INTO tender_desk.clients (name, capabilities, categories, team_size, max_contract_cents)
-    VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id`,
+    VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id, reference_number`,
   [input.name, input.capabilities, input.categories, input.team_size, input.max_contract_cents]);
-  if (!rows.length) return blocked('G1', 'Client could not be created with this name.');
+  if (!rows.length) return blocked('G1', 'That company name is not available. If this is your company, contact Tender Desk.');
   const client_id = rows[0].id;
   const projects = [];
   for (const item of input.past_projects) {
-    const result = await tx.query(`INSERT INTO tender_desk.projects (client_id,title,agency,value_cents,verified)
-      VALUES ($1,$2,$3,$4,false) RETURNING id,title,verified`, [client_id, item.title, item.agency ?? null, item.value_cents ?? null]);
+    const result = await tx.query(`INSERT INTO tender_desk.projects (client_id,title,agency,value_cents,verified,gebiz_tender_no)
+      VALUES ($1,$2,$3,$4,false,$5) RETURNING id,title,verified`, [client_id, item.title, item.agency ?? null, item.value_cents ?? null, item.gebiz_tender_no ?? null]);
     projects.push(result.rows[0]);
   }
-  return { outcome: 'allowed', client_id, projects };
+  return { outcome: 'allowed', client_id, client_reference: referenceCode('CLI', rows[0].reference_number), projects };
 }
+
+export async function insertAgentCredential(tx, role, clientId = null) {
+  const token = randomBytes(32).toString('hex');
+  const { rows } = await tx.query(`INSERT INTO tender_desk.agent_credentials (token_hash,role,client_id)
+    VALUES ($1,$2,$3) RETURNING id`, [createHash('sha256').update(token).digest('hex'), role, clientId]);
+  return { credential_id: rows[0].id, token };
+}
+
+// Intake: create the client and hand back its own connector, shown to the caller once.
+export async function createClientWithConnector(tx, input, connector) {
+  const created = await createClient(tx, input);
+  if (created.outcome !== 'allowed') return created;
+  const { credential_id, token } = await insertAgentCredential(tx, 'client', created.client_id);
+  const connector_name = connectorSlug(input.name);
+  return { ...created, credential_id, connector_name,
+    connector_config: connectorConfig({ name: connector_name, url: connector.url, origin: connector.origin, timeout: connector.timeout, token }) };
+}
+
+export const localConnector = Object.freeze({ url: 'http://127.0.0.1:8788/mcp', origin: 'http://127.0.0.1:8788', timeout: 60 });
 
 export async function hasVerifiedCitations(tx, client_id, ids) {
   const { rows } = await tx.query(`SELECT id FROM tender_desk.projects
@@ -37,7 +60,7 @@ export async function hasVerifiedCitations(tx, client_id, ids) {
   return rows.length === new Set(ids).size;
 }
 
-export function agentWorkflows(dataset) {
+export function agentWorkflows(dataset, { connector = localConnector } = {}) {
   const incoming = new Map(dataset.contracts.filter((contract) => contract.is_holdout).map((contract) => [contract.tender_no, contract]));
   return {
     get_policies: {
@@ -52,8 +75,8 @@ export function agentWorkflows(dataset) {
         { rule_id: 'G6', title: 'Backtest integrity', policy: 'Agent tools never return held-out winners or amounts. Incoming entries are historical backtests, not live tenders.' },
       ] }),
     },
-    create_client: { description: "Intake only. Record a new SME client profile. Every self-reported past project is saved as unverified; only the founder can verify projects.",
-      roles: ['intake'], schema: clientProfileSchema, run: (tx, actor, input) => createClient(tx, input) },
+    create_client: { description: "Intake only. Record a new SME client profile after the user confirms it. Every self-reported past project is saved as unverified; only the admin can verify projects. Returns connector_config: the client's personal QwenWork connector. Show it to the user once, to paste into QwenWork Connectors; it is never shown again.",
+      roles: ['intake'], schema: clientProfileSchema, run: (tx, actor, input) => createClientWithConnector(tx, input, connector) },
     get_client_context: {
       description: "Return the profile, founder-verified past projects and saved shortlist of the client this connector is bound to. Takes no arguments; the client is fixed by the connector credential.",
       roles: ['client'], schema: z.strictObject({}),

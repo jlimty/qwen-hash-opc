@@ -1,6 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
-import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations } from './governance-agent.mjs';
+import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential } from './governance-agent.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
@@ -16,10 +16,10 @@ function validate(schema, input) {
   return { denial: blocked(keys.includes('client_id') ? 'G1' : keys.includes('verified') ? 'G3' : 'VALIDATION', 'Input does not match the permitted tool schema.') };
 }
 
-export function createTenderDesk({ database, dataset, founderToken, backtest: precomputed }) {
+export function createTenderDesk({ database, dataset, founderToken, backtest: precomputed, connector }) {
   if (typeof founderToken !== 'string' || !/^[a-f0-9]{64}$/.test(founderToken)) throw new Error('A 32-byte hexadecimal founder token is required.');
   const expectedFounder = digest(founderToken);
-  const workflows = agentWorkflows(dataset);
+  const workflows = agentWorkflows(dataset, connector ? { connector } : {});
   const tenderNumbers = new Set(dataset.contracts.map((contract) => contract.tender_no));
   const backtest = precomputed ?? buildBacktest(dataset);
   const revealSchema = z.union([z.strictObject({ tender_no: z.string().max(100) }), z.strictObject({ all: z.literal(true) })]);
@@ -32,7 +32,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
-    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count']) {
+    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference']) {
       if (result[key]) summary[key] = result[key];
     }
     await tx.query(`INSERT INTO tender_desk.audit_log (actor,action,client_id,tender_no,outcome,rule_id,reason,summary)
@@ -116,10 +116,8 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           if (input.role === 'client' && !(await tx.query('SELECT id FROM tender_desk.clients WHERE id=$1', [input.client_id])).rows.length) {
             return blocked('G1', 'Client does not exist.');
           }
-          const token = randomBytes(32).toString('hex');
-          const { rows } = await tx.query(`INSERT INTO tender_desk.agent_credentials (token_hash,role,client_id)
-            VALUES ($1,$2,$3) RETURNING id`, [digest(token).toString('hex'), input.role, input.client_id ?? null]);
-          return { outcome: 'allowed', credential_id: rows[0].id, token, role: input.role, client_id: input.client_id ?? null };
+          const { credential_id, token } = await insertAgentCredential(tx, input.role, input.client_id ?? null);
+          return { outcome: 'allowed', credential_id, token, role: input.role, client_id: input.client_id ?? null };
         }),
         revokeAgentCredential: founderOperation('revoke_agent_credential', z.strictObject({ credential_id: z.uuid() }), async (tx, input) => {
           const { rows } = await tx.query('DELETE FROM tender_desk.agent_credentials WHERE id=$1 RETURNING client_id', [input.credential_id]);
