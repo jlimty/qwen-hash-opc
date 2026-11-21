@@ -47,14 +47,14 @@ test('launcher seeds fictional clients, protects credential files, persists acro
   try {
     const url = await server.ready;
     const tokens = {};
-    for (const label of ['intake', 'amber', 'birch']) {
+    for (const label of ['intake', 'birch']) {
       const file = join(stateDir, 'agent-tokens', `${label}.txt`);
       assert.equal((await stat(file)).mode & 0o777, 0o600);
       assert.equal((await stat(join(stateDir, 'agent-tokens'))).mode & 0o777, 0o700);
       tokens[label] = (await readFile(file, 'utf8')).trim();
       assert.match(tokens[label], /^Bearer [a-f0-9]{64}$/);
     }
-    assert.equal(new Set(Object.values(tokens)).size, 3);
+    assert.equal(new Set(Object.values(tokens)).size, 2);
     assert.equal((await stat(join(stateDir, 'founder-token.txt'))).mode & 0o777, 0o600);
     const founderSecret = (await readFile(join(stateDir, 'founder-token.txt'), 'utf8')).trim();
     assert.match(founderSecret, /^[a-f0-9]{64}$/);
@@ -62,10 +62,17 @@ test('launcher seeds fictional clients, protects credential files, persists acro
     assert.match(await (await fetch(`${consoleUrl}login`)).text(), /Admin sign-in/);
     assert.ok(!server.output().includes(founderSecret));
 
-    const amber = await connect(url, tokens.amber);
+    const intake = await connect(url, tokens.intake);
+    const created = await call(intake, 'create_client', { name: 'Cedar Markets (test)', capabilities: 'Night markets', categories: ['events-community'], team_size: 6, max_contract_cents: 20000000 });
+    const server0 = created.connector_config.mcpServers[created.connector_name];
+    assert.equal(server0.url, url.href);
+    tokens.cedar = server0.headers.Authorization;
+    await intake.close();
+    const amber = await connect(url, tokens.cedar);
     const context = await call(amber, 'get_client_context');
-    assert.match(context.client.name, /Amber/);
-    assert.equal(context.client.past_projects.length, 1);
+    assert.equal(context.client.name, 'Cedar Markets (test)');
+    const birchContext = await call(await connect(url, tokens.birch), 'get_client_context');
+    assert.equal(birchContext.client.past_projects.length, 1);
     const incoming = await call(amber, 'get_incoming_tenders', { category: 'events-community', limit: 1 });
     const tender = incoming.items[0].tender_no;
     assert.equal((await call(amber, 'save_shortlist', { items: [{ tender_no: tender, fit_score: 60, reasons: ['Persisted'] }] })).outcome, 'allowed');
@@ -85,7 +92,7 @@ test('launcher seeds fictional clients, protects credential files, persists acro
 
     server = launch(stateDir);
     const restarted = await server.ready;
-    const again = await connect(restarted, tokens.amber);
+    const again = await connect(restarted, tokens.cedar);
     assert.equal((await call(again, 'get_client_context')).client.shortlist.length, 1);
     assert.equal((await call(again, 'request_pricing', { tender_no: tender, query: 'event management' })).stat_id, pricing.stat_id);
     await again.close();

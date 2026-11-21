@@ -17,7 +17,9 @@
     "site:admin": "node scripts/site-admin.mjs",
     "build": "npm run site:build",
     "site:admin-password": "node scripts/site-admin-password.mjs",
-    "site:rehearse": "node scripts/site-rehearse.mjs"
+    "site:rehearse": "node scripts/site-rehearse.mjs",
+    "site:reseed": "node scripts/site-reseed.mjs",
+    "starter-pack": "node scripts/starter-pack.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

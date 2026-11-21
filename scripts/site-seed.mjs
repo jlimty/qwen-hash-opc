@@ -8,7 +8,7 @@ import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { connectPg, createPgDatabase } from '../src/pg-database.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
-import { loadFounderToken, seedDemo } from './lib/seed.mjs';
+import { loadFounderToken, seedDemo, siteConnector } from './lib/seed.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let database;
@@ -33,10 +33,12 @@ try {
     const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
     const desk = createTenderDesk({ database, dataset, founderToken });
     const tokenDir = join(stateDir, 'agent-tokens');
-    await seedDemo(desk.founder(founderToken), tokenDir);
+    const connectorDir = join(stateDir, 'connectors');
+    await seedDemo(desk.founder(founderToken), tokenDir, { connector: await siteConnector(root), connectorDir });
     console.log('Schema migrated and demo clients seeded (fictional).');
     console.log(`Founder secret file: ${founderTokenPath}`);
     console.log(`Connector credential files: ${tokenDir}`);
+    console.log(`QwenWork connector configs (paste into Connectors): ${connectorDir}`);
   }
 } catch (error) {
   console.error(`Site seed failed: ${error.message}`);

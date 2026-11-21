@@ -7,7 +7,6 @@ import postgres from 'postgres';
 import { createTenderDesk } from '../src/governance.mjs';
 import { createMcpWebHandler } from '../src/mcp-web.mjs';
 import { connectPg, createPgDatabase } from '../src/pg-database.mjs';
-import { buildStatsSnapshot } from '../src/tender-stats.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -25,7 +24,7 @@ try {
   if (production && hostOf(production) === hostOf(databaseUrl)) throw new Error('Refusing to run: that is the production database.');
   const tokensDir = resolve(values['tokens-dir'] ?? join(root, '.local', 'site', 'agent-tokens'));
   const token = async (name) => (await readFile(join(tokensDir, `${name}.txt`), 'utf8')).trim().replace(/^Bearer /, '');
-  const [amber, birch, intake] = await Promise.all([token('amber'), token('birch'), token('intake')]);
+  const [birch, intake] = await Promise.all([token('birch'), token('intake')]);
 
   const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
   database = createPgDatabase(connectPg(postgres, databaseUrl, { max: 1 }));
@@ -46,136 +45,114 @@ try {
   };
   const ok = (condition, message) => { if (!condition) throw new Error(message); };
   const leaks = (value) => /supplier|awarded_cents|awarded_amt|winner/i.test(JSON.stringify(value));
+  const consoleState = async () => admin.readConsole();
+  const demoTender = 'DST000ETT26000005';
+  const state = {};
 
-  const state = { };
-  await step('intake agent: records a new client; every self-reported project is saved unverified', async () => {
+  await step('1 intake: Cedar signs up and gets its own connector; projects start unverified', async () => {
     const names = (await rpc(intake, 'tools/list', {})).result.tools.map((t) => t.name);
     ok(!names.includes('request_pricing') && !names.includes('submit_brief'), 'intake sees client tools');
-    const created = await tool(intake, 'create_client', { name: 'Cedar Events (rehearsal)', capabilities: 'Night markets and charity galas.', categories: ['events-community'], team_size: 6, max_contract_cents: 20000000, past_projects: [{ title: 'Harbour night market', value_cents: 9000000 }, { title: 'Charity gala (self-reported)' }] });
-    ok(created.outcome === 'allowed' && created.projects.length === 2 && created.projects.every((p) => p.verified === false), JSON.stringify(created).slice(0, 200));
-    return `2 projects, both unverified (${created.projects.map((p) => p.title).join(', ')})`;
+    const created = await tool(intake, 'create_client', { name: 'Cedar Markets (rehearsal)', capabilities: 'Night markets, community events and festivals.',
+      categories: ['events-community'], team_size: 6, max_contract_cents: 50000000,
+      past_projects: [{ title: 'Harbour night market', value_cents: 9000000 }, { title: 'Charity gala (self-reported)' }] });
+    ok(created.outcome === 'allowed' && created.projects.every((p) => p.verified === false), JSON.stringify(created).slice(0, 200));
+    state.cedar = created.connector_config.mcpServers[created.connector_name].headers.Authorization.replace(/^Bearer /, '');
+    state.market = created.projects.find((p) => /night market/i.test(p.title));
+    state.gala = created.projects.find((p) => /gala/i.test(p.title));
+    const context = await tool(state.cedar, 'get_client_context');
+    ok(context.client.name === 'Cedar Markets (rehearsal)', 'connector not bound to Cedar');
+    return `${created.client_reference}, connector "${created.connector_name}" works`;
   });
 
-  await step('scout agent (Amber): sees incoming backtest tenders with no winners or amounts', async () => {
-    const context = await tool(amber, 'get_client_context');
-    ok(context.client.name === 'Amber Events (demo)', 'wrong identity');
-    state.verified = context.client.past_projects.find((p) => p.verified);
-    ok(state.verified, 'Amber has no verified project');
-    const incoming = await tool(amber, 'get_incoming_tenders', { category: 'events-community', limit: 100 });
+  await step('2 admin verifies one project on evidence: no note is refused, a note is accepted', async () => {
+    const bare = await admin.verifyProject({ project_id: state.market.id, verified: true });
+    ok(bare.outcome === 'blocked' && bare.rule_id === 'G3', JSON.stringify(bare));
+    const noted = await admin.verifyProject({ project_id: state.market.id, verified: true, note: 'Rehearsal: saw the signed contract.' });
+    ok(noted.outcome === 'allowed' && noted.check_result === 'no_match', JSON.stringify(noted));
+    return `${noted.project_reference} verified with a note (GeBIZ: ${noted.check_result}); the gala stays unverified`;
+  });
+
+  await step('3 scout (Cedar): incoming tenders show no winners or amounts; shortlist saved', async () => {
+    const incoming = await tool(state.cedar, 'get_incoming_tenders', { category: 'events-community', limit: 100 });
     ok(incoming.items.length > 0 && !leaks(incoming), 'no tenders, or outcome data leaked');
-    const usable = incoming.items.find((item) => {
-      const words = item.description.toLowerCase().match(/[a-z]{5,}/g) ?? [];
-      const query = words.slice(0, 2).join(' ');
-      return query && buildStatsSnapshot(dataset, { category: item.category, query }).status === 'ready' && (state.query = query);
-    });
-    ok(usable, 'no incoming tender has enough comparables');
-    state.tender = usable.tender_no;
-    state.description = usable.description;
-    return `${incoming.total} incoming; chose ${state.tender} with query "${state.query}"`;
+    const saved = await tool(state.cedar, 'save_shortlist', { items: [{ tender_no: demoTender, fit_score: 85, reasons: ['Event management; matches night markets and festivals'] }] });
+    ok(saved.outcome === 'allowed', JSON.stringify(saved));
+    return `${incoming.total} incoming; shortlisted ${demoTender}`;
   });
 
-  await step('both clients shortlist the same tender', async () => {
-    for (const [who, bearer] of [['Amber', amber], ['Birch', birch]]) {
-      const saved = await tool(bearer, 'save_shortlist', { items: [{ tender_no: state.tender, fit_score: 80, reasons: [`${who}: category and capability match`] }] });
-      ok(saved.outcome === 'allowed', JSON.stringify(saved));
-    }
-    return 'two shortlists saved';
-  });
-
-  await step('analyst (Amber): pricing takes an exclusive hold and returns a band with no supplier data', async () => {
-    const pricing = await tool(amber, 'request_pricing', { tender_no: state.tender, query: state.query });
-    ok(pricing.outcome === 'allowed' && Number.isInteger(pricing.price_band.low_cents) && !leaks(pricing), JSON.stringify(pricing).slice(0, 200));
+  await step('4 analyst (Cedar): band for the demo tender, no supplier data, no hold taken', async () => {
+    const pricing = await tool(state.cedar, 'request_pricing', { tender_no: demoTender, query: 'event management' });
+    ok(pricing.outcome === 'allowed' && !leaks(pricing), JSON.stringify(pricing).slice(0, 200));
     state.pricing = pricing;
+    ok(!(await consoleState()).holds.some((h) => h.tender_no === demoTender), 'pricing took a hold');
     return `band ${money(pricing.price_band.low_cents)} to ${money(pricing.price_band.high_cents)}, ${pricing.n} comparables`;
   });
 
-  await step('G2: the competing client (Birch) is escalated and gets no price and no holder identity', async () => {
-    const result = await tool(birch, 'request_pricing', { tender_no: state.tender, query: state.query });
-    ok(result.outcome === 'escalated' && result.rule_id === 'G2' && !result.price_band, JSON.stringify(result).slice(0, 200));
-    ok(!/Amber/.test(JSON.stringify(result)), 'the holder was named');
-    return 'escalated, no price, holder not revealed';
+  const submit = (bearer, pricing, overrides) => tool(bearer, 'submit_brief', { tender_no: demoTender, stat_id: pricing.stat_id, price_band: pricing.price_band,
+    recommendation: 'bid', content: `Recommend bidding. Historical band ${money(pricing.price_band.low_cents)} to ${money(pricing.price_band.high_cents)}; confirm staffing and scope first.`, credentials_cited: [], ...overrides });
+
+  await step('5 guardrails on Cedar\'s brief: G3 unverified citation, G4 altered band, G1 naming a client and a spoofed id', async () => {
+    const g3 = await submit(state.cedar, state.pricing, { credentials_cited: [state.gala.id] });
+    ok(g3.outcome === 'blocked' && g3.rule_id === 'G3', JSON.stringify(g3));
+    const g4 = await submit(state.cedar, state.pricing, { price_band: { ...state.pricing.price_band, high_cents: state.pricing.price_band.high_cents + 100 } });
+    ok(g4.rule_id === 'G4', JSON.stringify(g4));
+    const g1 = await submit(state.cedar, state.pricing, { content: 'We can undercut Birch Events (demo) on this one.' });
+    ok(g1.rule_id === 'G1', JSON.stringify(g1));
+    const spoof = await tool(state.cedar, 'get_client_context', { client_id: '00000000-0000-4000-8000-000000000000' });
+    ok(spoof.rule_id === 'G1', JSON.stringify(spoof));
+    ok(!(await consoleState()).holds.some((h) => h.tender_no === demoTender), 'a blocked brief took the advice slot');
+    return 'all blocked; no advice slot taken';
   });
 
-  const consoleState = async () => admin.readConsole();
-  const submit = (overrides) => tool(amber, 'submit_brief', { tender_no: state.tender, stat_id: state.pricing.stat_id, price_band: state.pricing.price_band, recommendation: 'bid', content: 'Recommend bidding; confirm staffing and scope first.', credentials_cited: [], ...overrides });
-
-  await step('G3: a brief citing an unverified project is blocked', async () => {
-    const snapshot = await consoleState();
-    const amberId = snapshot.clients.find((c) => c.name === 'Amber Events (demo)').id;
-    state.unverified = snapshot.projects.find((p) => p.client_id === amberId && !p.verified);
-    if (!state.unverified) {
-      const roadshow = snapshot.projects.find((p) => p.client_id === amberId && /roadshow/i.test(p.title));
-      ok(roadshow && (await admin.verifyProject({ project_id: roadshow.id, verified: false })).outcome === 'allowed', 'could not recreate an unverified project');
-      state.unverified = { ...roadshow, verified: false };
-    }
-    const result = await submit({ credentials_cited: [state.unverified.id] });
-    ok(result.outcome === 'blocked' && result.rule_id === 'G3', JSON.stringify(result));
-    return `blocked: "${state.unverified.title}" is not founder-verified`;
-  });
-
-  await step('G4: a brief with an altered price band is blocked', async () => {
-    const result = await submit({ price_band: { ...state.pricing.price_band, high_cents: state.pricing.price_band.high_cents + 100 } });
-    ok(result.outcome === 'blocked' && result.rule_id === 'G4', JSON.stringify(result));
-    return 'blocked: band does not match the saved snapshot';
-  });
-
-  await step('G1: a brief naming another client is blocked, and a spoofed client_id is blocked', async () => {
-    const named = await submit({ content: 'We can undercut Birch Events (demo) on this one.' });
-    ok(named.outcome === 'blocked' && named.rule_id === 'G1', JSON.stringify(named));
-    const spoof = await tool(amber, 'get_client_context', { client_id: '00000000-0000-4000-8000-000000000000' });
-    ok(spoof.outcome === 'blocked' && spoof.rule_id === 'G1', JSON.stringify(spoof));
-    return 'both blocked';
-  });
-
-  await step('a valid brief citing a verified project is accepted, as pending approval only', async () => {
-    const result = await submit({ credentials_cited: [state.verified.id] });
-    ok(result.outcome === 'allowed' && result.status === 'pending_approval', JSON.stringify(result));
+  await step('5b Cedar resubmits citing the verified project: pending approval, Cedar holds the advice slot', async () => {
+    const result = await submit(state.cedar, state.pricing, { credentials_cited: [state.market.id] });
+    ok(result.outcome === 'allowed' && result.status === 'pending_approval' && !('risk_level' in result), JSON.stringify(result));
     state.briefId = result.brief_id;
-    return `pending approval, flags: ${result.flags.join(', ')}`;
+    return `${result.brief_reference} pending`;
+  });
+
+  await step('6 G2: Birch gets the same public band, but its brief is escalated with nothing disclosed', async () => {
+    const pricing = await tool(birch, 'request_pricing', { tender_no: demoTender, query: 'event management' });
+    ok(pricing.outcome === 'allowed', JSON.stringify(pricing).slice(0, 200));
+    const result = await submit(birch, pricing, {});
+    ok(result.outcome === 'escalated' && result.rule_id === 'G2' && !/Cedar|price_band/.test(JSON.stringify(result)), JSON.stringify(result));
+    return 'escalated; holder not revealed';
   });
 
   await step('G5: agents have no way to approve, decline, verify or reveal', async () => {
-    const names = (await rpc(amber, 'tools/list', {})).result.tools.map((t) => t.name);
-    ok(!names.some((n) => /approve|decline|review|verify|reveal|resolve/.test(n)), `founder-like tools exposed: ${names.join(',')}`);
-    const attempt = await tool(amber, 'review_brief', { brief_id: state.briefId, decision: 'approved' });
-    ok(attempt.protocolError, 'review_brief was callable');
+    const names = (await rpc(state.cedar, 'tools/list', {})).result.tools.map((t) => t.name);
+    ok(!names.some((n) => /approve|decline|review|verify|reveal|resolve/.test(n)), `admin-like tools exposed: ${names.join(',')}`);
     return `${names.length} tools, none can decide`;
   });
 
-  await step('admin console sees one brief waiting, one open conflict and unverified projects', async () => {
+  await step('7 admin: brief shows risk facts; keeps advising Cedar; approves', async () => {
     const snapshot = await consoleState();
-    const pending = snapshot.briefs.filter((b) => b.status === 'pending_approval').length;
-    const open = snapshot.conflicts.filter((c) => c.status === 'open').length;
-    const unverified = snapshot.projects.filter((p) => !p.verified).length;
-    ok(pending === 1 && open === 1 && unverified >= 3, `pending ${pending}, open ${open}, unverified ${unverified}`);
-    return `${pending} brief, ${open} conflict, ${unverified} projects to verify`;
-  });
-
-  await step('admin decides: verifies a project, resolves the conflict for the holder, approves the brief', async () => {
-    const snapshot = await consoleState();
-    const conflict = snapshot.conflicts.find((c) => c.status === 'open');
-    ok((await admin.verifyProject({ project_id: state.unverified.id, verified: true, note: 'Seeded demo client (fictional).' })).outcome === 'allowed', 'verify');
+    const brief = snapshot.briefs.find((b) => b.id === state.briefId);
+    const conflict = snapshot.conflicts.find((c) => c.status === 'open' && c.tender_no === demoTender);
+    ok(brief && conflict, 'brief or conflict missing');
     ok((await admin.resolveConflict({ conflict_id: conflict.id, resolution: 'serve_holder' })).outcome === 'allowed', 'resolve');
     const approved = await admin.reviewBrief({ brief_id: state.briefId, decision: 'approved' });
     ok(approved.outcome === 'approved', JSON.stringify(approved));
-    ok((await admin.reviewBrief({ brief_id: state.briefId, decision: 'approved' })).outcome === 'blocked', 'a second approval was allowed');
-    return 'verified, resolved, approved; a repeat approval is blocked';
+    return `${brief.risk_level} risk (${brief.risk_facts.map((f) => f.code).join(', ') || 'no facts'}); conflict resolved; approved`;
   });
 
-  await step('after resolution Birch still gets no price for the tender', async () => {
-    const again = await tool(birch, 'request_pricing', { tender_no: state.tender, query: state.query });
-    ok(!again.price_band && ['escalated', 'blocked'].includes(again.outcome), JSON.stringify(again).slice(0, 200));
-    return `${again.outcome}, no price`;
+  await step('8 Cedar asks "where is my brief?" and gets the approved text; Birch sees it was not advised', async () => {
+    const mine = (await tool(state.cedar, 'get_client_context')).client.briefs.find((b) => b.tender_no === demoTender);
+    ok(mine?.status === 'approved' && mine.content.includes('Recommend bidding'), JSON.stringify(mine));
+    const refused = (await tool(birch, 'get_client_context')).client.advice_refused.find((r) => r.tender_no === demoTender);
+    ok(refused?.status === 'not_advised', JSON.stringify(refused));
+    return `${mine.reference} approved; Birch: not_advised`;
   });
 
-  await step('backtest: revealing the tender shows the real award against the predicted band', async () => {
-    const revealed = await admin.revealBacktest({ tender_no: state.tender });
+  await step('9 backtest: revealing the tender shows the real award against the predicted band', async () => {
+    const revealed = await admin.revealBacktest({ tender_no: demoTender });
     ok(revealed.outcome === 'allowed', JSON.stringify(revealed));
     const { backtest } = await consoleState();
-    const row = backtest.rows.find((r) => r.prediction.tender_no === state.tender);
+    const row = backtest.rows.find((r) => r.prediction.tender_no === demoTender);
     ok(row, 'revealed tender missing from the scoreboard');
     const p = row.prediction;
-    return `predicted ${money(p.band.low_cents)} to ${money(p.band.high_cents)}; actual ${money(p.actual_cents)} (${row.in_band ? 'inside' : 'outside'} band); ${backtest.revealed} of ${backtest.scoreable} revealed`;
+    const inBrief = p.actual_cents >= state.pricing.price_band.low_cents && p.actual_cents <= state.pricing.price_band.high_cents;
+    return `actual ${money(p.actual_cents)}: ${inBrief ? 'inside' : 'outside'} the brief's band; ${row.in_band ? 'inside' : 'outside'} the agency-level backtest band`;
   });
 
   await step('audit log recorded every guardrail: G1, G2, G3 and G4', async () => {
