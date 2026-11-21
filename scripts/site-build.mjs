@@ -6,7 +6,20 @@ import { parseTenderCsv } from '../src/tender-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const out = join(root, 'site');
-const modules = ['backtest', 'console-css', 'console-handler', 'console-view', 'governance', 'governance-agent', 'mcp-web', 'neon-auth', 'pg-database', 'site-app', 'tender-catalog', 'tender-data', 'tender-stats'];
+// Ship exactly what the function imports: walk relative imports from the two entry modules.
+async function importClosure(entries) {
+  const seen = new Set();
+  const queue = [...entries];
+  while (queue.length) {
+    const name = queue.shift();
+    if (seen.has(name)) continue;
+    seen.add(name);
+    const source = await readFile(join(root, 'src', `${name}.mjs`), 'utf8');
+    for (const [, target] of source.matchAll(/from '\.\/([^']+)\.mjs'/g)) queue.push(target);
+  }
+  return [...seen].sort();
+}
+const modules = await importClosure(['site-app', 'pg-database']);
 const pkg = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
 const { origin } = JSON.parse(await readFile(join(root, 'scripts', 'site-assets', 'site.json'), 'utf8'));
 const pinned = (name) => pkg.dependencies[name];
