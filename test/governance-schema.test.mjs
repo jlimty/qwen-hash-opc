@@ -31,17 +31,24 @@ function rejectsCode(operation, code) {
   return assert.rejects(operation, { code });
 }
 
-test('initializer does not execute DDL when clients already exists', async () => {
+test('initializer does not execute DDL when every migration is already applied', async () => {
   let queries = 0;
   await initializeGovernance({
-    async query(sql) {
-      assert.equal(sql, "SELECT to_regclass('tender_desk.clients') AS relation");
-      queries++;
-      return { rows: [{ relation: 'tender_desk.clients' }] };
-    },
-    async exec() { assert.fail('Existing databases must not rerun the migration'); },
+    async query() { queries++; return { rows: [{ present: true }] }; },
+    async exec() { assert.fail('Existing databases must not rerun a migration'); },
   });
-  assert.equal(queries, 1);
+  assert.equal(queries, 2);
+});
+
+test('002 backfills reference numbers on rows created before it', async () => {
+  const database = new PGlite();
+  try {
+    await database.exec(await readFile(migrationUrl, 'utf8'));
+    await insert(database, 'clients', clientValues('Early Events'));
+    await initializeGovernance(database);
+    const { rows } = await database.query('SELECT reference_number FROM tender_desk.clients');
+    assert.equal(Number(rows[0].reference_number), 1);
+  } finally { await database.close(); }
 });
 
 describe('PostgreSQL governance schema', () => {
@@ -62,8 +69,13 @@ describe('PostgreSQL governance schema', () => {
 
   after(async () => { if (database) await database.close(); });
 
+  test('reference numbers increase per table', async () => {
+    const { rows } = await database.query('SELECT name, reference_number FROM tender_desk.clients ORDER BY reference_number');
+    assert.deepEqual(rows.map((row) => [row.name, Number(row.reference_number)]), [['Alpha Events', 1], ['Beta Events', 2]]);
+  });
+
   test('initializes twice without rerunning DDL or losing data', async () => {
-    assert.equal(migrationExecutions, 1);
+    assert.equal(migrationExecutions, 2);
     await initializeGovernance({
       query: (...args) => database.query(...args),
       exec: () => assert.fail('Second initialization must not execute DDL'),
@@ -77,14 +89,14 @@ describe('PostgreSQL governance schema', () => {
 
   test('creates exactly the service tables and column types in tender_desk, not public', async () => {
     const expected = {
-      clients: 'id:uuid name:text capabilities:text categories:_text team_size:int4 max_contract_cents:int8 created_at:timestamptz',
-      projects: 'id:uuid client_id:uuid title:text agency:text value_cents:int8 verified:bool',
-      agent_credentials: 'id:uuid token_hash:text role:text client_id:uuid',
+      clients: 'id:uuid name:text capabilities:text categories:_text team_size:int4 max_contract_cents:int8 created_at:timestamptz reference_number:int8',
+      projects: 'id:uuid client_id:uuid title:text agency:text value_cents:int8 verified:bool reference_number:int8 gebiz_tender_no:text verification_note:text verified_at:timestamptz',
+      agent_credentials: 'id:uuid token_hash:text role:text client_id:uuid created_at:timestamptz',
       pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz',
       stats_snapshots: 'client_id:uuid tender_no:text stat_id:text snapshot:jsonb',
       shortlists: 'client_id:uuid tender_no:text fit_score:int4 reasons:_text',
-      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz',
-      conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz',
+      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text',
+      conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz reference_number:int8',
       audit_log: 'id:int8 ts:timestamptz actor:text action:text client_id:uuid tender_no:text outcome:text rule_id:text reason:text summary:jsonb',
     };
     const { rows } = await database.query(`
