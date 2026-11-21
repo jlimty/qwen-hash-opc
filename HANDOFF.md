@@ -42,6 +42,19 @@ Password reset (break-glass, no email needed): `npm run site:admin-password` in 
 
 Remaining: (1) the admin signs in at `https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/` with his Neon password (not testable by the agent); (2) the admin updates QwenWork connectors to `https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/mcp` with the credential from `.local/site/agent-tokens/*.txt` as `Authorization` plus an `Origin: https://tender-desk-bz2oc52nag4.qoder.website` header; (3) upload the agent skills from `skills/` to QwenWork and run the demo journey; (4) delete the probe site `tender-desk-probe` and the `sites-probe/` folder. Secret values pasted into Settings are trimmed and validated; wrong values log only the scheme and length. Each MCP call costs about 1 s of database round trips on a warm instance.
 
+## Demo preparation (21 Nov)
+
+ The video should centre on the guardrails firing and the backtest as proof.
+
+Rehearsal: `npm run site:rehearse -- --db-file <url file> --yes-this-is-disposable` runs the whole storyline (intake, shortlist, pricing, competing client escalated, G1/G3/G4 blocks, no agent power to decide, admin decisions, backtest reveal, audit) through the real MCP layer on the real GeBIZ data. It refuses to run without the flag and refuses the production database. It passed 15 of 15 on a clean Neon branch.
+
+Production demo state was spent by console exploration at 05:40 UTC: Amber's roadshow project was verified (removing the G3 beat) and **Reveal all 512** was clicked (irreversible by design, derived from the append-only audit log). "Reveal all" now needs a confirmation page. Every practice run in QwenWork also leaves permanent audit rows, so reset before the final recording:
+
+- Neon branch `demo-baseline` holds production exactly as of 05:39:30 UTC on 21 Nov (14 audit rows, no reveal, roadshow unverified, admin account present, the stray `you@example.com` account also present). It does not expire.
+- Reset: `neon branches restore production demo-baseline --preserve-under-name production-before-reset`. This rewinds production data, including the `neon_auth` schema, so sign in again afterwards, delete the stray account again (`neon neon-auth user delete 9b5651fa-7b0e-44cd-a353-c9a7e25faa2f`), and expect the audit log to start from row 14. It is a production change and needs the admin's explicit yes each time.
+
+Demo tender: **DST000ETT26000005** ("Event Management Services for Brainhack", Defence Science and Technology Agency). Analyst query "event management" gives 57 comparables, band S$208,800 to S$1,153,109; the real award of S$309,320 lands inside it (the agency-level backtest band S$104,083 to S$305,320 narrowly misses, a good honest-reporting moment). Both demo clients are events companies, so both shortlist it and the conflict happens naturally.
+
 ## Run it
 
 ```bash

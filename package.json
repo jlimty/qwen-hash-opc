@@ -16,7 +16,8 @@
     "site:seed": "node scripts/site-seed.mjs",
     "site:admin": "node scripts/site-admin.mjs",
     "build": "npm run site:build",
-    "site:admin-password": "node scripts/site-admin-password.mjs"
+    "site:admin-password": "node scripts/site-admin-password.mjs",
+    "site:rehearse": "node scripts/site-rehearse.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

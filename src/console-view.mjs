@@ -331,7 +331,7 @@ export function renderBacktest({ state, csrf, flash, filter = 'all' }) {
 <td>${p.incumbent ? `${esc(p.incumbent)}<span class="sub-line muted">${won ? 'Won' : 'Did not win'}</span>` : '<span class="muted">None predicted</span>'}</td>
 <td>${esc(p.actual_suppliers.join(', ') || 'None recorded')}</td></tr>`;
   };
-  const actions = bt.revealed < bt.scoreable ? form(csrf, '/actions/backtest/all/reveal', `Reveal all ${bt.scoreable - bt.revealed} remaining outcomes`, 'primary') : '';
+  const actions = bt.revealed < bt.scoreable ? `<a class="btn outline" href="/backtest/reveal-all">Reveal all ${bt.scoreable - bt.revealed} remaining outcomes…</a>` : '';
   return renderShell({ state, csrf, active: 'backtest', title: 'Backtest', actions, flash,
     sub: '2026 awards the agents saw as incoming tenders, with the winner and amount hidden. Predictions use only earlier awards. Reveal shows the real outcome and cannot be undone.',
     body: `<div class="stack-gap">
@@ -370,4 +370,16 @@ export function renderAudit({ state, csrf, flash }) {
       return `<tr><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
     }).join('') : '<tr><td colspan="5"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
 </table></div><div class="panel-foot"><span class="muted">Showing the latest ${plural(rows.length, 'entry')}.</span></div></section>` });
+}
+
+export function renderRevealConfirm({ state, csrf, flash }) {
+  const remaining = state.backtest.scoreable - state.backtest.revealed;
+  return renderShell({ state, csrf, active: 'backtest', title: 'Reveal all outcomes?', flash,
+    crumbs: '<nav class="crumbs" aria-label="Breadcrumb"><a href="/backtest">Backtest</a> / <span>Reveal all</span></nav>',
+    body: remaining > 0 ? `<section class="panel"><header><h2>This cannot be undone</h2></header>
+<div class="prose">Revealing shows the real winner and award amount for ${plural(remaining, 'hold-out tender')}. Once shown they stay shown, because the reveal is recorded in the append-only audit log. Revealing one tender at a time keeps the scoreboard a live demonstration; revealing everything spends it.</div>
+<div class="decision"><p class="muted small">Recorded in the audit log under your name.</p><div class="row-actions">
+<a class="btn outline" href="/backtest">Cancel</a>
+<form method="post" action="/actions/backtest/all/reveal"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="confirm" value="yes"><button class="primary" type="submit">Yes, reveal all ${remaining}</button></form>
+</div></div></section>` : '<section class="panel"><div class="empty"><strong>Everything is already revealed.</strong><a href="/backtest">Back to the backtest</a></div></section>' });
 }

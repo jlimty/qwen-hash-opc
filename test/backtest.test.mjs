@@ -57,7 +57,7 @@ async function login() {
 }
 const flashOf = (response) => (response.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).find((c) => c.startsWith('td_flash=')) ?? '';
 const follow = (session, response) => http({ path: response.headers.location, headers: { Cookie: `${session.cookie}; ${flashOf(response)}` } });
-const post = (session, path) => http({ method: 'POST', path, headers: { Origin: `http://127.0.0.1:${port}`, Cookie: session.cookie }, form: { csrf: session.csrf } });
+const post = (session, path, extra = {}) => http({ method: 'POST', path, headers: { Origin: `http://127.0.0.1:${port}`, Cookie: session.cookie }, form: { csrf: session.csrf, ...extra } });
 
 test('scores only hold-out tenders that have an amount and at least five comparables', () => {
   const backtest = buildBacktest(dataset);
@@ -131,7 +131,17 @@ test('the console reveal button works over HTTP, then a reveal-all completes the
   const blocked = await follow(session, bad);
   assert.match(blocked.text, /Blocked · G6/);
 
-  const all = await post(session, '/actions/backtest/all/reveal');
+  const unconfirmed = await post(session, '/actions/backtest/all/reveal');
+  assert.equal(unconfirmed.status, 303);
+  assert.equal(unconfirmed.headers.location, '/backtest/reveal-all');
+  assert.equal((await founder.readConsole()).backtest.revealed, 1, 'an unconfirmed reveal-all must change nothing');
+  const confirmPage = await http({ path: '/backtest/reveal-all', headers: { Cookie: session.cookie } });
+  assert.equal(confirmPage.status, 200);
+  assert.match(confirmPage.text, /This cannot be undone/);
+  assert.match(confirmPage.text, /Yes, reveal all 1/);
+  const backtestPage = await http({ path: '/backtest', headers: { Cookie: session.cookie } });
+  assert.doesNotMatch(backtestPage.text, /action="\/actions\/backtest\/all\/reveal"/, 'the backtest page must not offer a one-click reveal-all');
+  const all = await post(session, '/actions/backtest/all/reveal', { confirm: 'yes' });
   assert.equal(all.status, 303);
   const page = await follow(session, all);
   assert.match(page.text, /Revealed 1 outcomes/);

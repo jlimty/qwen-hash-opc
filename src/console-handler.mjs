@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { renderAudit, renderBacktest, renderBriefDetail, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset } from './console-view.mjs';
+import { renderAudit, renderBacktest, renderBriefDetail, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
 
 const sessionMs = 8 * 60 * 60 * 1000;
 const throttleMs = 60 * 1000;
@@ -165,6 +165,7 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
       }
       if (path === '/conflicts') return render((context) => renderConflicts(context));
       if (path === '/clients') return render((context) => renderClients(context));
+      if (path === '/backtest/reveal-all') return render((context) => renderRevealConfirm(context));
       if (path === '/backtest') return render((context) => renderBacktest({ ...context, filter: ['inside', 'outside'].includes(url.searchParams.get('filter')) ? url.searchParams.get('filter') : 'all' }));
       if (path === '/audit') return render((context) => renderAudit(context));
       return text(404, 'Not found');
@@ -182,6 +183,7 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
     if (reveal) {
       let tenderNo;
       try { tenderNo = decodeURIComponent(reveal[1]); } catch { tenderNo = ''; }
+      if (tenderNo === 'all' && form.get('confirm') !== 'yes') return redirect('/backtest/reveal-all');
       const result = await ops.revealBacktest(tenderNo === 'all' ? { all: true } : { tender_no: tenderNo });
       const flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` }
         : { ok: true, text: result.scope === 'all' ? `Revealed ${result.revealed_count} outcomes.` : 'Outcome revealed.' };
