@@ -1,0 +1,35 @@
+{
+  "name": "tender-desk",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=4",
+    "mcp:smoke": "node scripts/mcp-smoke.mjs",
+    "data:report": "node scripts/tender-report.mjs",
+    "governance:demo": "node scripts/governance-demo.mjs",
+    "server": "node scripts/tender-desk-server.mjs",
+    "site:build": "node scripts/site-build.mjs",
+    "site:seed": "node scripts/site-seed.mjs",
+    "site:admin": "node scripts/site-admin.mjs",
+    "build": "npm run site:build",
+    "site:admin-password": "node scripts/site-admin-password.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@neon/config": "^1.14.6",
+    "@neon/env": "^2.1.9",
+    "@neondatabase/serverless": "1.2.1",
+    "csv-parse": "7.0.3",
+    "postgres": "3.4.4",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.17",
+    "@electric-sql/pglite-socket": "^0.2.20",
+    "pg": "^8.23.1"
+  }
+}

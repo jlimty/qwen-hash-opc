@@ -1,0 +1,13 @@
+node_modules/
+.local/
+.env
+.env.*
+!.env.example
+site/functions/
+site/dist/
+.neon
+site/.*.qoder.site
+.impeccable/*
+!.impeccable/config.json
+vibe_images/
+.DS_Store
