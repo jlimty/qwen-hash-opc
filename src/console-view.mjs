@@ -222,7 +222,8 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
     brief.credentials_cited.length === 0 ? check('ok', 'check', 'Cites no projects', 'Acceptable, for example a no-bid.')
       : badCites.length === 0 ? check('ok', 'check', 'All cited projects verified', esc(cited.map((p) => p.title).join(', ')))
         : check('bad', 'cross', 'A cited project is not verified', esc(badCites.map((p) => p.title).join(', '))),
-    ...brief.flags.map((f) => check('warn', 'alert', esc(flagLabels[f] ?? f), f === 'unverified_numeric_content' ? 'Check every number in the brief against the band.' : 'The founder reads the prose; it is not semantically checked.')),
+    ...brief.flags.map((f) => check('warn', 'alert', esc(flagLabels[f] ?? f), 'You read the prose; it is not semantically checked.')),
+    ...(brief.risk_facts ?? []).map((f) => check('warn', 'alert', esc(f.message), 'Risk fact computed by code.')),
   ];
 
   const decided = brief.status !== 'pending_approval';
@@ -238,7 +239,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
   return renderShell({ state, csrf, active: 'briefs', title: brief.tender_no, flash,
     crumbs: `<nav class="crumbs" aria-label="Breadcrumb"><a href="/briefs">Briefs</a> / <span class="num">${esc(brief.tender_no)}</span></nav>`,
     body: `${banner}<div class="detail">
-<section class="panel"><header><h2>Agent brief</h2><span class="muted small">${esc(clients.get(brief.client_id) ?? 'Unknown client')}</span></header>
+<section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${esc(clients.get(brief.client_id) ?? 'Unknown client')}</span></header>
 <blockquote class="prose">${esc(brief.content)}</blockquote>
 <p class="note">Prose is not semantically checked; you are the check.</p></section>
 <aside class="stack-gap">

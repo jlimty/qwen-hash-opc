@@ -374,7 +374,10 @@ test('briefs naming another client are blocked and uncited prose numbers are fla
   const flagged = await c.agentA.invoke('submit_brief', brief(c, pricing, { content: 'Expected amount SGD 999,999.00 with 95% confidence.' }));
   assert.equal(flagged.outcome, 'allowed');
   assert.equal(flagged.status, 'pending_approval');
-  assert.equal(flagged.flags.includes('unverified_numeric_content'), true);
+  assert.deepEqual(Object.keys(flagged).filter((key) => /risk|flags/.test(key)), []);
+  const { rows: stored } = await db.query('SELECT risk_facts, risk_level FROM tender_desk.briefs WHERE id=$1', [flagged.brief_id]);
+  assert.ok(stored[0].risk_facts.some((f) => f.code === 'unmatched_numbers' && /999,999\.00, 95%/.test(f.message)));
+  assert.equal(stored[0].risk_level, 'high');
 });
 
 test('only founder verification and approval release a valid pending brief', async () => {

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { connectorConfig, connectorSlug } from './connector-config.mjs';
 import { referenceCode } from './references.mjs';
+import { computeRiskFacts } from './brief-risk.mjs';
 import { tenderCategories } from './tender-data.mjs';
 import { getIncomingTenders, historicalFilterSchema, searchHistoricalTenders } from './tender-catalog.mjs';
 import { buildStatsSnapshot } from './tender-stats.mjs';
@@ -181,14 +182,18 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
           return { outcome: 'escalated', rule_id: 'G2', conflict_id: rows[0].id,
             reason: 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.' };
         }
-        const flags = ['human_review_required'];
-        if (/\p{N}/u.test(input.content)) flags.push('unverified_numeric_content');
+        const counts = (await tx.query(`SELECT
+          (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
+          (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
+          (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1) AS prior`, [actor.client_id])).rows[0];
+        const risk = computeRiskFacts({ n: Number(saved.snapshot.n), band: input.price_band, maxContractCents: Number(counts.max_contract_cents),
+          content: input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
         const { rows } = await tx.query(`INSERT INTO tender_desk.briefs
-          (client_id,tender_no,stat_id,recommendation,content,credentials_cited,price_band,flags,status)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_approval') RETURNING id`,
+          (client_id,tender_no,stat_id,recommendation,content,credentials_cited,price_band,flags,status,risk_facts,risk_level)
+          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_approval',$9,$10) RETURNING id, reference_number`,
         [actor.client_id, input.tender_no, input.stat_id, input.recommendation, input.content,
-          input.credentials_cited, JSON.stringify(input.price_band), flags]);
-        return { outcome: 'allowed', brief_id: rows[0].id, status: 'pending_approval', flags };
+          input.credentials_cited, JSON.stringify(input.price_band), ['human_review_required'], JSON.stringify(risk.facts), risk.level]);
+        return { outcome: 'allowed', brief_id: rows[0].id, brief_reference: referenceCode('BRF', rows[0].reference_number), status: 'pending_approval' };
       },
     },
   };
