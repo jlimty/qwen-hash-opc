@@ -169,7 +169,11 @@ test('the founder can approve and decline briefs, with a visible result and an a
   assert.match(after.text, /Brief approved\./);
   assert.match(after.text, /role="status"/);
   assert.match(after.text, /This brief was approved/);
-  const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`);
+  const refused = await act(session, `/actions/brief/${two.brief.brief_id}/decline`);
+  assert.equal(await status(two.brief.brief_id), 'pending_approval');
+  assert.match((await follow(session, refused)).text, /A decline needs a reason/);
+  assert.match((await http({ path: `/briefs/${two.brief.brief_id}`, headers: { Cookie: session.cookie } })).text, /<textarea[^>]*name="reason"[^>]*required/);
+  const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.' });
   assert.equal(declined.status, 303);
   assert.equal(await status(two.brief.brief_id), 'declined');
   const audit = (await founder.readConsole()).audit.filter((row) => row.actor === 'founder' && row.action === 'review_brief');

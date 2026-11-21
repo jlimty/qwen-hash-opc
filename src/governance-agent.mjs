@@ -89,7 +89,7 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
     create_client: { description: "Intake only. Record a new SME client profile after the user confirms it. Every self-reported past project is saved as unverified; only the admin can verify projects. Returns connector_config: the client's personal QwenWork connector. Show it to the user once, to paste into QwenWork Connectors; it is never shown again.",
       roles: ['intake'], schema: clientProfileSchema, run: (tx, actor, input) => createClientWithConnector(tx, input, connector) },
     get_client_context: {
-      description: "Return the profile, admin-verified past projects and saved shortlist of the client this connector is bound to. Takes no arguments; the client is fixed by the connector credential.",
+      description: "Return the profile, admin-verified past projects, saved shortlist, this client's briefs with the admin's decision (approved text, or the decline reason), and tenders where advice was refused, for the client this connector is bound to. Takes no arguments; the client is fixed by the connector credential.",
       roles: ['client'], schema: z.strictObject({}),
       run: async (tx, actor) => {
         const client = (await tx.query(`SELECT id,name,capabilities,categories,team_size,max_contract_cents
@@ -98,8 +98,13 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
           WHERE client_id=$1 AND verified=true ORDER BY id`, [actor.client_id])).rows;
         const shortlist = (await tx.query(`SELECT tender_no,fit_score,reasons FROM tender_desk.shortlists
           WHERE client_id=$1 ORDER BY tender_no`, [actor.client_id])).rows;
+        const briefs = (await tx.query(`SELECT reference_number,tender_no,recommendation,status,created_at,decided_at,decline_reason,content
+          FROM tender_desk.briefs WHERE client_id=$1 ORDER BY created_at DESC, reference_number DESC LIMIT 20`, [actor.client_id])).rows
+          .map(({ reference_number, created_at, ...b }) => ({ reference: referenceCode('BRF', reference_number), ...b, submitted_at: created_at }));
+        const advice_refused = (await tx.query(`SELECT tender_no,status FROM tender_desk.conflicts WHERE client_id=$1 ORDER BY created_at`, [actor.client_id])).rows
+          .map((row) => ({ tender_no: row.tender_no, status: row.status === 'open' ? 'awaiting_admin' : 'not_advised' }));
         return { outcome: 'allowed', client: { ...client, max_contract_cents: Number(client.max_contract_cents),
-          past_projects: projects.map((p) => ({ ...p, value_cents: p.value_cents === null ? null : Number(p.value_cents) })), shortlist } };
+          past_projects: projects.map((p) => ({ ...p, value_cents: p.value_cents === null ? null : Number(p.value_cents) })), shortlist, briefs, advice_refused } };
       },
     },
     get_incoming_tenders: {

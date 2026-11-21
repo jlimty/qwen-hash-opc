@@ -133,6 +133,55 @@ test('connectorSlug makes a safe bounded name', () => {
   assert.ok(connectorSlug('x'.repeat(200)).length <= 'tender-desk-'.length + 40);
 });
 
+test('the client sees an approved brief in its context', async () => {
+  const c = await setup();
+  const submitted = await submitAs(c, c.agentA, { content: 'Bid, subject to capacity.' });
+  await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
+  const { client } = await c.agentA.invoke('get_client_context', {});
+  const mine = client.briefs.find((b) => b.tender_no === c.tender_no);
+  assert.match(mine.reference, /^BRF\d{5,}$/);
+  assert.equal(mine.status, 'approved');
+  assert.equal(mine.content, 'Bid, subject to capacity.');
+  assert.ok(mine.decided_at);
+});
+
+test('the client sees the decline reason', async () => {
+  const c = await setup();
+  const submitted = await submitAs(c, c.agentA);
+  await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Scope is beyond the team size.' });
+  const mine = (await c.agentA.invoke('get_client_context', {})).client.briefs[0];
+  assert.equal(mine.status, 'declined');
+  assert.equal(mine.decline_reason, 'Scope is beyond the team size.');
+});
+
+test('a decline without a reason is blocked', async () => {
+  const c = await setup();
+  const submitted = await submitAs(c, c.agentA);
+  const result = await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined' });
+  assert.equal(result.outcome, 'blocked');
+  assert.equal(result.reason, 'A decline needs a reason.');
+});
+
+test('an escalated client sees awaiting_admin, then not_advised', async () => {
+  const c = await setup();
+  await submitAs(c, c.agentA);
+  const conflict = await submitAs(c, c.agentB);
+  assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'awaiting_admin' }]);
+  await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
+  assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
+});
+
+test('client context never leaks the holder, risk or another client', async () => {
+  const c = await setup();
+  await submitAs(c, c.agentA);
+  await submitAs(c, c.agentB);
+  const text = JSON.stringify(await c.agentB.invoke('get_client_context', {}));
+  assert.doesNotMatch(text, /holder_client_id|risk_level|risk_facts|flags/);
+  assert.doesNotMatch(text, new RegExp(c.a.client_id));
+  const { rows } = await db.query('SELECT name FROM tender_desk.clients WHERE id=$1', [c.a.client_id]);
+  assert.doesNotMatch(text, new RegExp(rows[0].name));
+});
+
 test('agent catalogs contain neither founder tools nor an ungated pricing path', async () => {
   const c = await setup();
   assert.equal(c.agentA.toolNames.includes('request_pricing'), true);
@@ -201,7 +250,7 @@ test('a blocked brief takes no hold', async () => {
 test('holder resubmits after decline without escalating against itself', async () => {
   const c = await setup();
   const first = await submitAs(c, c.agentA);
-  await founder.reviewBrief({ brief_id: first.brief_id, decision: 'declined' });
+  await founder.reviewBrief({ brief_id: first.brief_id, decision: 'declined', reason: 'Tighten the risks section.' });
   const again = await submitAs(c, c.agentA);
   assert.equal(again.status, 'pending_approval');
   assert.equal((await db.query('SELECT * FROM tender_desk.conflicts WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
@@ -338,7 +387,7 @@ test('only founder verification and approval release a valid pending brief', asy
   assert.equal((await c.agentA.invoke('approve_brief', { brief_id: submitted.brief_id })).outcome, 'blocked');
   const approved = await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
   assert.equal(approved.outcome, 'approved');
-  assert.equal((await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined' })).outcome, 'blocked');
+  assert.equal((await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Too late.' })).outcome, 'blocked');
 });
 
 test('approval rechecks a project that was revoked after the brief was submitted', async () => {

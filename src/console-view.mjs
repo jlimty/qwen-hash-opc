@@ -229,7 +229,11 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
   const banner = decided ? `<p class="banner ${brief.status === 'approved' ? 'ok' : 'bad'}" role="status">This brief was ${brief.status}.</p>` : '';
   const actions = decided ? '' : `<div class="decision">
 <p class="muted small">Approval re-checks the pricing hold and the citations.</p>
-<div class="row-actions">${form(csrf, `/actions/brief/${brief.id}/approve`, 'Approve', 'primary')}${form(csrf, `/actions/brief/${brief.id}/decline`, 'Decline', 'outline')}</div></div>`;
+<div class="row-actions">${form(csrf, `/actions/brief/${brief.id}/approve`, 'Approve', 'primary')}</div>
+<form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<label for="decline-reason">Reason for declining (sent to the client)</label>
+<textarea id="decline-reason" name="reason" required maxlength="500" rows="3"></textarea>
+<button class="outline" type="submit">Decline</button></form></div>`;
 
   return renderShell({ state, csrf, active: 'briefs', title: brief.tender_no, flash,
     crumbs: `<nav class="crumbs" aria-label="Breadcrumb"><a href="/briefs">Briefs</a> / <span class="num">${esc(brief.tender_no)}</span></nav>`,

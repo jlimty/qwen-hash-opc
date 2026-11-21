@@ -17,7 +17,7 @@ const securityHeaders = {
 
 const actions = {
   'brief/approve': (ops, id) => ops.reviewBrief({ brief_id: id, decision: 'approved' }),
-  'brief/decline': (ops, id) => ops.reviewBrief({ brief_id: id, decision: 'declined' }),
+  'brief/decline': (ops, id, form) => ops.reviewBrief({ brief_id: id, decision: 'declined', reason: String(form.get('reason') ?? '').slice(0, 500) }),
   'conflict/serve-holder': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_holder' }),
   'conflict/stop': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_neither' }),
   'project/verify': (ops, id) => ops.verifyProject({ project_id: id, verified: true }),
@@ -194,7 +194,7 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
     if (!match || !actions[actionKey] || !idPattern.test(match[2])) return text(404, 'Not found');
     let flash;
     try {
-      const result = await actions[actionKey](ops, match[2]);
+      const result = await actions[actionKey](ops, match[2], form);
       flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` } : { ok: true, text: successText[actionKey] };
     } catch {
       flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };

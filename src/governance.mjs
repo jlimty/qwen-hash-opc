@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential } from './governance-agent.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
+import { referenceCode } from './references.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
@@ -32,7 +33,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
-    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference']) {
+    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason']) {
       if (result[key]) summary[key] = result[key];
     }
     await tx.query(`INSERT INTO tender_desk.audit_log (actor,action,client_id,tender_no,outcome,rule_id,reason,summary)
@@ -129,7 +130,9 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           return rows.length ? { outcome: 'allowed', project_id: input.project_id, client_id: rows[0].client_id, verified: input.verified }
             : blocked('G3', 'Project does not exist.');
         }),
-        reviewBrief: founderOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']) }), async (tx, input) => {
+        reviewBrief: founderOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']),
+          reason: z.string().trim().max(500).optional() }), async (tx, input) => {
+          if (input.decision === 'declined' && !input.reason) return blocked('VALIDATION', 'A decline needs a reason.');
           const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
           if (!brief) return blocked('G5', 'Brief does not exist.');
           const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [brief.tender_no])).rows[0];
@@ -140,8 +143,10 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           if (input.decision === 'approved' && !await hasVerifiedCitations(tx, brief.client_id, brief.credentials_cited)) {
             return blocked('G3', 'A cited project is no longer verified.');
           }
-          await tx.query('UPDATE tender_desk.briefs SET status=$1 WHERE id=$2', [input.decision, brief.id]);
-          return { outcome: input.decision, status: input.decision, brief_id: brief.id, client_id: brief.client_id, tender_no: brief.tender_no };
+          const decline_reason = input.decision === 'declined' ? input.reason : null;
+          await tx.query('UPDATE tender_desk.briefs SET status=$1, decided_at=now(), decline_reason=$2 WHERE id=$3', [input.decision, decline_reason, brief.id]);
+          return { outcome: input.decision, status: input.decision, brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number),
+            client_id: brief.client_id, tender_no: brief.tender_no, ...(decline_reason && { decline_reason }) };
         }),
         resolveConflict: founderOperation('resolve_conflict', z.strictObject({ conflict_id: z.uuid(), resolution: z.enum(['serve_holder', 'serve_neither']) }), async (tx, input) => {
           const conflict = (await tx.query('SELECT * FROM tender_desk.conflicts WHERE id=$1', [input.conflict_id])).rows[0];
