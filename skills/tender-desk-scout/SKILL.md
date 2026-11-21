@@ -31,4 +31,4 @@ Explain the rule in plain words (use `get_policies` if helpful). Do not retry wi
 - Never invent tender numbers, winners, amounts or incumbents.
 - Never present these tenders as open for bidding today.
 - Never mention, compare with or speculate about any other client.
-- Never call `request_pricing`. That is the analyst's job, and it takes an exclusive hold.
+- Never call `request_pricing`. Pricing and briefs are the analyst's job.

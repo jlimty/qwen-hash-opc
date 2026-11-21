@@ -14,11 +14,11 @@ Use only the Tender Desk connector bound to this client: `get_client_context`, `
 ## Steps
 
 1. Announce: "Using tender-desk-proposal."
-2. Call `get_client_context` for the profile and **verified** projects. Read the tender's description and agency with `get_incoming_tenders`.
+2. Call `get_client_context` for the profile, **verified** projects and briefs. If it holds an **approved brief** for this tender, follow its bid or no-bid recommendation and do not contradict it. Read the tender's description and agency with `get_incoming_tenders`.
 3. If the description is thin, say so and ask the user for the actual tender documents. Do not invent requirements.
 4. Produce: an outline (understanding of the need, approach, team and capacity, relevant experience, delivery plan, risks), and a compliance checklist of items the client must confirm from the real tender documents, such as eligibility, registrations, insurance, deadlines and forms. Mark every requirement you inferred as "to confirm".
 5. Draw experience only from the verified projects, by title. Where there is no matching project, write "no verified project to cite" instead of filling the gap.
-6. Do not include a price. If asked, say pricing goes through the analyst's founder-approved brief.
+6. Do not include a price. If asked, say pricing goes through the analyst's admin-approved brief.
 
 ## When a tool blocks or fails
 

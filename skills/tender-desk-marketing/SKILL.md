@@ -5,7 +5,7 @@ description: Use when asked to write a Tender Desk data article, weekly market n
 
 # Tender Desk Marketing
 
-Write a short, honest data article about Singapore government contract awards, and optionally a promo script. This uses public data only. No client, brief, price band or founder information may appear.
+Write a short, honest data article about Singapore government contract awards, and optionally a promo script. This uses public data only. No client, brief, price band or admin information may appear.
 
 ## Input
 
@@ -23,6 +23,6 @@ The user pastes the output of `npm run data:report -- --category <category>` (a 
 ## Never
 
 - Never use a number that is not in the pasted report. Never round in a way that changes the meaning.
-- Never mention a client, brief, pricing hold, or any Tender Desk internal data.
+- Never mention a client, brief, advice slot, or any Tender Desk internal data.
 - Never claim to predict winners, guarantee outcomes, or give legal or bid advice.
 - Never describe the backtest as live tender discovery.
