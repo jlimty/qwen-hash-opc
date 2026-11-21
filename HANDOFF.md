@@ -1,143 +1,98 @@
 # Tender Desk: handoff
 
-Status as of 21 Nov 2026. Hackathon: QwenWork x Hashmeta AI One-Person Company. Demo video (max 3 min) and submission due **Mon 23 Nov 2026, 23:59 SGT**.
+Status as of 21 Nov 2026, evening. Hackathon: QwenWork x Hashmeta AI One-Person Company. **Demo video (max 3 min) and submission due Mon 23 Nov 2026, 23:59 SGT.** Judging: innovation 25%, feasibility 25%, QwenWork use 20%, demo presentation 15%, Hashmeta website 15%.
 
-Tender Desk is a one-person tender advisory for Singapore SMEs. QwenWork agents do the work (intake, scouting, analysis, proposals). A deterministic backend holds the data and enforces the rules. The founder alone approves briefs, verifies clients' projects and resolves pricing conflicts.
+Tender Desk is a one-person tender advisory for Singapore SMEs. QwenWork agents do the work (intake, scouting, analysis, proposals) through a governed MCP endpoint. A deterministic backend enforces the rules; the admin alone approves briefs, verifies projects, resolves pricing conflicts and reveals backtest outcomes.
 
-## What exists and works (local only)
+## Where things stand
 
-113 automated tests pass (`npm test`), `npm audit --omit=dev` reports 0 vulnerabilities. Everything runs on loopback with embedded PostgreSQL (PGlite). **Nothing is deployed, hosted or committed.**
+**LIVE:** `https://tender-desk-bz2oc52nag4.qoder.website` (public; the root redirects straight to the console). Admin: the original admin email, signed in successfully. Hosted on Qoder Sites (Deno function) with Neon Postgres and Neon Auth.
 
-| Piece | Files | State |
-|---|---|---|
-| GeBIZ importer, categories, historical search, price statistics | `src/tender-data.mjs`, `src/tender-catalog.mjs`, `src/tender-stats.mjs` | Done, tested on the real CSV |
-| Governance schema (Postgres, schema `tender_desk`) | `db/001-governance.sql`, `src/governance-db.mjs` | Done; audit log and price snapshots are append-only by trigger |
-| Governed agent tools and founder actions | `src/governance.mjs`, `src/governance-agent.mjs` | Done, independently reviewed |
-| Business MCP endpoint (agents call this) | `src/mcp-business.mjs` | Done, independently reviewed |
-| Founder console (approve, resolve, verify, audit) | `src/console.mjs`, `src/console-view.mjs`, `src/console-css.mjs` | Redesigned 21 Nov as a multi-screen SaaS app: sidebar shell, Overview inbox, Briefs list + detail, Conflicts, Clients, Backtest, Audit log. No client JavaScript. |
-| Backtest prediction + reveal + scoreboard | `src/backtest.mjs`, reveal in `src/governance.mjs` | Done. Founder-only reveal (per tender or all), derived from the append-only audit log, honest hit rates (47% band / 5% incumbent on the full set), filters All/Inside/Outside |
-| Launcher | `scripts/tender-desk-server.mjs` | Done |
-| Scripted end-to-end demo (not QwenWork) | `scripts/governance-demo.mjs` (`npm run governance:demo`) | Done |
-| Connection-check skill (private QwenWork skill) | `skills/tender-desk-connection-check/SKILL.md` | Installed and verified earlier |
-| QwenWork agent skills (intake, scout, analyst, proposal, marketing) | `skills/tender-desk-*/SKILL.md` | Written 21 Nov, not yet uploaded to QwenWork or exercised there |
-| Product record | `PRODUCT.md` | Written |
+**QwenWork:** three connectors imported from JSON config (`tender-desk-amber`, `-birch`, `-intake`, all verified live: correct tool sets per role) and the five skills imported (intake, scout, analyst, proposal, marketing). **Not yet exercised end-to-end by QwenWork agents** — that practice run is the next step.
 
-## Hosting on Qoder Sites (in progress, 21 Nov)
+**Code:** 167 automated tests pass, `npm audit --omit=dev` clean, two local commits (`dc650d6`, `70848f7`), **no remote push** (GitHub is optional for the submission).
 
-Decision: host on Qoder Sites, not local. Verified with a live probe site: functions run on the Supabase edge runtime (Deno 1.45 compatible), outbound HTTPS and raw TCP are open, and `npm:` imports of zod, csv-parse and postgres load. The gateway rejects non-browser POSTs without a same-site `Origin` header, and the admin confirmed QwenWork connectors can send that header. The Sites database is too restricted for the governance schema (no triggers, transactions or row locks), so the governance data lives in an external Postgres reached over TCP.
+**Demo state:** production's demo beats were spent by console exploration at 05:40 UTC (roadshow project verified; "Reveal all 512" clicked — irreversible by design). A pristine snapshot exists; reset before recording (below).
 
-Built and tested locally (139 tests): `src/pg-database.mjs` (Postgres adapter, same interface as PGlite), `src/console-handler.mjs` (web-standard console with signed-cookie sessions, `src/console.mjs` is now a thin Node wrapper), `src/mcp-web.mjs` (hand-rolled MCP over fetch), `src/site-app.mjs` (routing and lazy boot), `scripts/site-build.mjs` (`npm run site:build` writes `site/`), `scripts/site-seed.mjs` (`npm run site:seed`, `-- --check` to test connectivity). Tests run the real wire protocol through `@electric-sql/pglite-socket`.
+## The demo (guardrails firing, backtest as proof)
 
-Admin sign-in uses Neon Auth (managed Better Auth), not a shared secret: email and password are checked by the Neon Auth REST API (`src/neon-auth.mjs`), and only the single Neon user ID in `TD_ADMIN_USER_ID` is allowed, because Neon allows open sign-up (restricted sign-up is "coming soon"). Sessions are the Neon Auth session cookie, verified on every request and revoked at sign-out. CSRF is a double-submit cookie. The code's internal founder capability is a random value generated at boot and never stored. The local launcher still uses the secret login. Neon's own Functions, Storage, AI gateway and Realtime are not needed and stay off.
+Demo tender: **DST000ETT26000005** ("Event Management Services for Brainhack", DSTA). Analyst query "event management" → 57 comparables, band S$208,800–S$1,153,109; real award S$309,320 lands **inside** (the agency-level backtest band narrowly misses — a good honest-reporting moment). Amber and Birch are both events companies, so both shortlist it and the G2 conflict happens naturally.
 
-Site `Tender Desk` is prepared (project 01a1fc00-0331-71d8-8889-f9c1c96aca6d, latest draft action 3071148d-8f3f-4acf-92c2-af75d3c2bb81), host `tender-desk-bz2oc52nag4.qoder.website`, still private and unpublished. Blocked only on three values entered through Sites Settings: `TD_DB_URL`, `TD_AUTH_URL` and `TD_ADMIN_USER_ID`. The founder-token file in `.local/site/` is now only the local seeding capability, not a deployed secret.
+Storyline for the recording: article (Hashmeta) → intake (Cedar Markets, fictional) → scout shortlist → Amber prices and submits a brief → Birch hits the same tender → **escalated G2** → brief citing an unverified project → **blocked G3** → admin verifies, resolves, approves → audit log → backtest reveal.
 
-Neon is set up (21 Nov): project `qwen-meta-opc` (`curly-surf-74518312`), branch `production`, Postgres 18 plus Neon Auth. `neon init` created `neon.ts` and `.neon` (git-ignored) and wrote `.env.local` (git-ignored) with `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED`, `NEON_AUTH_BASE_URL` and others; agent installs were skipped on purpose (`--no-agent-setup`). `neon deploy` changed nothing in the cloud project. The governance schema is migrated and the two fictional demo clients are seeded; connector credential files are in `.local/site/agent-tokens/`. The site's address is added as a Neon Auth trusted domain. Proof run against the real services (17 checks: TLS Postgres, row locks, append-only trigger, sign-up, sign-in, session check, refusal of a non-founder, sign-out revocation, every console screen, MCP handshake) passed.
+Practice-run prompts (one chat per step, connector noted) were given to the admin on 21 Nov; they are reproduced in git history if needed. The scripted rehearsal covers the same ground: `npm run site:rehearse -- --db-file .local/site/rehearsal-db.url --yes-this-is-disposable` — 15 of 15 steps passed on a clean branch. It refuses to run without the disposable flag and refuses the production database.
 
-Live (21 Nov): the site is published and public at `https://tender-desk-bz2oc52nag4.qoder.website`, latest draft action `9789a6a2-073b-4e19-920c-e14340437431`. The deployed function uses Neon's WebSocket driver (`@neondatabase/serverless`) because the raw-TCP `postgres` driver times out inside the Sites runtime; Node scripts still use `postgres`. 11 live checks passed (see the Neon memory note for the list). Admin is the original admin email, public sign-up is disabled, and a stray placeholder account you@example.com (ID 9b5651fa-7b0e-44cd-a353-c9a7e25faa2f) can be removed with `neon neon-auth user delete <id>`.
+### Reset production before recording (needs the admin's explicit yes, every time)
 
-Browser sign-in bug (fixed 21 Nov): the console used `Referrer-Policy: no-referrer`, which makes browsers send `Origin: null` on same-site form posts, and the Sites gateway rejects that with `sites_gateway_origin_forbidden`. It is now `same-origin`, with a regression test. curl-based checks missed this because they set Origin by hand; `node scripts/browser-login-check.mjs <login URL>` drives real headless Chrome through the form (it cannot run against the live site, whose bot protection blocks headless browsers, so run it against a local console). The site root `/` is now an instant redirect to the console, with no landing page.
-
-Password reset (break-glass, no email needed): `npm run site:admin-password` in a terminal. It shows which account it will change, asks for the new password twice, writes Better Auth's scrypt hash (`src/neon-password.mjs`, validated against the real Neon Auth with a throwaway user), and signs the admin out everywhere. The admin setup prompt now also asks twice; before 21 Nov it asked once, so a typo left an unknown password. The sign-in page also has a "Forgot password?" link (email reset through Neon Auth's shared email provider, sender auth@mail.myneon.app). The flow was verified against the real Neon Auth with a throwaway user, reading the token from `neon_auth.verification` instead of an inbox: request, link redirect, reset, single-use token, sign-in with the new password. Actual email delivery to the admin's inbox is unverified. Neon's "Revoke Sessions On Reset" setting is off, so a reset does not sign out other sessions (`neon neon-auth config email-password update --revoke-sessions-on-password-reset` turns it on; needs explicit approval).
-
-Remaining: (1) the admin signs in at `https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/` with his Neon password (not testable by the agent); (2) the admin updates QwenWork connectors to `https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/mcp` with the credential from `.local/site/agent-tokens/*.txt` as `Authorization` plus an `Origin: https://tender-desk-bz2oc52nag4.qoder.website` header; (3) upload the agent skills from `skills/` to QwenWork and run the demo journey; (4) delete the probe site `tender-desk-probe` and the `sites-probe/` folder. Secret values pasted into Settings are trimmed and validated; wrong values log only the scheme and length. Each MCP call costs about 1 s of database round trips on a warm instance.
-
-## Demo preparation (21 Nov)
-
- The video should centre on the guardrails firing and the backtest as proof.
-
-Rehearsal: `npm run site:rehearse -- --db-file <url file> --yes-this-is-disposable` runs the whole storyline (intake, shortlist, pricing, competing client escalated, G1/G3/G4 blocks, no agent power to decide, admin decisions, backtest reveal, audit) through the real MCP layer on the real GeBIZ data. It refuses to run without the flag and refuses the production database. It passed 15 of 15 on a clean Neon branch.
-
-Production demo state was spent by console exploration at 05:40 UTC: Amber's roadshow project was verified (removing the G3 beat) and **Reveal all 512** was clicked (irreversible by design, derived from the append-only audit log). "Reveal all" now needs a confirmation page. Every practice run in QwenWork also leaves permanent audit rows, so reset before the final recording:
-
-- Neon branch `demo-baseline` holds production exactly as of 05:39:30 UTC on 21 Nov (14 audit rows, no reveal, roadshow unverified, admin account present, the stray `you@example.com` account also present). It does not expire.
-- Reset: `neon branches restore production demo-baseline --preserve-under-name production-before-reset`. This rewinds production data, including the `neon_auth` schema, so sign in again afterwards, delete the stray account again (`neon neon-auth user delete 9b5651fa-7b0e-44cd-a353-c9a7e25faa2f`), and expect the audit log to start from row 14. It is a production change and needs the admin's explicit yes each time.
-
-Demo tender: **DST000ETT26000005** ("Event Management Services for Brainhack", Defence Science and Technology Agency). Analyst query "event management" gives 57 comparables, band S$208,800 to S$1,153,109; the real award of S$309,320 lands inside it (the agency-level backtest band S$104,083 to S$305,320 narrowly misses, a good honest-reporting moment). Both demo clients are events companies, so both shortlist it and the conflict happens naturally.
-
-## Run it
+Every QwenWork practice run leaves permanent audit rows, and reveals cannot be undone. Neon branch `demo-baseline` holds production exactly as of 21 Nov 05:39:30 UTC (14 audit rows, no reveal, roadshow unverified, admin present, stray `you@example.com` account present). Does not expire.
 
 ```bash
-cd <local-path>
-npm install
-npm test
-npm run server -- --seed-demo     # first run only; creates fictional clients and credential files
-npm run server                    # later runs reuse the saved state
+neon branches restore production demo-baseline --preserve-under-name production-before-reset
 ```
 
-- MCP endpoint: `http://127.0.0.1:8788/mcp` (`TENDER_DESK_PORT`)
-- Founder console: `http://127.0.0.1:8789/` (`TENDER_DESK_CONSOLE_PORT`)
-- State folder: `.local/` (git-ignored; override with `TENDER_DESK_STATE_DIR`)
+Afterwards: sign in again (the rewind includes `neon_auth`), delete the stray account again (`neon neon-auth user delete 9b5651fa-7b0e-44cd-a353-c9a7e25faa2f`), and expect the audit log to start from row 14.
 
-Do not delete `.local/db` without also deleting `.local/agent-tokens/`; the seed refuses to run over existing credential files.
+## Remaining work
 
-### Secrets (never paste these into chat; paths only)
+| # | Item | Owner |
+|---|---|---|
+| 1 | QwenWork practice run through the storyline (prompts already drafted); fix any skill-following issues | The admin, with agent debugging |
+| 2 | Approve + run the production reset just before recording | The admin approves, agent runs |
+| 3 | Record the video — QwenWork-made, ≤3 min, guardrails-centred | The admin (agent drafts script/shot list on request) |
+| 4 | Hashmeta site (15%): data article from `npm run data:report -- --category events-community`; marketing skill turns that JSON into the article/promo script | The admin builds; agent drafts content |
+| 5 | Submit via the form (YouTube link, title, one-sentence description, project description) | The admin |
+| 6 | Optional: push the repo to GitHub; delete the stray `you@example.com` Neon account | The admin decides |
 
-- `.local/founder-token.txt`: the founder console login secret (64 hex characters, mode 0600). Copy it with `pbcopy < .local/founder-token.txt`, paste into the console's login form.
-- `.local/agent-tokens/{amber,birch,intake}.txt`: one `Bearer ...` credential per QwenWork connector (mode 0600). Copy each with `pbcopy < <file>`.
-- `.local/mcp-authorization.txt`: credential for the old connection-check probe only (`npm run mcp:smoke`, port 8787).
+## Architecture
 
-### Connect QwenWork
+- **Governance core** (`src/governance.mjs`, `src/governance-agent.mjs`, `db/001-governance.sql`): bearer-token identity (hashed credentials; a supplied `client_id` is G1-blocked), exclusive pricing holds (G2, one holder wins, escalation reveals neither price nor holder), verified-citation briefs (G3), snapshot-exact price bands (G4), admin-only decisions (G5), hold-out secrecy (G6, no winner/amount until revealed), append-only audit and snapshots (Postgres triggers), every write transactional with its audit row.
+- **MCP** for agents: `src/mcp-web.mjs` (fetch-native, deployed) and `src/mcp-business.mjs` (SDK-based, local). Tools: `get_policies`, `get_client_context`, `get_incoming_tenders`, `search_tenders`, `save_shortlist`, `request_pricing`, `submit_brief`, `create_client` (intake only). No admin tool is ever exposed to agents.
+- **Console** (`src/console-handler.mjs` + `console-view.mjs` + `console-css.mjs`): server-rendered, zero client JavaScript, CSP `default-src 'none'`, screens: Overview inbox, Briefs + detail, Conflicts, Clients, Backtest (rates + filters + reveal), Audit log. Admin sign-in via Neon Auth email/password allowlisted by user ID (`TD_ADMIN_USER_ID`); CSRF double-submit cookie; "Forgot password?" email reset through Neon Auth.
+- **Site** (`src/site-app.mjs`, built by `npm run site:build` into `site/`): one Deno function serves console + MCP + `/health`; root `/` is an instant redirect to the console. Seeds/migrates with `npm run site:seed` (`-- --check` first). Admin setup: `npm run site:admin -- --email <email>`; break-glass password reset: `npm run site:admin-password` (asks twice, signs out all sessions).
+- **Local fallback** (works offline, used for early testing): `npm run server -- --seed-demo` → MCP on 8788, console on 8789, secret-file login. Keep as the recording fallback if the hosted site has issues.
 
-Extensions → Connectors → Add → Streamable HTTP. Create one connector per credential, for example `tender-desk-amber` and `tender-desk-birch`, URL `http://127.0.0.1:8788/mcp`, header `Authorization` set to the file's contents. Each connector acts as exactly one client; the credential decides which. The founder secret is never accepted by the MCP endpoint.
+## Platform facts learned the hard way (all verified)
 
-Agent tools: `get_policies`, `get_client_context`, `get_incoming_tenders`, `search_tenders`, `save_shortlist`, `request_pricing`, `submit_brief` (and `create_client` for the intake credential). No founder tool is exposed to agents.
+- Sites functions run on the Supabase edge runtime (Deno 1.45-compatible). The **raw-TCP `postgres` driver times out** there; use `@neondatabase/serverless` (WebSocket) — `createPoolDatabase` in `src/pg-database.mjs`. Node scripts keep `postgres`.
+- The Sites gateway rejects non-browser POSTs without a same-site `Origin` header (`sites_gateway_origin_forbidden`); QwenWork connectors can send it. Browsers send `Origin: null` under `Referrer-Policy: no-referrer` — the console uses `same-origin` (this bug broke live sign-in; regression-tested). `curl` with hand-set headers misses both classes of bug.
+- The gateway rewrites function paths to a physical name (`/app-<hash>`); route on path suffixes. It also rewrites `Cache-Control` to `private, no-store`.
+- The Sites database is a restricted SQL subset (no triggers/transactions/row locks) — unfit for the governance schema; that's why Neon holds the data.
+- Sites Settings secrets are write-only; the app trims stray whitespace/quotes and logs only a bad value's scheme and length, never the value.
+- Real-browser form testing: `node scripts/browser-login-check.mjs <login-url>` (headless Chrome via CDP; works locally only — the live site blocks automated browsers, which is correct behaviour).
+- Neon Auth (managed Better Auth): open sign-up is **disabled** on production (verified HTTP 400); the site origin is a trusted domain; password hashes are scrypt `salt:key` (`src/neon-password.mjs`, validated against the real service). "Revoke Sessions On Reset" is off; enabling it needs the admin's approval.
 
-## The rules enforced in code
+## Secrets and credentials (paths only, never chat)
 
-- **Identity:** the client comes from the stored, hashed credential, never from tool input. A supplied `client_id` is blocked (G1) and audited.
-- **Exclusive pricing (G2):** the first client to call `request_pricing` on a tender holds it. A competitor is escalated, gets no price and no holder identity, and the founder decides: keep serving the holder, or stop pricing that tender. Advice already given is never transferred.
-- **Verified credentials (G3):** briefs may cite only that client's founder-verified projects. Intake records every project as unverified.
-- **Grounded numbers (G4):** the price band must exactly match a saved snapshot for that client and tender. Prose numbers are only flagged, not proven.
-- **Founder approval (G5):** agents can only submit pending briefs. Approval re-checks the hold and the citations.
-- **Hold-out secrecy (G6):** 2026 awards are shown to agents as "incoming" backtest tenders with no winner or amount.
-- **Audit:** every action, allowed or blocked, is written in the same transaction as the change. Failed sign-ins are aggregated to one row a minute.
+- `.env.local` — Neon URLs (from `neon init`; git-ignored). `~/.td-db-url`, `~/.td-auth-url` — copies for scripts.
+- `.local/site/agent-tokens/{amber,birch,intake}.txt` — connector credentials (`Bearer …`, mode 0600).
+- `.local/site/connectors/*.json` — QwenWork import configs with real tokens (mode 600).
+- `.local/site/admin-user-id.txt` — the admin's Neon user ID `00000000-0000-4000-8000-000000000001` (the original admin email). `.local/site/db-unpooled.url`, `rehearsal-db.url`, `baseline-db.url` — connection strings (unpooled; rehearsal; demo-baseline).
+- `.local/founder-token.txt` and `.local/agent-tokens/` — the LOCAL launcher's credentials (fallback mode only).
 
 ## Verified versus not verified
 
-Verified by automated tests: all of the above, over real HTTP with the official MCP SDK client, plus restart persistence and rollback when an audit write fails. The console was also screenshot-checked at 1440px and 390px.
+**Verified:** 167 automated tests (wire-protocol Postgres via PGlite-socket, MCP via the official SDK, console over HTTP, both database adapters). 17 checks against real Neon from Node. 11→8 live checks against the deployed site (health, login page, wrong password refused by real Neon Auth, session walls, MCP handshake with correct role tools, hold-out secrecy, spoofed `client_id` blocked, real DB write, 401s, sign-up closed). Forgot-password flow against real Neon Auth with a throwaway user. Rehearsal 15/15 on a branch.
 
-**Not verified:**
-- The new business endpoint has not been called from QwenWork itself yet. The earlier connection-check probe and skill were verified from QwenWork.
-- Hosted HTTPS (Vercel) compatibility with the QwenWork connector. Deferred by you.
-- Concurrency on a real Postgres. PGlite serialises transactions, so the "one holder wins" test shows the logic, not behaviour under load.
-- The redesigned console was screenshot-checked at 1440px and 390px and passed the Impeccable design detector, but this session's agent could not view images (no vision), so no human eyes have seen the redesign yet. Screenshots for review: `.impeccable/review/` (overview, briefs, brief, conflicts, clients, backtest, audit, login, mobile). The console has not been clicked through in a live browser by a person.
-
-## Not built yet (in rough priority order)
-
-1. **QwenWork agent skills:** written in `skills/` but need uploading to QwenWork and a real end-to-end run (intake → scout → analyst → brief → conflict → approval → backtest reveal). Marketing skill consumes `npm run data:report -- --category <cat>` output pasted into chat.
-3. **Hashmeta marketing site** (15% of judging). Built by the admin in the Hashmeta AI Website Builder, not by code here. Needs data articles from `market_stats`-style output.
-4. **Demo video** (max 3 minutes, made with QwenWork). Suggested flow: article, intake, shortlist, brief appears in console, second client escalated, unverified project blocked, founder resolves, audit log, backtest reveal.
-5. **Hosting** (optional for the deadline): needs a fetch-style MCP handler, a real shared Postgres adapter replacing PGlite, a stored founder secret, TLS, rate limiting, and the real hostname in the Host/Origin allow-list.
-6. **Client portal** `/c/[token]` and policies page (design doc "Should").
-7. **Git:** the repository has no commits. Nothing has been committed or pushed.
+**Not verified:** a full QwenWork agent run against the live connectors (connectors and tool catalogs are verified; skill-following is not). Real email delivery of a reset link to the admin's inbox. Console visuals as judged by a human (agent has no vision; screenshots in `.impeccable/review/`). Cold-start and CPU limits under load. Concurrency on Neon under contention (row-lock logic is tested; heavy parallel load is not).
 
 ## Decisions to know about
 
-- **Stack:** the founder console is plain server-rendered Node with no client JavaScript, because the embedded database can only be opened by one process. Next.js on Vercel (original plan) is deferred until a hosted Postgres adapter exists; the console's render functions port over with mostly view changes. You asked about the tradeoffs and did not object.
-- **No LLM calls in this code.** All reasoning and writing happens in QwenWork.
-- **Taxonomy:** categories are ordered keyword rules (`keywords-v1`); the exclusive counts differ from the draft's overlapping estimates.
-- **Zero citations allowed:** a brief may cite no projects (for example a no-bid). Cited projects must be verified.
-- **Console design:** built from a generated mock-up (`vibe_images/founder-console-comp_*.png`). Light ledger-style surface, one accent colour, status colours reserved for guardrail outcomes.
-- `.impeccable/config.json` records `buildPath: comp`. `PRODUCT.md` records the product facts for design work.
-- **Console redesign direction (21 Nov):** app shell with separate screens, chosen by the admin; references Stripe Dashboard + Attio. Cool-grey sidebar, white work surface, one cobalt accent (#2457D6), status colours only for guardrail outcomes, system font stack, no shadows/gradients. Design comps in `vibe_images/td-overview-comp_*.png` and `vibe_images/td-backtest-comp_*.png`.
+- Hosted on Qoder Sites + Neon (Vercel plan superseded); local launcher kept as recording fallback.
+- Admin auth is Neon Auth allowlisted by user ID — email allowlisting is unsafe while any stranger can register an address; sign-up is disabled anyway.
+- The admin role is called "admin", not "founder", in UI copy and config; internal function names still say founder.
+- No LLM calls in this code — all reasoning happens in QwenWork.
+- "Reveal all" requires a confirmation page and is recorded in the audit log; a reveal is forever (the scoreboard is honest, not re-runnable).
+- Console design: Stripe Dashboard × Attio direction, cobalt accent, status colours only for guardrail outcomes; comps in `vibe_images/`.
 
 ## Known limitations
 
-- Prose in briefs is not semantically checked; the founder reads it. The console says so.
-- Public historical data allows inference; the system does not claim to prevent every form of collusion.
-- Two launchers pointed at the same state folder are not locked against each other.
-- Seeding that stops partway needs `.local/db` and `.local/agent-tokens` deleted together before retrying.
-- Bad tool arguments return a slightly verbose protocol error.
-- Console login is a single shared secret with a global throttle (5 failures a minute); fine for local use only.
+- Prose in briefs is not semantically checked (the admin reads it; the console says so).
+- Public GeBIZ data allows inference; the system does not claim to prevent every form of collusion.
+- A warm MCP call costs ~0.8 s, a cold one ~2.4 s; several calls per demo step are normal.
+- Logout is best-effort across function instances; sessions expire after 8 h regardless.
+- Two local launchers on one state folder are not locked against each other; a partway local seed needs `.local/db` and `.local/agent-tokens` removed together.
+- `[UNDICI-EHPA] … experimental` warnings on every Node command are environment noise, not app errors.
 
 ## Dataset
 
-`data/GovernmentProcurementviaGeBIZ.csv`, data.gov.sg dataset `d_acde1106003906a75c3fa052592f2fcb` (Singapore Open Data Licence). 18,464 rows, 12,052 contracts, awards 2021-04-01 to 2026-03-31, SHA-256 `cff64371cb6d84348fb05f23068e9287a8bba6d7e7cb049c10226dc7f6afa30e`. 11,516 historical contracts and 536 hold-out contracts (2026 awards). All money is integer cents in SGD.
-
-## Housekeeping
-
-- The environment prints `[UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental` on every Node command. It is not an application error.
-- Test and detector scratch files are in `/tmp` and outside the repo. `vibe_images/` contains the generated console mock-up and can be deleted or kept.
-- The design draft this started from is at `<local-path>`.
-- A newer Impeccable skill (v4.10.0) is available; not updated this session.
+`data/GovernmentProcurementviaGeBIZ.csv` — data.gov.sg `d_acde1106003906a75c3fa052592f2fcb` (Singapore Open Data Licence). 18,464 rows, 12,052 contracts, awards 2021-04-01→2026-03-31, SHA-256 `cff64371…faf30e`. 11,516 historical + 536 hold-out (2026) contracts; money in integer cents SGD. Submission form: https://survey.alibabacloud.com/uone/sg/survey/nXEUDcuj- (do not submit without the admin). Hub: https://one-person-company-hackathon-96f7yf4o51w.qoder.website/
