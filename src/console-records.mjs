@@ -36,6 +36,7 @@ function lookups(state) {
     projectLink: (id) => recordLink('project', projects.get(id), projects.get(id)?.title),
   };
 }
+export const tenderLink = (tenderNo) => `<a class="num" href="/tenders/${encodeURIComponent(tenderNo)}">${esc(tenderNo)}</a>`;
 const crumbs = (kind, code) => `<nav class="crumbs" aria-label="Breadcrumb"><a href="${recordKinds[kind].listPath ?? recordKinds[kind].path}">${recordKinds[kind].list}</a> / <span class="num">${esc(code)}</span></nav>`;
 const props = (pairs) => `<dl class="props">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
 const panel = (title, inner, extra = '') => `<section class="panel"><header><h2>${esc(title)}</h2>${extra}</header>${inner}</section>`;
@@ -47,7 +48,7 @@ export function renderNotFound({ state, csrf, kind }) {
     body: `<section class="panel"><div class="empty"><strong>No record with that reference.</strong><a href="${k.listPath ?? k.path}">Back to ${esc(k.list)}</a></div></section>` });
 }
 
-export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
+export function renderBriefDetail({ state, dataset, csrf, flash, brief, back }) {
   const { client, project, clientLink, projectLink } = lookups(state);
   const code = recordCode('brief', brief);
   const tender = dataset.contracts.find((c) => c.tender_no === brief.tender_no);
@@ -77,7 +78,8 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
 <textarea id="decline-reason" name="reason" required maxlength="500" rows="3"></textarea>
 <button class="outline" type="submit">Decline</button></form></div>`;
 
-  return renderShell({ state, csrf, active: 'briefs', title: `${code} - ${brief.tender_no}`, flash, crumbs: crumbs('brief', code),
+  const backLink = back ? `<p class="small"><a href="${esc(back)}">Back to Briefs</a></p>` : '';
+  return renderShell({ state, csrf, active: 'briefs', title: `${code} - ${brief.tender_no}`, flash, crumbs: crumbs('brief', code) + backLink,
     actions: `${riskChip(brief.risk_level)} ${briefChip(brief.status)}`,
     body: `${banner}<div class="detail"><div class="stack-gap">
 ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => check('warn', 'alert', esc(f.message), '')).join('')}</ul>` : '<div class="empty">No risk facts fired.</div>',
@@ -88,7 +90,7 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
 <aside class="stack-gap">
 ${panel('Details', props([
     ['Client', clientLink(brief.client_id)],
-    ['Tender', `<span class="num">${esc(brief.tender_no)}</span>`],
+    ['Tender', tenderLink(brief.tender_no)],
     ['Agency', esc(tender?.agency ?? 'Unknown')],
     ['Recommendation', brief.recommendation === 'bid' ? chip('Bid', 'progress') : chip('No-bid')],
     ['Historical band', `<span class="num">${money(brief.price_band.low_cents)} – ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">median ${money(brief.price_band.median_cents)}${n ? ` · ${n} comparables` : ''}</span>`],
@@ -139,6 +141,8 @@ export function renderClientDetail({ state, csrf, flash, client }) {
   const briefs = state.briefs.filter((b) => b.client_id === client.id).reverse();
   const conflicts = state.conflicts.filter((c) => c.client_id === client.id || c.holder_client_id === client.id);
   const connectors = state.credentials.filter((c) => c.client_id === client.id);
+  const back = recordHref('client', client);
+  const shortlist = (state.shortlists ?? []).filter((s) => s.client_id === client.id);
   return renderShell({ state, csrf, active: 'clients', title: `${code} - ${client.name}`, flash, crumbs: crumbs('client', code),
     body: `<div class="detail"><div class="stack-gap">
 ${panel('Projects', list(projects.map((p) => `${recordLink('project', p, p.title)} ${verifiedChip(p)}`), 'No projects reported.'), `<span class="muted small">${plural(projects.length, 'project')}</span>`)}
@@ -150,10 +154,10 @@ ${panel('Profile', props([
     ['Capabilities', esc(client.capabilities)],
     ['Team', `<span class="num">${client.team_size}</span>`],
     ['Largest contract', `<span class="num">${money(client.max_contract_cents)}</span>`],
-    ['Connector issued', connectors.length ? connectors.map((c) => stamp(c.created_at)).join('<br>') : '<span class="muted">None</span>'],
+    ['Connector issued', connectors.length ? connectors.map((c) => `${stamp(c.created_at)} ${form(csrf, `/actions/credential/${c.id}/revoke`, 'Revoke connector', 'link', back)}`).join('<br>') : '<span class="muted">None (revoked or never issued)</span>'],
     ['Joined', stamp(client.created_at)],
   ]))}
-${panel('Shortlist', '<p class="muted small">Shortlists live with the client\'s agent; ask the client for the latest.</p>')}
+${panel('Shortlist', list(shortlist.map((s) => `${tenderLink(s.tender_no)} <span class="num">${s.fit_score}</span><span class="sub-line muted">${esc(s.reasons.join('; '))}</span>`), 'Nothing shortlisted yet.'), '<span class="muted small">Saved by the client\'s agent; fit scores are the agent\'s.</span>')}
 </aside></div>` });
 }
 
@@ -168,7 +172,7 @@ export function renderConflictDetail({ state, csrf, flash, conflict }) {
     actions: conflictChip(conflict),
     body: `<div class="stack-gap">
 ${panel('What happened', props([
-    ['Tender', `<span class="num">${esc(conflict.tender_no)}</span>`],
+    ['Tender', tenderLink(conflict.tender_no)],
     ['Escalated client', clientLink(conflict.client_id)],
     ['Holds the advice slot', clientLink(conflict.holder_client_id)],
     ['Slot state', hold ? (hold.state === 'held' ? chip('Held', 'progress') : chip('Stopped')) : '<span class="muted">None</span>'],
@@ -205,4 +209,27 @@ export function renderAuditDetail({ state, csrf, flash, entry }) {
       ...(s.note ? [['Note', esc(s.note)]] : []), ...(s.decline_reason ? [['Decline reason', esc(s.decline_reason)]] : []),
       ...(s.check_result ? [['GeBIZ check', esc(s.check_result)]] : []),
     ]), '<span class="muted small">Append-only: this entry can never change.</span>') });
+}
+
+export function renderTender({ state, dataset, csrf, flash, tenderNo }) {
+  const { clientLink } = lookups(state);
+  const contract = dataset.contracts.find((c) => c.tender_no === tenderNo);
+  const briefs = state.briefs.filter((b) => b.tender_no === tenderNo);
+  const conflicts = state.conflicts.filter((c) => c.tender_no === tenderNo);
+  const hold = state.holds.find((h) => h.tender_no === tenderNo);
+  const outcome = state.backtest.rows?.find((r) => r.prediction.tender_no === tenderNo);
+  return renderShell({ state, csrf, active: 'briefs', title: tenderNo, flash,
+    sub: contract.is_holdout ? 'A 2026 award replayed to agents as an incoming tender, winner and amount hidden.' : 'A historical award (comparable data).',
+    body: `<div class="detail"><div class="stack-gap">
+${panel('Briefs', list(briefs.map((b) => `${recordLink('brief', b, b.tender_no)} ${briefChip(b.status)} ${clientLink(b.client_id)}`), 'No briefs for this tender.'))}
+${panel('Conflicts', list(conflicts.map((c) => `${recordLink('conflict', c, c.tender_no)} ${conflictChip(c)}`), 'No conflicts.'))}
+</div><aside class="stack-gap">
+${panel('Tender', props([
+    ['Agency', esc(contract.agency)],
+    ['Description', esc(contract.description)],
+    ['Advice slot', hold ? `${hold.state === 'held' ? chip('Held', 'progress') : chip('Stopped')} ${clientLink(hold.client_id)}` : '<span class="muted">Free</span>'],
+    ['Outcome', outcome ? `<span class="num">${money(outcome.prediction.actual_cents)}</span> ${outcome.in_band ? chip('Inside band', 'done') : chip('Outside band', 'danger')}`
+      : contract.is_holdout ? '<span class="muted">Not revealed</span>' : '<span class="muted">Historical</span>'],
+  ]))}
+</aside></div>` });
 }

@@ -164,4 +164,11 @@ form.decline label{font-size:.8125rem;font-weight:600}
 textarea{font:inherit;padding:.5rem .6rem;border:1px solid var(--line-strong);border-radius:6px;resize:vertical}
 textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .detail>.stack-gap{min-width:0}
+
+.nav-group{margin:1rem .75rem .25rem;font-size:.6875rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.eyebrow{margin:0 0 .15rem;font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--accent-dark)}
+form.filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.6rem;margin-bottom:1rem}
+form.filters label{display:grid;gap:.2rem;font-size:.8125rem;font-weight:600}
+form.filters input,form.filters select{font:inherit;padding:.4rem .5rem;border:1px solid var(--line-strong);border-radius:6px;background:#fff;min-width:9rem}
+dd form{display:inline}
 `;

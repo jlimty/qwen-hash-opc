@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { renderAudit, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
-import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail } from './console-records.mjs';
+import { auditFilters, briefQuery, renderAudit, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
+import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail, renderTender } from './console-records.mjs';
 import { parseReference } from './references.mjs';
 
 const sessionMs = 8 * 60 * 60 * 1000;
@@ -24,6 +24,7 @@ const actions = {
   'conflict/stop': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_neither' }),
   'project/verify': (ops, id, form) => ops.verifyProject({ project_id: id, verified: true, note: String(form.get('note') ?? '').slice(0, 500) || undefined }),
   'project/unverify': (ops, id) => ops.verifyProject({ project_id: id, verified: false }),
+  'credential/revoke': (ops, id) => ops.revokeAgentCredential({ credential_id: id }),
 };
 // Where an action may send the admin back to: a record page or a list, never anywhere else.
 const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts)$/;
@@ -31,7 +32,8 @@ const routeKinds = { briefs: 'brief', conflicts: 'conflict', clients: 'client', 
 const stateKey = { brief: 'briefs', conflict: 'conflicts', client: 'clients', project: 'projects' };
 const detailRenderers = { brief: renderBriefDetail, conflict: renderConflictDetail, client: renderClientDetail, project: renderProjectDetail, audit: renderAuditDetail };
 const successText = { 'brief/approve': 'Brief approved.', 'brief/decline': 'Brief declined.', 'conflict/serve-holder': 'Conflict resolved: Tender Desk keeps advising the holder.',
-  'conflict/stop': 'Conflict resolved: advice on this tender has stopped.', 'project/verify': 'Project verified.', 'project/unverify': 'Project verification revoked.' };
+  'conflict/stop': 'Conflict resolved: advice on this tender has stopped.', 'project/verify': 'Project verified.', 'project/unverify': 'Project verification revoked.', 'credential/revoke': 'Connector revoked.' };
+const briefBackPattern = /^\/briefs(?:\?(?:status|risk|sort)=[a-z]+(?:&(?:status|risk|sort)=[a-z]+){0,2})?$/;
 
 export function createSecretAuth(founderToken) {
   const expected = digest(founderToken);
@@ -164,7 +166,15 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
       const options = { cookies: [...csrfCookies, ...(flash ? [clearFlash] : [])] };
       const render = (fn) => html(200, fn({ state, dataset, csrf, flash }), options);
       if (path === '/') return render((context) => renderOverview(context));
-      if (path === '/briefs') return render((context) => renderBriefs({ ...context, view: url.searchParams.get('view') === 'decided' ? 'decided' : 'pending' }));
+      if (path === '/briefs') return render((context) => renderBriefs({ ...context, query: briefQuery(url.searchParams) }));
+      if (path === '/projects') return render((context) => renderClients({ ...context, only: 'projects' }));
+      const tenderRoute = /^\/tenders\/([^/]+)$/.exec(path);
+      if (tenderRoute) {
+        let tenderNo = '';
+        try { tenderNo = decodeURIComponent(tenderRoute[1]); } catch { tenderNo = ''; }
+        if (!dataset.contracts.some((c) => c.tender_no === tenderNo)) return html(404, renderNotFound({ state, csrf, kind: 'brief' }), options);
+        return render((context) => renderTender({ ...context, tenderNo }));
+      }
       const record = /^\/(briefs|conflicts|clients|projects|audit)\/([^/]+)$/.exec(path);
       if (record) {
         const kind = routeKinds[record[1]];
@@ -178,13 +188,22 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
         const row = kind === 'audit' ? await ops.readAuditEntry(parsed.number)
           : state[stateKey[kind]].find((r) => Number(r.reference_number) === parsed.number);
         if (!row) return notFound();
-        return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row }));
+        const back = briefBackPattern.test(url.searchParams.get('back') ?? '') ? url.searchParams.get('back') : undefined;
+        return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row, back }));
       }
       if (path === '/conflicts') return render((context) => renderConflicts(context));
       if (path === '/clients') return render((context) => renderClients(context));
       if (path === '/backtest/reveal-all') return render((context) => renderRevealConfirm(context));
       if (path === '/backtest') return render((context) => renderBacktest({ ...context, filter: ['inside', 'outside'].includes(url.searchParams.get('filter')) ? url.searchParams.get('filter') : 'all' }));
-      if (path === '/audit') return render((context) => renderAudit(context));
+      if (path === '/audit') {
+        const p = url.searchParams;
+        const filters = { q: (p.get('q') ?? '').trim().slice(0, 120), client: (p.get('client') ?? '').trim().slice(0, 20), tender: (p.get('tender') ?? '').trim().slice(0, 100),
+          rule: auditFilters.rule.includes(p.get('rule')) ? p.get('rule') : '', outcome: auditFilters.outcome.includes(p.get('outcome')) ? p.get('outcome') : '' };
+        const clientRef = parseReference(filters.client);
+        const client_id = clientRef?.prefix === 'CLI' ? state.clients.find((c) => Number(c.reference_number) === clientRef.number)?.id ?? '00000000-0000-0000-0000-000000000000' : undefined;
+        const rows = await ops.readAudit({ q: filters.q || undefined, client_id, tender: filters.tender || undefined, rule: filters.rule || undefined, outcome: filters.outcome || undefined, limit: 100 });
+        return render((context) => renderAudit({ ...context, rows, filters }));
+      }
       return text(404, 'Not found');
     }
 
@@ -206,7 +225,7 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
         : { ok: true, text: result.scope === 'all' ? `Revealed ${result.revealed_count} outcomes.` : 'Outcome revealed.' };
       return redirect('/backtest', { cookies: [flashCookie(flash)] });
     }
-    const match = /^\/actions\/(brief|conflict|project)\/([^/]+)\/([a-z-]+)$/.exec(path);
+    const match = /^\/actions\/(brief|conflict|project|credential)\/([^/]+)\/([a-z-]+)$/.exec(path);
     const actionKey = match && `${match[1]}/${match[3]}`;
     if (!match || !actions[actionKey] || !idPattern.test(match[2])) return text(404, 'Not found');
     let flash;
@@ -217,7 +236,7 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
       flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };
     }
     const back = String(form.get('back') ?? '');
-    const landing = backPattern.test(back) ? back : { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients' }[match[1]];
+    const landing = backPattern.test(back) ? back : { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients', credential: '/clients' }[match[1]];
     return redirect(landing, { cookies: [flashCookie(flash)] });
   };
 }

@@ -355,6 +355,72 @@ test('audit entries have their own page linking the records they name', async ()
   assert.match(page.text, new RegExp(aud));
 });
 
+test('navigation is grouped: Overview, then Decisions, Clients and Records', async () => {
+  const session = await login();
+  const page = (await get(session, '/')).text;
+  const order = ['>Overview<', '>Decisions<', '>Briefs<', '>Conflicts<', '>Clients<', '>Projects<', '>Records<', '>Backtest<', '>Audit log<'].map((m) => page.indexOf(m));
+  assert.ok(order.every((at, i) => at > 0 && (i === 0 || at > order[i - 1])), order.join());
+  const projects = await get(session, '/projects');
+  assert.equal(projects.status, 200);
+  assert.match(projects.text, /class="eyebrow">Clients</);
+  assert.match(projects.text, /Projects to verify/);
+});
+
+test('briefs list filters round-trip in the URL and the detail page links back to them', async () => {
+  const one = await pendingBrief('Team of 12.');
+  const session = await login();
+  const list = (await get(session, '/briefs?status=all&risk=high&sort=newest')).text;
+  assert.match(list, /<option value="all" selected>/);
+  assert.match(list, /<option value="high" selected>/);
+  assert.match(list, /<option value="newest" selected>/);
+  const brf = code('BRF', await ref('briefs', one.brief.brief_id));
+  const link = new RegExp(`href="/briefs/${brf}\\?back=([^"]+)"`).exec(list);
+  assert.ok(link, 'detail link carries the list query');
+  const detail = (await get(session, `/briefs/${brf}?back=${link[1]}`)).text;
+  assert.match(detail, /href="\/briefs\?status=all&amp;risk=high&amp;sort=newest">Back to Briefs</);
+  const evil = (await get(session, `/briefs/${brf}?back=${encodeURIComponent('https://evil.example/')}`)).text;
+  assert.doesNotMatch(evil, /evil\.example/);
+  const none = (await get(session, '/briefs?status=approved&risk=low')).text;
+  assert.doesNotMatch(none, new RegExp(brf));
+});
+
+test('audit log filters by tender, rule and outcome', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const page = (await get(session, `/audit?tender=${one.tender_no}&rule=G2&outcome=escalated`)).text;
+  assert.match(page, /Submitted a brief/);
+  assert.doesNotMatch(page, /Requested pricing/);
+  assert.match(page, new RegExp(`value="${one.tender_no}"`));
+});
+
+test('the tender page gathers briefs and conflicts and hides the outcome until revealed', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const page = (await get(session, `/tenders/${one.tender_no}`)).text;
+  assert.match(page, new RegExp(`/briefs/${code('BRF', await ref('briefs', one.brief.brief_id))}`));
+  assert.match(page, /\/conflicts\/CON\d{5,}/);
+  assert.match(page, /Not revealed/);
+  assert.doesNotMatch(page, /Hidden winner/);
+  assert.equal((await get(session, '/tenders/NOPE-1')).status, 404);
+});
+
+test('the client page shows the shortlist, and revoking a connector stops the agent', async () => {
+  const suffix = randomUUID().slice(0, 6);
+  const c = await founder.createClient(profile(`Revoke ${suffix}`));
+  const key = await founder.issueAgentCredential({ role: 'client', client_id: c.client_id });
+  const agent = await desk.agent(key.token);
+  await agent.invoke('save_shortlist', { items: [{ tender_no: 'NEW-1', fit_score: 77, reasons: ['Good fit'] }] });
+  const session = await login();
+  const cli = code('CLI', await ref('clients', c.client_id));
+  const page = (await get(session, `/clients/${cli}`)).text;
+  assert.match(page, /NEW-1/);
+  assert.match(page, />77</);
+  const revoked = await act(session, `/actions/credential/${key.credential_id}/revoke`, { back: `/clients/${cli}` });
+  assert.equal(revoked.headers.location, `/clients/${cli}`);
+  assert.match((await follow(session, revoked)).text, /Connector revoked\./);
+  await assert.rejects(agent.invoke('get_client_context', {}), /Unauthorized/);
+});
+
 test('logging out ends the session, and repeated wrong secrets are throttled', async () => {
   const session = await login();
   const out = await act(session, '/logout');

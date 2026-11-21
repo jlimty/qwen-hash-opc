@@ -189,8 +189,30 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,
             audit: (await tx.query('SELECT * FROM tender_desk.audit_log ORDER BY id DESC LIMIT 200')).rows,
             credentials: (await tx.query('SELECT id,role,client_id,created_at FROM tender_desk.agent_credentials ORDER BY created_at,id')).rows,
+            shortlists: (await tx.query('SELECT client_id,tender_no,fit_score,reasons FROM tender_desk.shortlists ORDER BY fit_score DESC, tender_no')).rows,
             revealed: [...revealed],
           };
+        }),
+        // Filtered audit rows for the console. Every filter is optional; values are bound, never interpolated.
+        readAudit: ({ q, client_id, tender, rule, outcome, limit = 200 } = {}) => database.transaction(async (tx) => {
+          const where = [];
+          const params = [];
+          const bind = (value) => { params.push(value); return `$${params.length}`; };
+          if (client_id) where.push(`client_id = ${bind(client_id)}`);
+          if (tender) where.push(`tender_no = ${bind(tender)}`);
+          if (rule) where.push(`rule_id = ${bind(rule)}`);
+          if (outcome) where.push(`outcome = ${bind(outcome)}`);
+          if (q) {
+            const auditNumber = /^AUD(\d{5,})$/.exec(q)?.[1];
+            if (auditNumber) where.push(`id = ${bind(Number(auditNumber))}`);
+            else {
+              const like = bind(`%${q.replace(/[%_\\]/g, (c) => `\\${c}`)}%`);
+              where.push(`(action ILIKE ${like} OR reason ILIKE ${like} OR summary::text ILIKE ${like})`);
+            }
+          }
+          const cap = bind(Math.min(Math.max(Number(limit) || 200, 1), 500));
+          return (await tx.query(`SELECT * FROM tender_desk.audit_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+            ORDER BY id DESC LIMIT ${cap}`, params)).rows;
         }),
         readAuditEntry: (id) => database.transaction(async (tx) => (Number.isSafeInteger(id)
           ? (await tx.query('SELECT * FROM tender_desk.audit_log WHERE id=$1', [id])).rows[0] : undefined)),

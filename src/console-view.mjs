@@ -103,30 +103,32 @@ ${banner(message)}
 <button class="primary" type="submit">Change password</button></form>`);
 }
 
+const groupOf = { briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
+
 export function renderShell({ state, csrf, active, title, sub, crumbs = '', actions = '', flash, body }) {
   const pending = state.briefs.filter((b) => b.status === 'pending_approval').length;
   const openConflicts = state.conflicts.filter((c) => c.status === 'open').length;
   const unverified = state.projects.filter((p) => !p.verified).length;
   const badge = (n) => n ? `<span class="count">${n}</span>` : '';
   const navItem = (key, label, count) => `<a href="/${key === 'overview' ? '' : key}"${active === key ? ' aria-current="page"' : ''}>${icon(key)}<span>${label}</span>${count !== undefined ? badge(count) : ''}</a>`;
+  const group = (label, items) => `<p class="nav-group">${label}</p>${items.join('\n')}`;
+  const eyebrow = groupOf[active] ? `<p class="eyebrow">${groupOf[active]}</p>` : '';
   const flashBanner = flash ? `<p class="banner ${flash.ok ? 'ok' : 'bad'}" role="${flash.ok ? 'status' : 'alert'}">${esc(flash.text)}</p>` : '';
   return page(title, `<div class="app">
 <nav class="side" aria-label="Main">
 <a class="brand" href="/">${mark}<span>Tender Desk</span></a>
 <div class="nav">
 ${navItem('overview', 'Overview')}
-${navItem('briefs', 'Briefs', pending)}
-${navItem('conflicts', 'Conflicts', openConflicts)}
-${navItem('clients', 'Clients', unverified)}
-${navItem('backtest', 'Backtest')}
-${navItem('audit', 'Audit log')}
+${group('Decisions', [navItem('briefs', 'Briefs', pending), navItem('conflicts', 'Conflicts', openConflicts)])}
+${group('Clients', [navItem('clients', 'Clients'), navItem('projects', 'Projects', unverified)])}
+${group('Records', [navItem('backtest', 'Backtest'), navItem('audit', 'Audit log')])}
 </div>
 <div class="side-foot"><p class="env">Local only · fictional demo clients</p>
 <form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="link" type="submit">Sign out</button></form></div>
 </nav>
 <main class="content">
 ${crumbs}
-<div class="page-head"><div><h1>${esc(title)}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><div class="row-actions">${actions}</div></div>
+<div class="page-head"><div>${eyebrow}<h1>${esc(title)}</h1>${sub ? `<p class="sub">${sub}</p>` : ''}</div><div class="row-actions">${actions}</div></div>
 ${flashBanner}
 ${body}
 </main></div>`);
@@ -181,29 +183,50 @@ ${feed.length ? `<ul class="feed">${feed.join('')}</ul>` : '<div class="empty">N
 </aside></div>` });
 }
 
-export function renderBriefs({ state, dataset, csrf, flash, view = 'pending' }) {
+// Brief list filters live in the URL (defaults omitted) so any view can be linked and returned to.
+export const briefFilters = Object.freeze({
+  status: ['pending', 'approved', 'declined', 'all'], risk: ['any', 'high', 'medium', 'low'], sort: ['risk', 'newest', 'oldest'],
+});
+export function briefQuery(params) {
+  const pick = (key) => (briefFilters[key].includes(params.get(key)) ? params.get(key) : briefFilters[key][0]);
+  return { status: params.get('view') === 'decided' ? 'all' : pick('status'), risk: pick('risk'), sort: pick('sort') };
+}
+export function briefListHref(query) {
+  const params = new URLSearchParams();
+  for (const key of ['status', 'risk', 'sort']) if (query[key] !== briefFilters[key][0]) params.set(key, query[key]);
+  const search = params.toString();
+  return search ? `/briefs?${search}` : '/briefs';
+}
+const select = (name, label, options, current) => `<label>${label}<select name="${name}">${options.map(([value, text]) => `<option value="${value}"${value === current ? ' selected' : ''}>${text}</option>`).join('')}</select></label>`;
+
+export function renderBriefs({ state, dataset, csrf, flash, query = briefQuery(new URLSearchParams()) }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
   const contracts = new Map(dataset.contracts.map((c) => [c.tender_no, c]));
-  const pending = state.briefs.filter((b) => b.status === 'pending_approval').reverse();
-  const decided = state.briefs.filter((b) => b.status !== 'pending_approval').reverse();
-  const list = view === 'decided' ? decided : pending;
-  const tab = (key, label, n, href) => `<a href="${href}"${view === key ? ' aria-current="page"' : ''}>${label} <span class="n">${n}</span></a>`;
+  const order = { high: 0, medium: 1, low: 2 };
+  const list = state.briefs
+    .filter((b) => query.status === 'all' || b.status === (query.status === 'pending' ? 'pending_approval' : query.status))
+    .filter((b) => query.risk === 'any' || b.risk_level === query.risk)
+    .sort((a, b) => (query.sort === 'risk' ? (order[a.risk_level] ?? 3) - (order[b.risk_level] ?? 3) : 0)
+      || (query.sort === 'newest' ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at)));
+  const back = encodeURIComponent(briefListHref(query));
+  const statusChip = (b) => ({ approved: '<span class="chip done">Approved</span>', declined: '<span class="chip danger">Declined</span>' }[b.status] ?? '<span class="chip progress">Pending</span>');
   const row = (b) => `<tr>
-<td>${recordLink('brief', b, b.tender_no)}<span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
+<td><a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
 <td>${esc(clients.get(b.client_id) ?? 'Unknown client')}</td>
-<td>${view === 'decided' ? `<span class="pill ${b.status === 'approved' ? 'ok' : 'bad'}">${b.status === 'approved' ? 'Approved' : 'Declined'}</span>` : `<span class="pill info">${b.recommendation === 'bid' ? 'Bid' : 'No-bid'}</span>`}</td>
+<td>${statusChip(b)} ${riskChip(b.risk_level)}</td>
 <td class="r num nowrap">${money(b.price_band.low_cents)} – ${money(b.price_band.high_cents)}</td>
 <td class="muted num">${ago(b.created_at)}</td>
-<td class="end"><a class="btn outline" href="${recordHref('brief', b)}">${view === 'decided' ? 'Open' : 'Review'}</a></td></tr>`;
+<td class="end"><a class="btn outline" href="${recordHref('brief', b)}?back=${back}">${b.status === 'pending_approval' ? 'Review' : 'Open'}</a></td></tr>`;
   return renderShell({ state, csrf, active: 'briefs', title: 'Briefs', flash,
-    sub: 'Agents submit every brief as pending. Only you can approve or decline.',
-    body: `<nav class="tabs" aria-label="Brief status">
-${tab('pending', 'Waiting for approval', pending.length, '/briefs')}
-${tab('decided', 'Decided', decided.length, '/briefs?view=decided')}
-</nav>
+    sub: 'Agents submit every brief as pending. Only you can approve or decline. Risk is computed by code and sorts the list; it is not a verdict.',
+    body: `<form method="get" action="/briefs" class="filters">
+${select('status', 'Status', [['pending', 'Waiting for approval'], ['approved', 'Approved'], ['declined', 'Declined'], ['all', 'All statuses']], query.status)}
+${select('risk', 'Risk', [['any', 'Any risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], query.risk)}
+${select('sort', 'Sort', [['risk', 'Highest risk first'], ['newest', 'Newest first'], ['oldest', 'Oldest first']], query.sort)}
+<button class="outline" type="submit">Apply</button></form>
 <section class="panel"><div class="table-wrap"><table class="stack">
-<thead><tr><th>Tender</th><th>Client</th><th>${view === 'decided' ? 'Status' : 'Recommendation'}</th><th class="r">Historical band</th><th>Submitted</th><th><span class="visually-hidden">Open</span></th></tr></thead>
-<tbody>${list.length ? list.map(row).join('') : `<tr><td colspan="6"><div class="empty">${view === 'decided' ? 'No decided briefs yet.' : '<strong>No briefs waiting.</strong>When an agent submits one it appears here for your decision.'}</div></td></tr>`}</tbody>
+<thead><tr><th>Brief</th><th>Client</th><th>Status</th><th class="r">Historical band</th><th>Submitted</th><th><span class="visually-hidden">Open</span></th></tr></thead>
+<tbody>${list.length ? list.map(row).join('') : '<tr><td colspan="6"><div class="empty"><strong>No briefs in this view.</strong>When an agent submits one it appears here for your decision.</div></td></tr>'}</tbody>
 </table></div></section>` });
 }
 
@@ -231,12 +254,13 @@ ${resolved.length ? `<section class="panel"><header><h2>Resolved</h2><span class
 </div>` });
 }
 
-export function renderClients({ state, csrf, flash }) {
+export function renderClients({ state, csrf, flash, only }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
   const name = (id) => esc(clients.get(id) ?? 'Unknown client');
   const unverified = state.projects.filter((p) => !p.verified);
   const verified = state.projects.filter((p) => p.verified);
-  return renderShell({ state, csrf, active: 'clients', title: 'Clients', flash,
+  const projectsOnly = only === 'projects';
+  return renderShell({ state, csrf, active: projectsOnly ? 'projects' : 'clients', title: projectsOnly ? 'Projects' : 'Clients', flash,
     sub: 'Agents record every self-reported project as unverified. Only you can verify one, and briefs may cite verified projects only.',
     body: `<div class="stack-gap">
 <section class="panel"><header><h2>Projects to verify</h2><span class="muted small">${plural(unverified.length, 'project')}</span></header>
@@ -245,11 +269,11 @@ ${unverified.length ? `<ul class="queue">${unverified.map((p) => `<li><span clas
 <div class="row-actions"><a class="btn outline" href="${recordHref('project', p)}">Check and verify</a></div></li>`).join('')}</ul>`
   : `<div class="empty"><strong>Every reported project is verified.</strong>New self-reported projects appear here.</div>`}
 </section>
-<section class="panel"><header><h2>Clients</h2><span class="muted small">${plural(state.clients.length, 'client')}</span></header><div class="table-wrap"><table class="stack">
+${projectsOnly ? '' : `<section class="panel"><header><h2>Clients</h2><span class="muted small">${plural(state.clients.length, 'client')}</span></header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Name</th><th>Categories</th><th class="r">Team</th><th class="r">Largest contract</th><th class="r">Projects</th></tr></thead>
 <tbody>${state.clients.map((c) => `<tr><td>${recordLink('client', c, c.name)}</td><td class="muted">${esc(c.categories.join(', '))}</td><td class="r num">${c.team_size}</td><td class="r num">${money(c.max_contract_cents)}</td>
 <td class="r num">${state.projects.filter((p) => p.client_id === c.id && p.verified).length} of ${state.projects.filter((p) => p.client_id === c.id).length}</td></tr>`).join('')}</tbody>
-</table></div></section>
+</table></div></section>`}
 ${verified.length ? `<section class="panel"><header><h2>Verified projects</h2><span class="muted small">${plural(verified.length, 'project')}</span></header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Client</th><th>Project</th><th>Value</th><th><span class="visually-hidden">Action</span></th></tr></thead>
 <tbody>${verified.map((p) => `<tr><td>${name(p.client_id)}</td><td>${recordLink('project', p, p.title)}</td><td class="num">${p.value_cents === null ? '<span class="muted">Not given</span>' : money(p.value_cents)}</td>
@@ -312,12 +336,21 @@ ${tab('all', 'All', bt.revealed)}${tab('inside', 'Inside band', bt.band_hits)}${
 </div>` });
 }
 
-export function renderAudit({ state, csrf, flash }) {
+export const auditFilters = Object.freeze({ rule: ['G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'VALIDATION', 'ERROR'], outcome: ['allowed', 'blocked', 'escalated', 'approved', 'declined'] });
+
+export function renderAudit({ state, csrf, flash, rows = state.audit.slice(0, 100), filters = {} }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
-  const rows = state.audit.slice(0, 100);
+  const opt = (values, current, anyLabel) => [['', anyLabel], ...values.map((v) => [v, v])];
   return renderShell({ state, csrf, active: 'audit', title: 'Audit log', flash,
-    sub: 'Every agent and founder action, allowed or blocked, written in the same transaction as the change.',
-    body: `<section class="panel"><div class="table-wrap"><table class="stack">
+    sub: 'Every agent and admin action, allowed or blocked, written in the same transaction as the change.',
+    body: `<form method="get" action="/audit" class="filters">
+<label>Search<input type="search" name="q" maxlength="120" value="${esc(filters.q ?? '')}" placeholder="AUD00042, action or reason"></label>
+<label>Client<input name="client" maxlength="20" value="${esc(filters.client ?? '')}" placeholder="CLI00003"></label>
+<label>Tender<input name="tender" maxlength="100" value="${esc(filters.tender ?? '')}"></label>
+${select('rule', 'Rule', opt(auditFilters.rule, filters.rule, 'Any rule'), filters.rule ?? '')}
+${select('outcome', 'Outcome', opt(auditFilters.outcome, filters.outcome, 'Any outcome'), filters.outcome ?? '')}
+<button class="outline" type="submit">Apply</button></form>
+<section class="panel"><div class="table-wrap"><table class="stack">
 <thead><tr><th>Ref</th><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
 <tbody>${rows.length ? rows.map((row) => {
       const who = row.client_id ? esc(clients.get(row.client_id) ?? 'Client') : row.actor === 'founder' ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
