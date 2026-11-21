@@ -54,7 +54,14 @@ async function login() {
   return { cookie, csrf: /name="csrf" value="([a-f0-9]{64})"/.exec(page.text)?.[1], page };
 }
 const flashOf = (response) => (response.headers['set-cookie'] ?? []).map((c) => c.split(';')[0]).find((c) => c.startsWith('td_flash=')) ?? '';
-const follow = (session, response) => http({ path: response.headers.location, headers: { Cookie: `${session.cookie}; ${flashOf(response)}` } });
+// Follows the action's redirect, and the uuid-to-reference redirect behind it when there is one.
+async function follow(session, response) {
+  const cookie = `${session.cookie}; ${flashOf(response)}`;
+  let page = await http({ path: response.headers.location, headers: { Cookie: cookie } });
+  if (page.status === 303) page = await http({ path: page.headers.location, headers: { Cookie: cookie } });
+  return page;
+}
+const open = (session, path) => follow(session, { headers: { location: path, 'set-cookie': [] } });
 const act = (session, path, extra = {}) => http({ method: 'POST', path, headers: { ...sameOrigin(), Cookie: session.cookie }, form: { csrf: session.csrf, ...extra } });
 
 const profile = (name) => ({ name, capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000,
@@ -128,7 +135,7 @@ test('renders the app shell with sidebar navigation, badges and separate screens
   assert.match(page.text, /Needs your decision/);
   assert.match(page.text, /Recent activity/);
   assert.equal((page.text.match(/class="count">[1-9]\d*</g) ?? []).length, 3);
-  for (const [path, marker] of [['/briefs', 'Waiting for approval'], ['/conflicts', 'asked for pricing on'],
+  for (const [path, marker] of [['/briefs', 'Waiting for approval'], ['/conflicts', 'submitted a brief'],
     ['/clients', 'Projects to verify'], ['/backtest', 'Reveal outcome'], ['/audit', 'Requested pricing']]) {
     const screen = await http({ path, headers: { Cookie: cookie } });
     assert.equal(screen.status, 200, path);
@@ -143,7 +150,7 @@ test('shows a pending brief with tender, client, band and escaped agent text', a
   assert.match(page.text, new RegExp(brief.tender_no));
   assert.match(page.text, new RegExp(`Amber ${brief.suffix}`));
   assert.match(page.text, /Review/);
-  const detail = await http({ path: `/briefs/${brief.brief.brief_id}`, headers: { Cookie: cookie } });
+  const detail = await open({ cookie }, `/briefs/${brief.brief.brief_id}`);
   assert.equal(detail.status, 200);
   assert.match(detail.text, new RegExp(brief.tender_no));
   assert.match(detail.text, /&lt;script&gt;alert\(1\)&lt;\/script&gt; &amp; &quot;quoted&quot;/);
@@ -153,7 +160,7 @@ test('shows a pending brief with tender, client, band and escaped agent text', a
   assert.match(detail.text, /not checked/i);
   assert.match(detail.text, /Approve/);
   assert.match(detail.text, /Decline/);
-  assert.match(detail.text, /Active pricing hold/);
+  assert.match(detail.text, /Advice slot held by this client/);
   assert.match(detail.text, /Cites no projects/);
 });
 
@@ -172,7 +179,7 @@ test('the founder can approve and decline briefs, with a visible result and an a
   const refused = await act(session, `/actions/brief/${two.brief.brief_id}/decline`);
   assert.equal(await status(two.brief.brief_id), 'pending_approval');
   assert.match((await follow(session, refused)).text, /A decline needs a reason/);
-  assert.match((await http({ path: `/briefs/${two.brief.brief_id}`, headers: { Cookie: session.cookie } })).text, /<textarea[^>]*name="reason"[^>]*required/);
+  assert.match((await open(session, `/briefs/${two.brief.brief_id}`)).text, /<textarea[^>]*name="reason"[^>]*required/);
   const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.' });
   assert.equal(declined.status, 303);
   assert.equal(await status(two.brief.brief_id), 'declined');
@@ -196,7 +203,8 @@ test('conflicts name both clients, show no price, and resolve either way', async
   const session = await login();
   const page = (await http({ path: '/conflicts', headers: { Cookie: session.cookie } })).text;
   assert.match(page, new RegExp(`Birch ${one.suffix}`));
-  assert.match(page, new RegExp(`Keep serving Amber ${one.suffix}`));
+  assert.match(page, new RegExp(`Amber ${one.suffix}`));
+  assert.match(page, /Keep advising the holder/);
   assert.match(page, /cannot be moved to a competitor/i);
   const resolved = await act(session, `/actions/conflict/${one.conflict.conflict_id}/serve-holder`);
   assert.equal(resolved.status, 303);
@@ -249,6 +257,102 @@ test('the local secret console offers no password reset: no link, and the pages 
     assert.equal(response.status, 303, path);
     assert.equal(response.headers.location, '/login');
   }
+});
+
+const ref = async (table, id) => Number((await db.query(`SELECT reference_number FROM tender_desk.${table} WHERE id=$1`, [id])).rows[0].reference_number);
+const code = (prefix, n) => `${prefix}${String(n).padStart(5, '0')}`;
+const get = (session, path) => http({ path, headers: { Cookie: session.cookie } });
+
+test('brief detail by reference shows the risk facts before the draft', async () => {
+  const one = await pendingBrief('Team of 12 people.');
+  const session = await login();
+  const brf = code('BRF', await ref('briefs', one.brief.brief_id));
+  const page = await get(session, `/briefs/${brf}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, new RegExp(`${brf} - ${one.tender_no}`));
+  const facts = page.text.indexOf('Risk facts');
+  assert.ok(facts > 0 && facts < page.text.indexOf("Agent's draft"));
+  assert.match(page.text, /figure in the text is not a band figure: 12\./);
+  assert.match(page.text, /class="chip (danger|warning|neutral)">(High|Medium|Low) risk</);
+});
+
+test('a uuid brief URL redirects to its reference', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const response = await get(session, `/briefs/${one.brief.brief_id}`);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.location, `/briefs/${code('BRF', await ref('briefs', one.brief.brief_id))}`);
+});
+
+test('bad references 404 with a way back', async () => {
+  const session = await login();
+  for (const path of ['/briefs/brf00001', '/briefs/BRF99999', '/briefs/BRF1', '/clients/BRF00001', '/projects/PRJ99999', '/audit/AUD99999999']) {
+    const page = await get(session, path);
+    assert.equal(page.status, 404, path);
+    assert.match(page.text, /Back to /, path);
+  }
+});
+
+test('project detail shows the GeBIZ cross-check and verifies with a note', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const prj = code('PRJ', await ref('projects', one.a.projects[0].id));
+  const page = await get(session, `/projects/${prj}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /No GeBIZ tender number given\./);
+  assert.match(page.text, /<textarea[^>]*name="note"/);
+  assert.match(page.text, new RegExp(`name="back" value="/projects/${prj}"`));
+  const verified = await act(session, `/actions/project/${one.a.projects[0].id}/verify`, { note: 'Saw the contract.', back: `/projects/${prj}` });
+  assert.equal(verified.headers.location, `/projects/${prj}`);
+  assert.match((await follow(session, verified)).text, /Saw the contract\./);
+  assert.equal((await act(session, `/actions/project/${one.a.projects[0].id}/unverify`, { back: 'https://evil.example/' })).headers.location, '/clients');
+});
+
+test('client page links to its projects, briefs and conflicts by reference', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const cli = code('CLI', await ref('clients', one.a.client_id));
+  const page = await get(session, `/clients/${cli}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, new RegExp(`href="/projects/PRJ\\d{5,}"`));
+  assert.match(page.text, new RegExp(`href="/briefs/${code('BRF', await ref('briefs', one.brief.brief_id))}"`));
+  assert.match(page.text, /Connector issued/);
+  const other = await get(session, `/clients/${code('CLI', await ref('clients', one.b.client_id))}`);
+  assert.match(other.text, new RegExp(`href="/conflicts/CON\\d{5,}"`));
+});
+
+test('overview links records by reference', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const page = await get(session, '/');
+  assert.match(page.text, new RegExp(`href="/briefs/${code('BRF', await ref('briefs', one.brief.brief_id))}"`));
+  assert.match(page.text, new RegExp(`href="/conflicts/${code('CON', await ref('conflicts', one.conflict.conflict_id))}"`));
+  assert.match(page.text, /href="\/projects\/PRJ\d{5,}"/);
+});
+
+test('conflict detail names both clients and resolves back to itself', async () => {
+  const one = await pendingBrief();
+  const session = await login();
+  const con = code('CON', await ref('conflicts', one.conflict.conflict_id));
+  const page = await get(session, `/conflicts/${con}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Keep advising the holder/);
+  assert.match(page.text, /Stop advising on this tender/);
+  assert.match(page.text, new RegExp(`Amber ${one.suffix}`));
+  assert.match(page.text, new RegExp(`Birch ${one.suffix}`));
+  const resolved = await act(session, `/actions/conflict/${one.conflict.conflict_id}/serve-holder`, { back: `/conflicts/${con}` });
+  assert.equal(resolved.headers.location, `/conflicts/${con}`);
+});
+
+test('audit entries have their own page linking the records they name', async () => {
+  await pendingBrief();
+  const session = await login();
+  const list = await get(session, '/audit');
+  const aud = /href="\/audit\/(AUD\d{5,})"/.exec(list.text)?.[1];
+  assert.ok(aud);
+  const page = await get(session, `/audit/${aud}`);
+  assert.equal(page.status, 200);
+  assert.match(page.text, new RegExp(aud));
 });
 
 test('logging out ends the session, and repeated wrong secrets are throttled', async () => {

@@ -188,8 +188,12 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,
             audit: (await tx.query('SELECT * FROM tender_desk.audit_log ORDER BY id DESC LIMIT 200')).rows,
+            credentials: (await tx.query('SELECT id,role,client_id,created_at FROM tender_desk.agent_credentials ORDER BY created_at,id')).rows,
+            revealed: [...revealed],
           };
         }),
+        readAuditEntry: (id) => database.transaction(async (tx) => (Number.isSafeInteger(id)
+          ? (await tx.query('SELECT * FROM tender_desk.audit_log WHERE id=$1', [id])).rows[0] : undefined)),
       });
     },
   });

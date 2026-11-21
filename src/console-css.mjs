@@ -153,4 +153,15 @@ table.stack td.end,table.stack td.r{text-align:left}
 .decision{position:static;flex-direction:column;align-items:stretch}
 }
 @media (prefers-reduced-motion:reduce){button,.btn{transition:none}}
+
+.chip{display:inline-block;white-space:nowrap;border:1px solid var(--line-strong);border-radius:999px;padding:.1rem .55rem;font-size:.75rem;font-weight:600;color:var(--muted);vertical-align:middle}
+.chip.progress{border-color:var(--accent);color:var(--accent-dark);background:var(--info-bg)}
+.chip.done{border-color:#A9D3BA;color:var(--ok);background:var(--ok-bg)}
+.chip.warning{border-color:#F0C98A;color:var(--warn);background:var(--warn-bg)}
+.chip.danger{border-color:#E7A9A3;color:var(--bad);background:var(--bad-bg)}
+form.decline{display:grid;gap:.4rem;margin-top:.75rem;max-width:40rem}
+form.decline label{font-size:.8125rem;font-weight:600}
+textarea{font:inherit;padding:.5rem .6rem;border:1px solid var(--line-strong);border-radius:6px;resize:vertical}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.detail>.stack-gap{min-width:0}
 `;

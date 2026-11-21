@@ -1,6 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { renderAudit, renderBacktest, renderBriefDetail, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
+import { renderAudit, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
+import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail } from './console-records.mjs';
+import { parseReference } from './references.mjs';
 
 const sessionMs = 8 * 60 * 60 * 1000;
 const throttleMs = 60 * 1000;
@@ -23,8 +25,13 @@ const actions = {
   'project/verify': (ops, id, form) => ops.verifyProject({ project_id: id, verified: true, note: String(form.get('note') ?? '').slice(0, 500) || undefined }),
   'project/unverify': (ops, id) => ops.verifyProject({ project_id: id, verified: false }),
 };
-const successText = { 'brief/approve': 'Brief approved.', 'brief/decline': 'Brief declined.', 'conflict/serve-holder': 'Conflict resolved: the current holder keeps pricing.',
-  'conflict/stop': 'Conflict resolved: pricing for this tender has stopped.', 'project/verify': 'Project verified.', 'project/unverify': 'Project verification revoked.' };
+// Where an action may send the admin back to: a record page or a list, never anywhere else.
+const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts)$/;
+const routeKinds = { briefs: 'brief', conflicts: 'conflict', clients: 'client', projects: 'project', audit: 'audit' };
+const stateKey = { brief: 'briefs', conflict: 'conflicts', client: 'clients', project: 'projects' };
+const detailRenderers = { brief: renderBriefDetail, conflict: renderConflictDetail, client: renderClientDetail, project: renderProjectDetail, audit: renderAuditDetail };
+const successText = { 'brief/approve': 'Brief approved.', 'brief/decline': 'Brief declined.', 'conflict/serve-holder': 'Conflict resolved: Tender Desk keeps advising the holder.',
+  'conflict/stop': 'Conflict resolved: advice on this tender has stopped.', 'project/verify': 'Project verified.', 'project/unverify': 'Project verification revoked.' };
 
 export function createSecretAuth(founderToken) {
   const expected = digest(founderToken);
@@ -158,10 +165,20 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
       const render = (fn) => html(200, fn({ state, dataset, csrf, flash }), options);
       if (path === '/') return render((context) => renderOverview(context));
       if (path === '/briefs') return render((context) => renderBriefs({ ...context, view: url.searchParams.get('view') === 'decided' ? 'decided' : 'pending' }));
-      const briefMatch = /^\/briefs\/([0-9a-f-]{36})$/.exec(path);
-      if (briefMatch && idPattern.test(briefMatch[1])) {
-        const brief = state.briefs.find((b) => b.id === briefMatch[1]);
-        return brief ? render((context) => renderBriefDetail({ ...context, brief })) : text(404, 'Brief not found');
+      const record = /^\/(briefs|conflicts|clients|projects|audit)\/([^/]+)$/.exec(path);
+      if (record) {
+        const kind = routeKinds[record[1]];
+        const notFound = () => html(404, renderNotFound({ state, csrf, kind }), options);
+        if (kind === 'brief' && idPattern.test(record[2])) {
+          const brief = state.briefs.find((b) => b.id === record[2]);
+          return brief ? redirect(recordHref('brief', brief), { cookies: csrfCookies }) : notFound();
+        }
+        const parsed = parseReference(record[2]);
+        if (!parsed || parsed.prefix !== recordKinds[kind].prefix) return notFound();
+        const row = kind === 'audit' ? await ops.readAuditEntry(parsed.number)
+          : state[stateKey[kind]].find((r) => Number(r.reference_number) === parsed.number);
+        if (!row) return notFound();
+        return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row }));
       }
       if (path === '/conflicts') return render((context) => renderConflicts(context));
       if (path === '/clients') return render((context) => renderClients(context));
@@ -199,7 +216,8 @@ export function createConsoleHandler({ founder, founderToken, auth, dataset, bas
     } catch {
       flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };
     }
-    const landing = { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients' }[match[1]];
+    const back = String(form.get('back') ?? '');
+    const landing = backPattern.test(back) ? back : { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients' }[match[1]];
     return redirect(landing, { cookies: [flashCookie(flash)] });
   };
 }

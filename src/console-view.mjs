@@ -1,16 +1,18 @@
 const escapes = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 export const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => escapes[char]);
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+export const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const clock = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' });
+
+import { recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
 
 export function money(cents) {
   const total = Number(cents);
   return `S$${Math.floor(total / 100).toLocaleString('en-US')}.${String(total % 100).padStart(2, '0')}`;
 }
 
-function ago(ts) {
+export function ago(ts) {
   const seconds = Math.max(0, Math.round((Date.now() - new Date(ts).getTime()) / 1000));
   if (seconds < 60) return 'just now';
   const minutes = Math.round(seconds / 60);
@@ -19,7 +21,7 @@ function ago(ts) {
   if (hours < 24) return `${plural(hours, 'hour')} ago`;
   return dateOnly.format(new Date(ts));
 }
-const stamp = (ts) => `<time class="num" datetime="${new Date(ts).toISOString()}" title="${clock.format(new Date(ts))} SGT">${clock.format(new Date(ts))}</time>`;
+export const stamp = (ts) => `<time class="num" datetime="${new Date(ts).toISOString()}" title="${clock.format(new Date(ts))} SGT">${clock.format(new Date(ts))}</time>`;
 
 const icons = {
   overview: '<path d="M4 4.5h6v6H4zM14 4.5h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
@@ -32,10 +34,10 @@ const icons = {
   cross: '<circle cx="12" cy="12" r="8.5"/><path d="m9.2 9.2 5.6 5.6"/><path d="m14.8 9.2-5.6 5.6"/>',
   alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4"/><path d="M12 17.2h.01"/>',
 };
-const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
+export const icon = (name) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
 const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>';
 
-const actionLabels = {
+export const actionLabels = {
   authenticate: 'Rejected sign-in attempts', create_client: 'Created a client', issue_agent_credential: 'Issued a connector credential',
   revoke_agent_credential: 'Revoked a connector credential', verify_project: 'Changed project verification', review_brief: 'Reviewed a brief',
   resolve_conflict: 'Resolved a conflict', reveal_backtest: 'Revealed backtest results', get_policies: 'Read the rules', get_client_context: 'Read a client profile',
@@ -48,8 +50,7 @@ const outcomeLabel = (row) => {
   return { allowed: 'Allowed', approved: 'Approved', declined: 'Declined', blocked: `Blocked${rule}`, escalated: `Escalated${rule}` }[row.outcome] ?? row.outcome;
 };
 const outcomeClass = { allowed: '', approved: 'ok', declined: 'bad', blocked: 'bad', escalated: 'warn' };
-const outcomePill = (row) => `<span class="pill ${outcomeClass[row.outcome] ?? ''}">${esc(outcomeLabel(row))}</span>`;
-const flagLabels = { human_review_required: 'Human review required', unverified_numeric_content: 'Contains numbers that were not checked' };
+export const outcomePill = (row) => `<span class="pill ${outcomeClass[row.outcome] ?? ''}">${esc(outcomeLabel(row))}</span>`;
 const pct = (value) => (value === null ? 'n/a' : `${Math.round(value * 100)}%`);
 
 const page = (title, body) => `<!doctype html>
@@ -131,29 +132,31 @@ ${body}
 </main></div>`);
 }
 
-const form = (csrf, path, label, cls = '') => `<form method="post" action="${path}"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="${cls}" type="submit">${esc(label)}</button></form>`;
+export const form = (csrf, path, label, cls = '', back = '') => `<form method="post" action="${path}"><input type="hidden" name="csrf" value="${esc(csrf)}">${back ? `<input type="hidden" name="back" value="${esc(back)}">` : ''}<button class="${cls}" type="submit">${esc(label)}</button></form>`;
 
 export function renderOverview({ state, dataset, csrf, flash }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
   const contracts = new Map(dataset.contracts.map((c) => [c.tender_no, c]));
   const name = (id) => esc(clients.get(id) ?? 'Unknown client');
 
-  const pendingBriefs = state.briefs.filter((b) => b.status === 'pending_approval').reverse();
+  const riskOrder = { high: 0, medium: 1, low: 2 };
+  const pendingBriefs = state.briefs.filter((b) => b.status === 'pending_approval')
+    .sort((a, b) => (riskOrder[a.risk_level] ?? 3) - (riskOrder[b.risk_level] ?? 3) || new Date(a.created_at) - new Date(b.created_at));
   const openConflicts = state.conflicts.filter((c) => c.status === 'open');
   const unverified = state.projects.filter((p) => !p.verified);
   const queue = [
     ...pendingBriefs.map((b) => ({ pill: '<span class="pill info">Brief</span>',
-      title: `${b.recommendation === 'bid' ? 'Bid' : 'No-bid'} recommendation for <span class="num">${esc(b.tender_no)}</span>`,
+      title: `${recordCode('brief', b)} · ${b.recommendation === 'bid' ? 'Bid' : 'No-bid'} recommendation for <span class="num">${esc(b.tender_no)}</span> ${riskChip(b.risk_level)}`,
       sub: `${name(b.client_id)} · ${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')} · submitted ${ago(b.created_at)}`,
-      action: `<a class="btn primary" href="/briefs/${b.id}">Review</a>` })),
+      action: `<a class="btn primary" href="${recordHref('brief', b)}">Review</a>` })),
     ...openConflicts.map((c) => ({ pill: '<span class="pill warn">Conflict</span>',
-      title: `${name(c.client_id)} asked for pricing on <span class="num">${esc(c.tender_no)}</span>`,
-      sub: `Held by ${name(c.holder_client_id)}. No price was shown.`,
-      action: '<a class="btn outline" href="/conflicts">Resolve</a>' })),
+      title: `${recordCode('conflict', c)} · ${name(c.client_id)} submitted a brief on <span class="num">${esc(c.tender_no)}</span>`,
+      sub: `Tender Desk already advises ${name(c.holder_client_id)} on it. Nothing was disclosed.`,
+      action: `<a class="btn outline" href="${recordHref('conflict', c)}">Resolve</a>` })),
     ...unverified.map((p) => ({ pill: '<span class="pill">Project</span>',
-      title: esc(p.title),
+      title: `${recordCode('project', p)} · ${esc(p.title)}`,
       sub: `${name(p.client_id)}${p.agency ? ` · ${esc(p.agency)}` : ''} · ${p.value_cents === null ? 'no value given' : `<span class="num">${money(p.value_cents)}</span>`} · not yet verified`,
-      action: form(csrf, `/actions/project/${p.id}/verify`, 'Verify', 'outline') })),
+      action: `<a class="btn outline" href="${recordHref('project', p)}">Check</a>` })),
   ];
   const waiting = pendingBriefs.length + openConflicts.length + unverified.length;
 
@@ -186,12 +189,12 @@ export function renderBriefs({ state, dataset, csrf, flash, view = 'pending' }) 
   const list = view === 'decided' ? decided : pending;
   const tab = (key, label, n, href) => `<a href="${href}"${view === key ? ' aria-current="page"' : ''}>${label} <span class="n">${n}</span></a>`;
   const row = (b) => `<tr>
-<td><span class="tender">${esc(b.tender_no)}</span><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
+<td>${recordLink('brief', b, b.tender_no)}<span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
 <td>${esc(clients.get(b.client_id) ?? 'Unknown client')}</td>
 <td>${view === 'decided' ? `<span class="pill ${b.status === 'approved' ? 'ok' : 'bad'}">${b.status === 'approved' ? 'Approved' : 'Declined'}</span>` : `<span class="pill info">${b.recommendation === 'bid' ? 'Bid' : 'No-bid'}</span>`}</td>
 <td class="r num nowrap">${money(b.price_band.low_cents)} – ${money(b.price_band.high_cents)}</td>
 <td class="muted num">${ago(b.created_at)}</td>
-<td class="end"><a class="btn outline" href="/briefs/${b.id}">${view === 'decided' ? 'Open' : 'Review'}</a></td></tr>`;
+<td class="end"><a class="btn outline" href="${recordHref('brief', b)}">${view === 'decided' ? 'Open' : 'Review'}</a></td></tr>`;
   return renderShell({ state, csrf, active: 'briefs', title: 'Briefs', flash,
     sub: 'Agents submit every brief as pending. Only you can approve or decline.',
     body: `<nav class="tabs" aria-label="Brief status">
@@ -204,80 +207,26 @@ ${tab('decided', 'Decided', decided.length, '/briefs?view=decided')}
 </table></div></section>` });
 }
 
-export function renderBriefDetail({ state, dataset, csrf, flash, brief }) {
-  const clients = new Map(state.clients.map((c) => [c.id, c.name]));
-  const projects = new Map(state.projects.map((p) => [p.id, p]));
-  const tender = dataset.contracts.find((c) => c.tender_no === brief.tender_no);
-  const cited = brief.credentials_cited.map((id) => projects.get(id)).filter(Boolean);
-  const badCites = cited.filter((p) => !p.verified);
-  const hold = state.holds.find((h) => h.tender_no === brief.tender_no);
-  const holdOk = hold && hold.state === 'held' && hold.client_id === brief.client_id;
-  const n = state.comparables.find((s) => s.client_id === brief.client_id && s.tender_no === brief.tender_no && s.stat_id === brief.stat_id)?.n;
-  const check = (cls, iconName, title, sub) => `<li><span class="${cls}">${icon(iconName)}</span><div><span class="t">${title}</span>${sub ? `<span class="sub-line muted">${sub}</span>` : ''}</div></li>`;
-  const holdNote = !hold ? 'No pricing hold exists for this tender.' : hold.state === 'stopped' ? 'Pricing service for this tender was stopped.' : `Held by ${esc(clients.get(hold.client_id) ?? 'another client')}.`;
-
-  const checks = [
-    holdOk ? check('ok', 'check', 'Active pricing hold', `Exclusive to ${esc(clients.get(brief.client_id) ?? 'this client')} · taken ${ago(hold.created_at)}`)
-      : check('bad', 'cross', 'No active pricing hold', holdNote),
-    brief.credentials_cited.length === 0 ? check('ok', 'check', 'Cites no projects', 'Acceptable, for example a no-bid.')
-      : badCites.length === 0 ? check('ok', 'check', 'All cited projects verified', esc(cited.map((p) => p.title).join(', ')))
-        : check('bad', 'cross', 'A cited project is not verified', esc(badCites.map((p) => p.title).join(', '))),
-    ...brief.flags.map((f) => check('warn', 'alert', esc(flagLabels[f] ?? f), 'You read the prose; it is not semantically checked.')),
-    ...(brief.risk_facts ?? []).map((f) => check('warn', 'alert', esc(f.message), 'Risk fact computed by code.')),
-  ];
-
-  const decided = brief.status !== 'pending_approval';
-  const banner = decided ? `<p class="banner ${brief.status === 'approved' ? 'ok' : 'bad'}" role="status">This brief was ${brief.status}.</p>` : '';
-  const actions = decided ? '' : `<div class="decision">
-<p class="muted small">Approval re-checks the pricing hold and the citations.</p>
-<div class="row-actions">${form(csrf, `/actions/brief/${brief.id}/approve`, 'Approve', 'primary')}</div>
-<form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
-<label for="decline-reason">Reason for declining (sent to the client)</label>
-<textarea id="decline-reason" name="reason" required maxlength="500" rows="3"></textarea>
-<button class="outline" type="submit">Decline</button></form></div>`;
-
-  return renderShell({ state, csrf, active: 'briefs', title: brief.tender_no, flash,
-    crumbs: `<nav class="crumbs" aria-label="Breadcrumb"><a href="/briefs">Briefs</a> / <span class="num">${esc(brief.tender_no)}</span></nav>`,
-    body: `${banner}<div class="detail">
-<section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${esc(clients.get(brief.client_id) ?? 'Unknown client')}</span></header>
-<blockquote class="prose">${esc(brief.content)}</blockquote>
-<p class="note">Prose is not semantically checked; you are the check.</p></section>
-<aside class="stack-gap">
-<section class="panel"><header><h2>Details</h2></header>
-<dl class="props">
-<div><dt>Client</dt><dd>${esc(clients.get(brief.client_id) ?? 'Unknown client')}</dd></div>
-<div><dt>Tender</dt><dd><span class="num">${esc(brief.tender_no)}</span></dd></div>
-<div><dt>Agency</dt><dd>${esc(tender?.agency ?? 'Unknown')}</dd></div>
-<div><dt>Recommendation</dt><dd><span class="pill ${brief.recommendation === 'bid' ? 'info' : ''}">${brief.recommendation === 'bid' ? 'Bid' : 'No-bid'}</span></dd></div>
-<div><dt>Historical band</dt><dd class="num">${money(brief.price_band.low_cents)} – ${money(brief.price_band.high_cents)}<span class="sub-line muted">median ${money(brief.price_band.median_cents)}${n ? ` · ${n} comparables` : ''}</span></dd></div>
-<div><dt>Snapshot</dt><dd><code>${esc(brief.stat_id.slice(0, 21))}…</code></dd></div>
-<div><dt>Submitted</dt><dd>${stamp(brief.created_at)}</dd></div>
-</dl></section>
-<section class="panel"><header><h2>Before you decide</h2></header><ul class="checks">${checks.join('')}</ul>
-<p class="note">Blocked approvals keep the brief pending and explain the rule.</p></section>
-</aside></div>${actions}` });
-}
-
 export function renderConflicts({ state, csrf, flash }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
   const name = (id) => esc(clients.get(id) ?? 'Unknown client');
   const open = state.conflicts.filter((c) => c.status === 'open');
   const resolved = state.conflicts.filter((c) => c.status === 'resolved').reverse();
   return renderShell({ state, csrf, active: 'conflicts', title: 'Conflicts', flash,
-    sub: 'A competing client asking for pricing on a held tender is escalated to you. No price is shown to either side.',
+    sub: 'Tender Desk advises one client per tender. A second client submitting a brief is escalated to you; neither side learns about the other.',
     body: `<div class="stack-gap">
 <section class="panel"><header><h2>Open</h2><span class="muted small">${plural(open.length, 'conflict')}</span></header>
 ${open.length ? `<ul class="queue">${open.map((c) => `<li><span class="pill warn">Conflict</span>
-<div><strong>${name(c.client_id)} asked for pricing on <span class="num">${esc(c.tender_no)}</span></strong>
-<span class="muted">Held by ${name(c.holder_client_id)}. No price was shown.</span></div>
-<div class="row-actions">${form(csrf, `/actions/conflict/${c.id}/serve-holder`, `Keep serving ${clients.get(c.holder_client_id) ?? 'holder'}`, 'outline')}${form(csrf, `/actions/conflict/${c.id}/stop`, 'Stop pricing this tender', 'outline')}</div></li>`).join('')}</ul>
+<div><strong>${recordLink('conflict', c, c.tender_no)} · ${name(c.client_id)} submitted a brief</strong>
+<span class="muted">Tender Desk already advises ${name(c.holder_client_id)} on it. Nothing was disclosed.</span></div>
+<div class="row-actions">${form(csrf, `/actions/conflict/${c.id}/serve-holder`, 'Keep advising the holder', 'outline')}${form(csrf, `/actions/conflict/${c.id}/stop`, 'Stop advising on this tender', 'outline')}</div></li>`).join('')}</ul>
 <p class="note">Advice already given cannot be moved to a competitor.</p>`
   : `<div class="empty"><strong>No open conflicts.</strong>When two clients want pricing on the same tender, it lands here.</div>`}
 </section>
 ${resolved.length ? `<section class="panel"><header><h2>Resolved</h2><span class="muted small">${plural(resolved.length, 'conflict')}</span></header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Tender</th><th>Asked</th><th>Resolution</th><th>When</th></tr></thead>
-<tbody>${resolved.map((c) => `<tr><td><span class="tender">${esc(c.tender_no)}</span></td><td>${name(c.client_id)}</td>
-<td>${c.resolution === 'serve_holder' ? `Kept serving ${name(c.holder_client_id)}` : 'Stopped pricing'}</td><td class="muted num">${ago(c.created_at)}</td></tr>`).join('')}</tbody>
+<tbody>${resolved.map((c) => `<tr><td>${recordLink('conflict', c, c.tender_no)}</td><td>${name(c.client_id)}</td>
+<td>${c.resolution === 'serve_holder' ? `Kept advising ${name(c.holder_client_id)}` : 'Stopped advising'}</td><td class="muted num">${ago(c.created_at)}</td></tr>`).join('')}</tbody>
 </table></div></section>` : ''}
 </div>` });
 }
@@ -292,18 +241,18 @@ export function renderClients({ state, csrf, flash }) {
     body: `<div class="stack-gap">
 <section class="panel"><header><h2>Projects to verify</h2><span class="muted small">${plural(unverified.length, 'project')}</span></header>
 ${unverified.length ? `<ul class="queue">${unverified.map((p) => `<li><span class="pill">Project</span>
-<div><strong>${esc(p.title)}</strong><span class="muted">${name(p.client_id)}${p.agency ? ` · ${esc(p.agency)}` : ''} · ${p.value_cents === null ? 'no value given' : `<span class="num">${money(p.value_cents)}</span>`} · not yet verified</span></div>
-<div class="row-actions">${form(csrf, `/actions/project/${p.id}/verify`, 'Verify', 'outline')}</div></li>`).join('')}</ul>`
+<div><strong>${recordLink('project', p, p.title)}</strong><span class="muted">${name(p.client_id)}${p.agency ? ` · ${esc(p.agency)}` : ''} · ${p.value_cents === null ? 'no value given' : `<span class="num">${money(p.value_cents)}</span>`} · not yet verified</span></div>
+<div class="row-actions"><a class="btn outline" href="${recordHref('project', p)}">Check and verify</a></div></li>`).join('')}</ul>`
   : `<div class="empty"><strong>Every reported project is verified.</strong>New self-reported projects appear here.</div>`}
 </section>
 <section class="panel"><header><h2>Clients</h2><span class="muted small">${plural(state.clients.length, 'client')}</span></header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Name</th><th>Categories</th><th class="r">Team</th><th class="r">Largest contract</th><th class="r">Projects</th></tr></thead>
-<tbody>${state.clients.map((c) => `<tr><td>${esc(c.name)}</td><td class="muted">${esc(c.categories.join(', '))}</td><td class="r num">${c.team_size}</td><td class="r num">${money(c.max_contract_cents)}</td>
+<tbody>${state.clients.map((c) => `<tr><td>${recordLink('client', c, c.name)}</td><td class="muted">${esc(c.categories.join(', '))}</td><td class="r num">${c.team_size}</td><td class="r num">${money(c.max_contract_cents)}</td>
 <td class="r num">${state.projects.filter((p) => p.client_id === c.id && p.verified).length} of ${state.projects.filter((p) => p.client_id === c.id).length}</td></tr>`).join('')}</tbody>
 </table></div></section>
 ${verified.length ? `<section class="panel"><header><h2>Verified projects</h2><span class="muted small">${plural(verified.length, 'project')}</span></header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Client</th><th>Project</th><th>Value</th><th><span class="visually-hidden">Action</span></th></tr></thead>
-<tbody>${verified.map((p) => `<tr><td>${name(p.client_id)}</td><td>${esc(p.title)}</td><td class="num">${p.value_cents === null ? '<span class="muted">Not given</span>' : money(p.value_cents)}</td>
+<tbody>${verified.map((p) => `<tr><td>${name(p.client_id)}</td><td>${recordLink('project', p, p.title)}</td><td class="num">${p.value_cents === null ? '<span class="muted">Not given</span>' : money(p.value_cents)}</td>
 <td class="end">${form(csrf, `/actions/project/${p.id}/unverify`, 'Revoke', '')}</td></tr>`).join('')}</tbody>
 </table></div></section>` : ''}
 </div>` });
@@ -369,11 +318,11 @@ export function renderAudit({ state, csrf, flash }) {
   return renderShell({ state, csrf, active: 'audit', title: 'Audit log', flash,
     sub: 'Every agent and founder action, allowed or blocked, written in the same transaction as the change.',
     body: `<section class="panel"><div class="table-wrap"><table class="stack">
-<thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
+<thead><tr><th>Ref</th><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
 <tbody>${rows.length ? rows.map((row) => {
       const who = row.client_id ? esc(clients.get(row.client_id) ?? 'Client') : row.actor === 'founder' ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
-      return `<tr><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
-    }).join('') : '<tr><td colspan="5"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
+      return `<tr><td class="num nowrap">${recordLink('audit', row)}</td><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
+    }).join('') : '<tr><td colspan="6"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
 </table></div><div class="panel-foot"><span class="muted">Showing the latest ${plural(rows.length, 'entry')}.</span></div></section>` });
 }
 

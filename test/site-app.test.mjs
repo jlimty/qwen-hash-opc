@@ -136,7 +136,9 @@ test('a session for any other Neon Auth user is rejected even with a real sessio
 
 test('actions need the CSRF cookie and field to match, redirect inside the prefix, and flash through a cookie', async () => {
   const cookie = both(await signIn());
-  const page = await (await call('/clients', { headers: { Cookie: cookie } })).text();
+  const list = await (await call('/clients', { headers: { Cookie: cookie } })).text();
+  const prj = new RegExp(`href="${publicBase}/projects/(PRJ\\d{5,})"`).exec(list)[1];
+  const page = await (await call(`/projects/${prj}`, { headers: { Cookie: cookie } })).text();
   const csrf = /name="csrf" value="([a-f0-9]{64})"/.exec(page)[1];
   const projectId = /\/actions\/project\/([0-9a-f-]{36})\/verify/.exec(page)[1];
   assert.equal((await form(`/actions/project/${projectId}/verify`, {}, cookie)).status, 403);
