@@ -11,3 +11,4 @@ site/.*.qoder.site
 !.impeccable/config.json
 vibe_images/
 .DS_Store
+HANDOFF.md

@@ -12,7 +12,7 @@ Design: `docs/superpowers/specs/2026-11-21-tender-desk-journey-design.md`. Build
 
 **QwenWork (to do):** paste `.local/site/connectors/tender-desk-intake.json` and `tender-desk-birch.json` into Connectors, replacing the old three; reinstall the four skills from `.local/site/starter-pack/*.zip`.
 
-**Hashmeta site copy:** drafted in `docs/hashmeta/site-content.md` (article, product section, Get started, promo script) by a side session; review before publishing.
+**Hashmeta site (LIVE, 22 Nov):** `https://tenderdesk.geo.hashmeta.tech` (pages `/`, `/terms`, `/privacy`). Built by QwenWork through the Hashmeta MCP connector (Hashmeta → account menu → AI Assistants → QwenWork tab) from `docs/hashmeta/site-content.md`; the promo script was not published (it is for the video). Get started serves the starter pack from the site's media library at `/api/media/file/<name>` (four skill zips + `tender-desk-intake.json`), verified byte-identical to `.local/site/starter-pack/`. If the intake key is rotated or the skills change, re-run `npm run starter-pack` and re-upload the changed files. Admin: `https://app.hashmeta.ai/ai-cms/3dc2df00-20f8-41db-bf01-bd629031b67a`. Open: confirm `contact@tenderdesk-test.com` (shown on Terms and Privacy) receives mail.
 
 ## The demo (guardrails firing, backtest as proof)
 
@@ -58,7 +58,7 @@ The old `demo-baseline` Neon branch is **retired**: it predates schema 002, so r
 | 1 | Review and merge `journey-self-service`; production cut-over above | The admin approves, agent runs |
 | 2 | QwenWork practice run of the storyline with the new skills; fix any skill-following issues | The admin, with agent debugging |
 | 3 | Record the video (≤3 min, guardrails-centred) | The admin (agent drafts script/shot list on request) |
-| 4 | Hashmeta site: publish the article and the Get started pack | The admin |
+| 4 | ~~Hashmeta site: publish the article and the Get started pack~~ Done: `https://tenderdesk.geo.hashmeta.tech` (only the contact mailbox left to confirm) | The admin |
 | 5 | Submit via the form | The admin |
 
 ## Architecture
@@ -89,7 +89,7 @@ The old `demo-baseline` Neon branch is **retired**: it predates schema 002, so r
 
 - `.env.local`, `~/.td-db-url`, `~/.td-auth-url`: Neon URLs.
 - `.local/site/agent-tokens/*.txt`, `.local/site/connectors/*.json`: connector credentials and QwenWork configs (mode 0600).
-- `.local/site/starter-pack/`: contains the public intake key; publish only on the Hashmeta site.
+- `.local/site/starter-pack/`: contains the public intake key; published on the Hashmeta site (`/api/media/file/tender-desk-intake.json`). Publish nowhere else, and never upload anything from `.local/site/connectors/`.
 - `.local/site/admin-user-id.txt`, `.local/site/db-unpooled.url`, `rehearsal-db.url`.
 
 ## Verified versus not verified
