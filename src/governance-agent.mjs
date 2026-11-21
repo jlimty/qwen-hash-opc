@@ -60,6 +60,17 @@ export async function hasVerifiedCitations(tx, client_id, ids) {
   return rows.length === new Set(ids).size;
 }
 
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// G1: true when the text names another client by its full name as whole words.
+export function namesOtherClient(content, names) {
+  const text = String(content).normalize('NFKC').toLowerCase();
+  return names.some((name) => {
+    const needle = String(name).normalize('NFKC').toLowerCase().trim();
+    return needle !== '' && new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(needle)}(?![\\p{L}\\p{N}])`, 'u').test(text);
+  });
+}
+
 export function agentWorkflows(dataset, { connector = localConnector } = {}) {
   const incoming = new Map(dataset.contracts.filter((contract) => contract.is_holdout).map((contract) => [contract.tender_no, contract]));
   return {
@@ -67,18 +78,18 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
       description: "List the six Tender Desk governance rules in plain English. Use this to explain a blocked or escalated result to the user; do not retry around a block.",
       roles: ['client', 'intake'], schema: z.strictObject({}),
       run: async () => ({ outcome: 'allowed', policies: [
-        { rule_id: 'G1', title: 'Client walls', policy: 'Credentials bind each agent to one client. Do not share client context between chats.' },
-        { rule_id: 'G2', title: 'Exclusive pricing', policy: 'Pricing for a tender is disclosed to only one client. Conflicts require founder review; disclosed advice cannot be transferred.' },
-        { rule_id: 'G3', title: 'Verified credentials', policy: 'Cited project IDs must belong to this client and be founder-verified. Prose still needs human review.' },
-        { rule_id: 'G4', title: 'Grounded numbers', policy: 'Structured price bands must match a saved client/tender snapshot. Prose numbers are flagged, not semantically validated.' },
-        { rule_id: 'G5', title: 'Founder approval', policy: 'Agents submit pending briefs. Only the founder can approve or decline them.' },
+        { rule_id: 'G1', title: 'Client walls', policy: 'Credentials bind each agent to one client. Do not share client context between chats, and never name another client.' },
+        { rule_id: 'G2', title: 'Exclusive advice', policy: 'Tender Desk advises only one client per tender. A second client is escalated to the admin; advice already given is never transferred.' },
+        { rule_id: 'G3', title: 'Verified credentials', policy: 'Cited project IDs must belong to this client and be admin-verified. Prose still needs human review.' },
+        { rule_id: 'G4', title: 'Grounded numbers', policy: 'Structured price bands must match a saved client/tender snapshot. Prose numbers are checked against the band and shown to the admin, not semantically validated.' },
+        { rule_id: 'G5', title: 'Admin approval', policy: 'Agents submit pending briefs. Only the admin can approve or decline them.' },
         { rule_id: 'G6', title: 'Backtest integrity', policy: 'Agent tools never return held-out winners or amounts. Incoming entries are historical backtests, not live tenders.' },
       ] }),
     },
     create_client: { description: "Intake only. Record a new SME client profile after the user confirms it. Every self-reported past project is saved as unverified; only the admin can verify projects. Returns connector_config: the client's personal QwenWork connector. Show it to the user once, to paste into QwenWork Connectors; it is never shown again.",
       roles: ['intake'], schema: clientProfileSchema, run: (tx, actor, input) => createClientWithConnector(tx, input, connector) },
     get_client_context: {
-      description: "Return the profile, founder-verified past projects and saved shortlist of the client this connector is bound to. Takes no arguments; the client is fixed by the connector credential.",
+      description: "Return the profile, admin-verified past projects and saved shortlist of the client this connector is bound to. Takes no arguments; the client is fixed by the connector credential.",
       roles: ['client'], schema: z.strictObject({}),
       run: async (tx, actor) => {
         const client = (await tx.query(`SELECT id,name,capabilities,categories,team_size,max_contract_cents
@@ -124,25 +135,14 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
       },
     },
     request_pricing: {
-      description: "Request the historical price band for an incoming tender. This takes an exclusive pricing hold on the tender for this client; a competing client is escalated to the founder and receives no price. Only call after the user confirms they want pricing for this tender. Needs at least five comparable contracts.",
+      description: "Request the historical price band for an incoming tender, computed from public GeBIZ awards and saved as a snapshot. Open to every client; it takes no hold. Needs at least five comparable contracts.",
       roles: ['client'], schema: z.strictObject({ tender_no: tenderNumber, query: historicalFilterSchema.shape.query, same_agency: z.boolean().default(false) }),
       run: async (tx, actor, input) => {
         const tender = incoming.get(input.tender_no);
         if (!tender) return blocked('G6', 'Pricing requests require an incoming backtest tender.');
-        const inserted = await tx.query(`INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2)
-          ON CONFLICT DO NOTHING RETURNING tender_no`, [input.tender_no, actor.client_id]);
-        const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [input.tender_no])).rows[0];
-        if (hold.state === 'stopped') return blocked('G2', 'Further pricing service for this tender has been stopped.');
-        if (hold.client_id !== actor.client_id) {
-          const { rows } = await tx.query(`INSERT INTO tender_desk.conflicts (tender_no,client_id,holder_client_id) VALUES ($1,$2,$3)
-            ON CONFLICT (tender_no,client_id) DO UPDATE SET tender_no=EXCLUDED.tender_no RETURNING id`,
-          [input.tender_no, actor.client_id, hold.client_id]);
-          return { outcome: 'escalated', rule_id: 'G2', conflict_id: rows[0].id, reason: 'This tender requires founder conflict review. No pricing is returned.' };
-        }
         const snapshot = buildStatsSnapshot(dataset, { category: tender.category, query: input.query,
           agency: input.same_agency ? tender.agency : undefined });
         if (snapshot.status !== 'ready') {
-          if (inserted.rows.length) await tx.query('DELETE FROM tender_desk.pricing_holds WHERE tender_no=$1 AND client_id=$2', [input.tender_no, actor.client_id]);
           return blocked('G4', 'At least five positive historical comparables are required. No price band is available.');
         }
         await tx.query(`INSERT INTO tender_desk.stats_snapshots (client_id,tender_no,stat_id,snapshot)
@@ -152,22 +152,30 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
       },
     },
     submit_brief: {
-      description: "Submit a bid or no-bid brief for founder approval. The price band must exactly match the snapshot returned by request_pricing, and cited project IDs must be this client's founder-verified projects. The brief is always saved as pending approval.",
+      description: "Submit a bid or no-bid brief for admin approval. Only after the user confirms. The price band must exactly match the snapshot returned by request_pricing, and cited project IDs must be this client's admin-verified projects. Submitting takes the advice slot for this tender: if Tender Desk already advises another client on it, you are escalated to the admin and nothing is saved. A saved brief is always pending approval.",
       roles: ['client'], schema: z.strictObject({ tender_no: tenderNumber, stat_id: z.string().regex(/^stat_[a-f0-9]{64}$/),
         price_band: bandSchema, recommendation: z.enum(['bid', 'no-bid']), content: text(20000),
         credentials_cited: z.array(z.uuid()).max(30).default([]) }),
       run: async (tx, actor, input) => {
-        const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [input.tender_no])).rows[0];
-        if (!hold || hold.client_id !== actor.client_id || hold.state !== 'held') return blocked('G2', 'An active pricing hold for this client is required.');
         const saved = (await tx.query(`SELECT snapshot FROM tender_desk.stats_snapshots
           WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3`, [actor.client_id, input.tender_no, input.stat_id])).rows[0];
         if (!saved || Object.keys(input.price_band).some((key) => input.price_band[key] !== saved.snapshot.price_band[key])) {
           return blocked('G4', 'The price band must match a saved snapshot for this client and tender.');
         }
         if (!await hasVerifiedCitations(tx, actor.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
-        const otherNames = (await tx.query('SELECT name FROM tender_desk.clients WHERE id<>$1', [actor.client_id])).rows;
-        const content = input.content.normalize('NFKC').toLowerCase();
-        if (otherNames.some(({ name }) => content.includes(name.normalize('NFKC').toLowerCase()))) return blocked('G1', 'Brief content must not name another client.');
+        const otherNames = (await tx.query('SELECT name FROM tender_desk.clients WHERE id<>$1', [actor.client_id])).rows.map((row) => row.name);
+        if (namesOtherClient(input.content, otherNames)) return blocked('G1', 'Brief content must not name another client.');
+        // G2 last, so a brief blocked by any other rule never takes the advice slot.
+        await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [input.tender_no, actor.client_id]);
+        const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [input.tender_no])).rows[0];
+        if (hold.state === 'stopped') return blocked('G2', 'Tender Desk has stopped advising on this tender.');
+        if (hold.client_id !== actor.client_id) {
+          const { rows } = await tx.query(`INSERT INTO tender_desk.conflicts (tender_no,client_id,holder_client_id) VALUES ($1,$2,$3)
+            ON CONFLICT (tender_no,client_id) DO UPDATE SET tender_no=EXCLUDED.tender_no RETURNING id`,
+          [input.tender_no, actor.client_id, hold.client_id]);
+          return { outcome: 'escalated', rule_id: 'G2', conflict_id: rows[0].id,
+            reason: 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.' };
+        }
         const flags = ['human_review_required'];
         if (/\p{N}/u.test(input.content)) flags.push('unverified_numeric_content');
         const { rows } = await tx.query(`INSERT INTO tender_desk.briefs

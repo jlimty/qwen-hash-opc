@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential } from './governance-agent.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';

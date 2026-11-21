@@ -44,9 +44,10 @@ test('the pool adapter migrates once and runs the full governed journey with JSO
   assert.deepEqual(context.client.categories, ['events-community']);
   const pricing = await agentA.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
   assert.equal(pricing.outcome, 'allowed');
-  assert.equal((await agentB.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' })).outcome, 'escalated');
   const brief = await agentA.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricing.stat_id, price_band: pricing.price_band, recommendation: 'bid', content: 'Check capacity.', credentials_cited: [a.projects[0].id] });
   assert.equal(brief.outcome, 'allowed');
+  const pricingB = await agentB.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
+  assert.equal((await agentB.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricingB.stat_id, price_band: pricingB.price_band, recommendation: 'bid', content: 'Check capacity.' })).outcome, 'escalated');
   const state = await founder.readConsole();
   const stored = state.briefs.find((x) => x.id === brief.brief_id);
   assert.deepEqual(stored.price_band, pricing.price_band);

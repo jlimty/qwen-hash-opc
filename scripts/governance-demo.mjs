@@ -37,7 +37,7 @@ try {
       reasons: ['Scripted category match; scope still requires agent assessment.'] }] }), 'allowed');
   }
   const pricing = step('request_amber_pricing', await agentA.invoke('request_pricing', { tender_no: tender.tender_no, query: 'event management' }), 'allowed');
-  const conflict = step('request_birch_pricing', await agentB.invoke('request_pricing', { tender_no: tender.tender_no, query: 'event management' }), 'escalated', 'G2');
+  const birchPricing = step('request_birch_pricing', await agentB.invoke('request_pricing', { tender_no: tender.tender_no, query: 'event management' }), 'allowed');
   const brief = { tender_no: tender.tender_no, stat_id: pricing.stat_id, price_band: pricing.price_band, recommendation: 'bid',
     content: 'Scripted demonstration brief, not a bid recommendation. Check scope, duration and capacity before proceeding.', credentials_cited: [a.projects[0].id] };
   step('unverified_project', await agentA.invoke('submit_brief', brief), 'blocked', 'G3');
@@ -45,6 +45,7 @@ try {
   step('client_impersonation', await agentA.invoke('get_client_context', { client_id: b.client_id }), 'blocked', 'G1');
   step('founder_verifies_project', await founder.verifyProject({ project_id: a.projects[0].id, verified: true }), 'allowed');
   const pending = step('submit_valid_brief', await agentA.invoke('submit_brief', brief), 'allowed');
+  const conflict = step('birch_brief_escalated', await agentB.invoke('submit_brief', { ...brief, stat_id: birchPricing.stat_id, price_band: birchPricing.price_band, credentials_cited: [] }), 'escalated', 'G2');
   step('agent_cannot_approve', await agentA.invoke('approve_brief', { brief_id: pending.brief_id }), 'blocked', 'G5');
   step('founder_resolves_conflict', await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' }), 'allowed');
   step('founder_approves', await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' }), 'approved');

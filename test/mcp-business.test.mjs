@@ -125,17 +125,18 @@ test('an agent can only act as its own client, and spoof attempts are audited wi
   assert.doesNotMatch(audit, /sensitive-http-marker/);
 });
 
-test('competing clients over HTTP: one priced, one escalated with no price or holder identity', async () => {
+test('competing clients over HTTP: both priced, one brief escalated with no price or holder identity', async () => {
   const c = await provision();
   const [agentA, agentB] = [await connect(c.keyA.token), await connect(c.keyB.token)];
   const args = { tender_no: c.tender_no, query: 'event management' };
-  const [first, second] = await Promise.all([call(agentA, 'request_pricing', args), call(agentB, 'request_pricing', args)]);
-  const outcomes = [first.data.outcome, second.data.outcome].sort();
-  assert.deepEqual(outcomes, ['allowed', 'escalated']);
+  const [pa, pb] = await Promise.all([call(agentA, 'request_pricing', args), call(agentB, 'request_pricing', args)]);
+  assert.deepEqual([pa.data.outcome, pb.data.outcome], ['allowed', 'allowed']);
+  assert.doesNotMatch(JSON.stringify(pa.data), /comparables|top_suppliers|likely_incumbent|Historical supplier/);
+  const submit = (agent, p) => call(agent, 'submit_brief', { tender_no: c.tender_no, stat_id: p.data.stat_id, price_band: p.data.price_band, recommendation: 'bid', content: 'Check capacity.' });
+  const [first, second] = await Promise.all([submit(agentA, pa), submit(agentB, pb)]);
+  assert.deepEqual([first.data.outcome, second.data.outcome].sort(), ['allowed', 'escalated']);
   const escalated = [first, second].find((r) => r.data.outcome === 'escalated');
   assert.doesNotMatch(JSON.stringify(escalated.data), /price_band|stat_id|low_cents|Amber|Birch|client_id/);
-  const allowed = [first, second].find((r) => r.data.outcome === 'allowed');
-  assert.doesNotMatch(JSON.stringify(allowed.data), /comparables|top_suppliers|likely_incumbent|Historical supplier/);
 });
 
 test('the full agent journey works through MCP and ends pending founder approval', async () => {
@@ -227,8 +228,10 @@ test('tool descriptions disclose side effects and tools carry annotations', asyn
   const c = await provision();
   const { tools } = await (await connect(c.keyA.token)).listTools();
   const pricing = tools.find((tool) => tool.name === 'request_pricing');
-  assert.match(pricing.description, /exclusive/i);
-  assert.match(pricing.description, /confirm/i);
+  assert.match(pricing.description, /no hold/i);
+  const submit = tools.find((tool) => tool.name === 'submit_brief');
+  assert.match(submit.description, /advice slot/i);
+  assert.match(submit.description, /confirm/i);
   assert.equal(pricing.annotations.readOnlyHint, false);
   assert.equal(tools.find((tool) => tool.name === 'get_incoming_tenders').annotations.readOnlyHint, true);
 });

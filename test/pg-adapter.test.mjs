@@ -57,12 +57,13 @@ test('the full governed journey works: pricing hold, escalation, brief, approval
   const pricing = await agentA.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
   assert.equal(pricing.outcome, 'allowed');
   assert.equal(typeof pricing.price_band.low_cents, 'number');
-  const escalated = await agentB.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
-  assert.equal(escalated.outcome, 'escalated');
-
   const brief = await agentA.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricing.stat_id, price_band: pricing.price_band,
     recommendation: 'bid', content: 'Check capacity before bidding.', credentials_cited: [a.projects[0].id] });
   assert.equal(brief.outcome, 'allowed');
+  const pricingB = await agentB.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
+  const escalated = await agentB.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricingB.stat_id, price_band: pricingB.price_band,
+    recommendation: 'bid', content: 'Check capacity before bidding.' });
+  assert.equal(escalated.outcome, 'escalated');
 
   const state = await founder.readConsole();
   const stored = state.briefs.find((x) => x.id === brief.brief_id);

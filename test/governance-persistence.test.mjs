@@ -48,7 +48,10 @@ test('pricing, pending briefs, credential bindings and audit survive a database 
     const recoveredA = await desk.agent(keyA.token);
     const recoveredB = await desk.agent(keyB.token);
     assert.equal((await recoveredA.invoke('request_pricing', { tender_no: 'NEW-1' })).stat_id, pricing.stat_id);
-    assert.equal((await recoveredB.invoke('request_pricing', { tender_no: 'NEW-1' })).outcome, 'escalated');
+    const pricingB = await recoveredB.invoke('request_pricing', { tender_no: 'NEW-1' });
+    assert.equal(pricingB.outcome, 'allowed');
+    assert.equal((await recoveredB.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricingB.stat_id, price_band: pricingB.price_band,
+      recommendation: 'bid', content: 'Subject to capacity review.' })).outcome, 'escalated');
     assert.equal((await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).outcome, 'approved');
 
     const failingDatabase = {
@@ -82,12 +85,12 @@ test('a tool that throws still leaves an audit row and no partial state', async 
     const client = await founder.createClient(profile('Throwing Amber'));
     const key = await founder.issueAgentCredential({ role: 'client', client_id: client.client_id });
     const failing = { transaction: (handler) => db.transaction((tx) => handler({ query: (sql, params) => {
-      if (sql.startsWith('INSERT INTO tender_desk.pricing_holds')) throw new Error('Simulated database failure');
+      if (sql.startsWith('INSERT INTO tender_desk.stats_snapshots')) throw new Error('Simulated database failure');
       return tx.query(sql, params);
     } })) };
     const agent = await createTenderDesk({ database: failing, dataset, founderToken }).agent(key.token);
     await assert.rejects(agent.invoke('request_pricing', { tender_no: 'NEW-1' }), /Simulated database failure/);
-    assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds')).rows.length, 0);
+    assert.equal((await db.query('SELECT * FROM tender_desk.stats_snapshots')).rows.length, 0);
     const rows = (await db.query("SELECT outcome,rule_id,reason FROM tender_desk.audit_log WHERE action='request_pricing'")).rows;
     assert.equal(rows.length, 1);
     assert.deepEqual([rows[0].outcome, rows[0].rule_id], ['blocked', 'ERROR']);

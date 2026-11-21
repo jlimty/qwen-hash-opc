@@ -68,9 +68,11 @@ async function pendingBrief(content = 'Check scope and capacity before bidding.'
   const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
   const tender_no = `NEW-${++sequence}`;
   const pricing = await agentA.invoke('request_pricing', { tender_no, query: 'event management' });
-  const conflict = await agentB.invoke('request_pricing', { tender_no, query: 'event management' });
   const brief = await agentA.invoke('submit_brief', { tender_no, stat_id: pricing.stat_id, price_band: pricing.price_band, recommendation: 'bid',
     content, credentials_cited: cite ? [a.projects[0].id] : [] });
+  const pricingB = await agentB.invoke('request_pricing', { tender_no, query: 'event management' });
+  const conflict = await agentB.invoke('submit_brief', { tender_no, stat_id: pricingB.stat_id, price_band: pricingB.price_band, recommendation: 'bid',
+    content: 'Check scope.', credentials_cited: [] });
   return { a, b, tender_no, pricing, conflict, brief, suffix };
 }
 const status = async (id) => (await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [id])).rows[0].status;

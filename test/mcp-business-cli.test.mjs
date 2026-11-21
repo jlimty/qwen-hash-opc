@@ -72,7 +72,10 @@ test('launcher seeds fictional clients, protects credential files, persists acro
     const pricing = await call(amber, 'request_pricing', { tender_no: tender, query: 'event management' });
     assert.equal(pricing.outcome, 'allowed');
     const birch = await connect(url, tokens.birch);
-    assert.equal((await call(birch, 'request_pricing', { tender_no: tender, query: 'event management' })).outcome, 'escalated');
+    assert.equal((await call(amber, 'submit_brief', { tender_no: tender, stat_id: pricing.stat_id, price_band: pricing.price_band, recommendation: 'bid', content: 'Check capacity.' })).outcome, 'allowed');
+    const birchPricing = await call(birch, 'request_pricing', { tender_no: tender, query: 'event management' });
+    assert.equal(birchPricing.outcome, 'allowed');
+    assert.equal((await call(birch, 'submit_brief', { tender_no: tender, stat_id: birchPricing.stat_id, price_band: birchPricing.price_band, recommendation: 'bid', content: 'Check capacity.' })).outcome, 'escalated');
     await amber.close();
     await birch.close();
 

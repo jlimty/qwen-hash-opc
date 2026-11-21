@@ -6,6 +6,7 @@ import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
 import { connectorSlug } from '../src/connector-config.mjs';
+import { namesOtherClient } from '../src/governance-agent.mjs';
 
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = parseTenderCsv(header + [
@@ -36,6 +37,7 @@ async function setup() {
   const keyB = await founder.issueAgentCredential({ role: 'client', client_id: b.client_id });
   return { a, b, keyA, keyB, agentA: await desk.agent(keyA.token), agentB: await desk.agent(keyB.token), tender_no: `NEW-${++sequence}` };
 }
+const submitAs = async (context, agent, overrides = {}) => agent.invoke('submit_brief', brief(context, await price(context, agent), overrides));
 const price = (context, agent = context.agentA) => agent.invoke('request_pricing', { tender_no: context.tender_no, query: 'event management' });
 function brief(context, pricing, overrides = {}) {
   return { tender_no: context.tender_no, stat_id: pricing.stat_id, price_band: pricing.price_band,
@@ -162,18 +164,66 @@ test('shortlists are client-scoped and accept incoming metadata only', async () 
   assert.equal((await c.agentA.invoke('get_client_context', {})).client.shortlist[0].fit_score, 80);
 });
 
-test('competing pricing requests produce one holder and one private escalation', async () => {
+test('two clients can both get the band for one tender', async () => {
   const c = await setup();
-  const results = await Promise.all([price(c), price(c, c.agentB)]);
+  const [a, b] = await Promise.all([price(c), price(c, c.agentB)]);
+  assert.equal(a.outcome, 'allowed');
+  assert.equal(b.outcome, 'allowed');
+  assert.deepEqual(a.price_band, { low_cents: 20000, median_cents: 30000, high_cents: 40000 });
+  assert.deepEqual(b.price_band, a.price_band);
+  assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
+});
+
+test('competing briefs produce one holder and one private escalation that saves nothing', async () => {
+  const c = await setup();
+  const [pa, pb] = await Promise.all([price(c), price(c, c.agentB)]);
+  const results = await Promise.all([c.agentA.invoke('submit_brief', brief(c, pa)), c.agentB.invoke('submit_brief', brief(c, pb))]);
   const allowed = results.filter((r) => r.outcome === 'allowed');
   const escalated = results.filter((r) => r.outcome === 'escalated');
   assert.equal(allowed.length, 1);
   assert.equal(escalated.length, 1);
   assert.equal(escalated[0].rule_id, 'G2');
-  assert.deepEqual(allowed[0].price_band, { low_cents: 20000, median_cents: 30000, high_cents: 40000 });
+  assert.equal(escalated[0].reason, 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.');
   assert.doesNotMatch(JSON.stringify(escalated[0]), /stat_id|price_band|low_cents|Amber|Birch|client_id/);
   assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no])).rows.length, 1);
-  assert.equal((await db.query('SELECT * FROM tender_desk.stats_snapshots WHERE tender_no=$1', [c.tender_no])).rows.length, 1);
+  assert.equal((await db.query('SELECT * FROM tender_desk.briefs WHERE tender_no=$1', [c.tender_no])).rows.length, 1);
+  assert.equal((await db.query("SELECT * FROM tender_desk.conflicts WHERE tender_no=$1 AND status='open'", [c.tender_no])).rows.length, 1);
+});
+
+test('a blocked brief takes no hold', async () => {
+  const c = await setup();
+  assert.equal((await submitAs(c, c.agentA, { credentials_cited: [c.a.projects[0].id] })).rule_id, 'G3');
+  assert.equal((await submitAs(c, c.agentB)).status, 'pending_approval');
+  const { rows } = await db.query('SELECT client_id FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no]);
+  assert.equal(rows[0].client_id, c.b.client_id);
+});
+
+test('holder resubmits after decline without escalating against itself', async () => {
+  const c = await setup();
+  const first = await submitAs(c, c.agentA);
+  await founder.reviewBrief({ brief_id: first.brief_id, decision: 'declined' });
+  const again = await submitAs(c, c.agentA);
+  assert.equal(again.status, 'pending_approval');
+  assert.equal((await db.query('SELECT * FROM tender_desk.conflicts WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
+});
+
+test('G1 matches another client name as whole words only', async () => {
+  const c = await setup();
+  const name = `Birch Events ${randomUUID().slice(0, 8)}`;
+  await founder.createClient({ ...profile(name), past_projects: [] });
+  assert.equal((await submitAs(c, c.agentA, { content: `${name}ful planning ahead.` })).outcome, 'allowed');
+  const leak = await submitAs(c, c.agentA, { content: `We met ${name.toLowerCase()} last year.` });
+  assert.equal(leak.outcome, 'blocked');
+  assert.equal(leak.rule_id, 'G1');
+});
+
+test('G1 tolerates regex characters in client names', async () => {
+  const c = await setup();
+  const name = `A+B Events (Pte.) Ltd ${randomUUID().slice(0, 4)}`;
+  await founder.createClient({ ...profile(name), past_projects: [] });
+  assert.equal(namesOtherClient(`Partner: ${name}.`, [name]), true);
+  assert.equal(namesOtherClient('A Events Pte Ltd', [name]), false);
+  assert.equal((await submitAs(c, c.agentA, { content: `Partner: ${name}.` })).rule_id, 'G1');
 });
 
 test('pricing responses expose the price band but no per-contract amounts or supplier identities', async () => {
@@ -203,9 +253,10 @@ test('NUL characters are rejected as audited validation blocks without side effe
 test('a founder-resolved conflict stays resolved when the challenger asks again', async () => {
   const c = await setup();
   await price(c);
-  const conflict = await price(c, c.agentB);
+  await submitAs(c, c.agentA);
+  const conflict = await submitAs(c, c.agentB);
   await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
-  const again = await price(c, c.agentB);
+  const again = await submitAs(c, c.agentB);
   assert.equal(again.outcome, 'escalated');
   const { rows } = await db.query('SELECT status,resolution FROM tender_desk.conflicts WHERE id=$1', [conflict.conflict_id]);
   assert.deepEqual(rows[0], { status: 'resolved', resolution: 'serve_holder' });
@@ -229,9 +280,7 @@ test('insufficient comparables create no exclusivity hold or price snapshot', as
   assert.equal(denied.outcome, 'blocked');
   assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
   assert.equal((await price(c, c.agentB)).outcome, 'allowed');
-  const attempt = await c.agentA.invoke('request_pricing', { tender_no: c.tender_no, query: 'unmatchedword' });
-  assert.equal(attempt.rule_id, 'G2');
-  assert.equal(attempt.outcome, 'escalated');
+  assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
 });
 
 test('a holder can repeat pricing without duplicating the immutable snapshot', async () => {
@@ -253,7 +302,7 @@ test('briefs reject unverified credentials, forged snapshots and altered price b
   const altered = await c.agentA.invoke('submit_brief', brief(c, pricing, { price_band: { ...pricing.price_band, low_cents: 1 } }));
   assert.equal(altered.rule_id, 'G4');
   const other = await c.agentB.invoke('submit_brief', brief(c, pricing));
-  assert.equal(other.rule_id, 'G2');
+  assert.equal(other.rule_id, 'G4');
   assert.equal((await db.query('SELECT * FROM tender_desk.briefs WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
 });
 
@@ -305,29 +354,32 @@ test('founder may stop further pricing but cannot transfer advice already disclo
   const c = await setup();
   const pricing = await price(c);
   const pending = await c.agentA.invoke('submit_brief', brief(c, pricing));
-  const conflict = await price(c, c.agentB);
+  const conflict = await submitAs(c, c.agentB);
   const transfer = await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_challenger' });
   assert.equal(transfer.outcome, 'blocked');
   assert.equal((await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' })).outcome, 'allowed');
-  assert.equal((await price(c)).rule_id, 'G2');
-  assert.equal((await price(c, c.agentB)).rule_id, 'G2');
+  assert.equal((await price(c)).outcome, 'allowed');
+  const stopped = await submitAs(c, c.agentA);
+  assert.equal(stopped.rule_id, 'G2');
+  assert.equal(stopped.reason, 'Tender Desk has stopped advising on this tender.');
+  assert.equal((await submitAs(c, c.agentB)).rule_id, 'G2');
   assert.equal((await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).rule_id, 'G2');
 });
 
 test('serving the existing holder never gives the competing client access', async () => {
   const c = await setup();
-  await price(c);
-  const conflict = await price(c, c.agentB);
+  await submitAs(c, c.agentA);
+  const conflict = await submitAs(c, c.agentB);
   assert.equal((await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' })).outcome, 'allowed');
-  assert.equal((await price(c)).outcome, 'allowed');
-  assert.equal((await price(c, c.agentB)).outcome, 'escalated');
+  assert.equal((await submitAs(c, c.agentA)).outcome, 'allowed');
+  assert.equal((await submitAs(c, c.agentB)).outcome, 'escalated');
 });
 
 test('audit records allowed, blocked and escalated actions without raw client inputs', async () => {
   const c = await setup();
   await c.agentA.invoke('get_client_context', { client_id: c.b.client_id, token: 'sensitive-input-marker' });
-  await price(c);
-  await price(c, c.agentB);
+  await submitAs(c, c.agentA);
+  await submitAs(c, c.agentB);
   const { rows } = await db.query('SELECT * FROM tender_desk.audit_log WHERE client_id=$1 OR client_id=$2 ORDER BY id', [c.a.client_id, c.b.client_id]);
   assert.ok(rows.some((r) => r.outcome === 'allowed' && r.action === 'request_pricing'));
   assert.ok(rows.some((r) => r.outcome === 'blocked' && r.rule_id === 'G1'));
