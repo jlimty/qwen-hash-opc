@@ -182,6 +182,33 @@ test('client context never leaks the holder, risk or another client', async () =
   assert.doesNotMatch(text, new RegExp(rows[0].name));
 });
 
+test('verifying a project without a GeBIZ match needs a note', async () => {
+  const c = await setup();
+  const result = await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true });
+  assert.equal(result.outcome, 'blocked');
+  assert.equal(result.rule_id, 'G3');
+  assert.equal(result.reason, 'A note is required to verify a project without a GeBIZ match.');
+});
+
+test('verifying with a note stores the note and time, and unverifying clears the time', async () => {
+  const c = await setup();
+  const id = c.a.projects[0].id;
+  assert.equal((await founder.verifyProject({ project_id: id, verified: true, note: 'Saw the signed contract.' })).outcome, 'allowed');
+  let row = (await db.query('SELECT verified, verification_note, verified_at FROM tender_desk.projects WHERE id=$1', [id])).rows[0];
+  assert.deepEqual([row.verified, row.verification_note, Boolean(row.verified_at)], [true, 'Saw the signed contract.', true]);
+  const audit = (await db.query("SELECT summary FROM tender_desk.audit_log WHERE action='verify_project' ORDER BY id DESC LIMIT 1")).rows[0].summary;
+  assert.deepEqual([audit.check_result, audit.note], ['no_match', 'Saw the signed contract.']);
+  assert.match(audit.project_reference, /^PRJ\d{5,}$/);
+  await founder.verifyProject({ project_id: id, verified: false });
+  row = (await db.query('SELECT verified, verified_at FROM tender_desk.projects WHERE id=$1', [id])).rows[0];
+  assert.deepEqual([row.verified, row.verified_at], [false, null]);
+});
+
+test('a GeBIZ match verifies without a note', async () => {
+  const created = await founder.createClient({ ...profile(`Historical Supplier`), past_projects: [{ title: 'Past event', gebiz_tender_no: 'OLD-1' }] });
+  assert.equal((await founder.verifyProject({ project_id: created.projects[0].id, verified: true })).outcome, 'allowed');
+});
+
 test('agent catalogs contain neither founder tools nor an ungated pricing path', async () => {
   const c = await setup();
   assert.equal(c.agentA.toolNames.includes('request_pricing'), true);
@@ -316,7 +343,7 @@ test('briefs may cite no projects, and a repeated verified project ID is still v
   const pricing = await price(c);
   const none = await c.agentA.invoke('submit_brief', brief(c, pricing, { recommendation: 'no-bid', credentials_cited: [] }));
   assert.equal(none.outcome, 'allowed');
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true });
+  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const id = c.a.projects[0].id;
   const duplicate = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [id, id] }));
   assert.equal(duplicate.outcome, 'allowed');
@@ -358,7 +385,7 @@ test('briefs reject unverified credentials, forged snapshots and altered price b
 test('snapshot and verified-project identities cannot be reused for a different client or tender', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.b.projects[0].id, verified: true });
+  await founder.verifyProject({ project_id: c.b.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   assert.equal((await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.b.projects[0].id] }))).rule_id, 'G3');
   const another = `NEW-${++sequence}`;
   await c.agentA.invoke('request_pricing', { tender_no: another, query: 'management', same_agency: true });
@@ -383,7 +410,7 @@ test('briefs naming another client are blocked and uncited prose numbers are fla
 test('only founder verification and approval release a valid pending brief', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true });
+  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   assert.equal((await c.agentA.invoke('get_client_context', {})).client.past_projects.length, 1);
   const submitted = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.a.projects[0].id] }));
   assert.equal(submitted.status, 'pending_approval');
@@ -396,7 +423,7 @@ test('only founder verification and approval release a valid pending brief', asy
 test('approval rechecks a project that was revoked after the brief was submitted', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true });
+  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const submitted = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.a.projects[0].id] }));
   await founder.verifyProject({ project_id: c.a.projects[0].id, verified: false });
   assert.equal((await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' })).rule_id, 'G3');

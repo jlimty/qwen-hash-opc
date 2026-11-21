@@ -36,7 +36,7 @@ test('the pool adapter migrates once and runs the full governed journey with JSO
   await initializeGovernance({ query: database.query, exec: () => assert.fail('must not rerun DDL') });
   const a = await founder.createClient({ name: 'Amber Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project', value_cents: 12500000 }] });
   const b = await founder.createClient({ name: 'Birch Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [] });
-  await founder.verifyProject({ project_id: a.projects[0].id, verified: true });
+  await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const agentA = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
   const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
   const context = await agentA.invoke('get_client_context', {});

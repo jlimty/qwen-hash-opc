@@ -34,7 +34,7 @@ export async function seedDemo(founder, tokenDir) {
   for (const { label, profile, verifyFirstOnly } of seedClients) {
     const created = await founder.createClient(profile);
     if (created.outcome !== 'allowed') throw new Error(`Could not create demo client ${label}.`);
-    if (verifyFirstOnly) await founder.verifyProject({ project_id: created.projects[0].id, verified: true });
+    if (verifyFirstOnly) await founder.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' });
     const credential = await founder.issueAgentCredential({ role: 'client', client_id: created.client_id });
     await writeCredential(join(tokenDir, `${label}.txt`), credential.token);
   }

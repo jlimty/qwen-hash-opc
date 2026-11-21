@@ -142,7 +142,7 @@ test('actions need the CSRF cookie and field to match, redirect inside the prefi
   assert.equal((await form(`/actions/project/${projectId}/verify`, {}, cookie)).status, 403);
   assert.equal((await form(`/actions/project/${projectId}/verify`, { csrf: 'b'.repeat(64) }, cookie)).status, 403);
   assert.equal((await form(`/actions/project/${projectId}/verify`, { csrf }, cookie.replace(/td_csrf=[a-f0-9]{64}/, `td_csrf=${'c'.repeat(64)}`))).status, 403);
-  const verified = await form(`/actions/project/${projectId}/verify`, { csrf }, cookie);
+  const verified = await form(`/actions/project/${projectId}/verify`, { csrf, note: 'Saw the contract.' }, cookie);
   assert.equal(verified.status, 303);
   assert.equal(verified.headers.get('location'), `${publicBase}/clients`);
   const landed = await call('/clients', { headers: { Cookie: `${cookie}; ${cookieOf(verified, 'td_flash')}` } });

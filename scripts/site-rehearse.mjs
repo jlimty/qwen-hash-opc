@@ -154,7 +154,7 @@ try {
   await step('admin decides: verifies a project, resolves the conflict for the holder, approves the brief', async () => {
     const snapshot = await consoleState();
     const conflict = snapshot.conflicts.find((c) => c.status === 'open');
-    ok((await admin.verifyProject({ project_id: state.unverified.id, verified: true })).outcome === 'allowed', 'verify');
+    ok((await admin.verifyProject({ project_id: state.unverified.id, verified: true, note: 'Seeded demo client (fictional).' })).outcome === 'allowed', 'verify');
     ok((await admin.resolveConflict({ conflict_id: conflict.id, resolution: 'serve_holder' })).outcome === 'allowed', 'resolve');
     const approved = await admin.reviewBrief({ brief_id: state.briefId, decision: 'approved' });
     ok(approved.outcome === 'approved', JSON.stringify(approved));

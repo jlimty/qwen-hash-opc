@@ -43,7 +43,7 @@ try {
   step('unverified_project', await agentA.invoke('submit_brief', brief), 'blocked', 'G3');
   step('forged_statistics', await agentA.invoke('submit_brief', { ...brief, stat_id: `stat_${'0'.repeat(64)}` }), 'blocked', 'G4');
   step('client_impersonation', await agentA.invoke('get_client_context', { client_id: b.client_id }), 'blocked', 'G1');
-  step('founder_verifies_project', await founder.verifyProject({ project_id: a.projects[0].id, verified: true }), 'allowed');
+  step('founder_verifies_project', await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' }), 'allowed');
   const pending = step('submit_valid_brief', await agentA.invoke('submit_brief', brief), 'allowed');
   const conflict = step('birch_brief_escalated', await agentB.invoke('submit_brief', { ...brief, stat_id: birchPricing.stat_id, price_band: birchPricing.price_band, credentials_cited: [] }), 'escalated', 'G2');
   step('agent_cannot_approve', await agentA.invoke('approve_brief', { brief_id: pending.brief_id }), 'blocked', 'G5');

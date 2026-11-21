@@ -63,7 +63,7 @@ async function pendingBrief(content = 'Check scope and capacity before bidding.'
   const suffix = randomUUID().slice(0, 6);
   const a = await founder.createClient(profile(`Amber ${suffix}`));
   const b = await founder.createClient(profile(`Birch ${suffix}`));
-  if (cite) await founder.verifyProject({ project_id: a.projects[0].id, verified: true });
+  if (cite) await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const agentA = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
   const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
   const tender_no = `NEW-${++sequence}`;
@@ -211,7 +211,10 @@ test('projects can be verified and revoked from the console', async () => {
   const id = brief.a.projects[0].id;
   const session = await login();
   assert.match((await http({ path: '/clients', headers: { Cookie: session.cookie } })).text, /Festival project/);
-  const verifyResponse = await act(session, `/actions/project/${id}/verify`);
+  const refused = await act(session, `/actions/project/${id}/verify`);
+  assert.match((await follow(session, refused)).text, /A note is required to verify a project without a GeBIZ match/);
+  assert.equal((await db.query('SELECT verified FROM tender_desk.projects WHERE id=$1', [id])).rows[0].verified, false);
+  const verifyResponse = await act(session, `/actions/project/${id}/verify`, { note: 'Saw the contract.' });
   assert.equal(verifyResponse.headers.location, '/clients');
   assert.equal((await follow(session, verifyResponse)).status, 200);
   assert.equal((await db.query('SELECT verified FROM tender_desk.projects WHERE id=$1', [id])).rows[0].verified, true);

@@ -20,7 +20,7 @@ const actions = {
   'brief/decline': (ops, id, form) => ops.reviewBrief({ brief_id: id, decision: 'declined', reason: String(form.get('reason') ?? '').slice(0, 500) }),
   'conflict/serve-holder': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_holder' }),
   'conflict/stop': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_neither' }),
-  'project/verify': (ops, id) => ops.verifyProject({ project_id: id, verified: true }),
+  'project/verify': (ops, id, form) => ops.verifyProject({ project_id: id, verified: true, note: String(form.get('note') ?? '').slice(0, 500) || undefined }),
   'project/unverify': (ops, id) => ops.verifyProject({ project_id: id, verified: false }),
 };
 const successText = { 'brief/approve': 'Brief approved.', 'brief/decline': 'Brief declined.', 'conflict/serve-holder': 'Conflict resolved: the current holder keeps pricing.',

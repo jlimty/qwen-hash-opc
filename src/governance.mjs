@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential } from './governance-agent.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
 import { referenceCode } from './references.mjs';
+import { crossCheckProject } from './gebiz-check.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
@@ -33,7 +34,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
-    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason']) {
+    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason', 'project_reference', 'check_result', 'note']) {
       if (result[key]) summary[key] = result[key];
     }
     await tx.query(`INSERT INTO tender_desk.audit_log (actor,action,client_id,tender_no,outcome,rule_id,reason,summary)
@@ -125,10 +126,18 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           return rows.length ? { outcome: 'allowed', credential_id: input.credential_id, client_id: rows[0].client_id }
             : blocked('G1', 'Credential does not exist.');
         }),
-        verifyProject: founderOperation('verify_project', z.strictObject({ project_id: z.uuid(), verified: z.boolean() }), async (tx, input) => {
-          const { rows } = await tx.query('UPDATE tender_desk.projects SET verified=$1 WHERE id=$2 RETURNING client_id', [input.verified, input.project_id]);
-          return rows.length ? { outcome: 'allowed', project_id: input.project_id, client_id: rows[0].client_id, verified: input.verified }
-            : blocked('G3', 'Project does not exist.');
+        verifyProject: founderOperation('verify_project', z.strictObject({ project_id: z.uuid(), verified: z.boolean(),
+          note: z.string().trim().max(500).optional() }), async (tx, input) => {
+          const project = (await tx.query(`SELECT p.*, c.name AS client_name FROM tender_desk.projects p
+            JOIN tender_desk.clients c ON c.id = p.client_id WHERE p.id=$1 FOR UPDATE OF p`, [input.project_id])).rows[0];
+          if (!project) return blocked('G3', 'Project does not exist.');
+          const check = crossCheckProject(dataset, project, project.client_name, await revealedTenders(tx));
+          const note = input.note || null;
+          if (input.verified && check.result !== 'match' && !note) return blocked('G3', 'A note is required to verify a project without a GeBIZ match.');
+          await tx.query(`UPDATE tender_desk.projects SET verified=$1, verification_note=COALESCE($2, verification_note),
+            verified_at=CASE WHEN $1 THEN now() ELSE NULL END WHERE id=$3`, [input.verified, note, project.id]);
+          return { outcome: 'allowed', project_id: project.id, project_reference: referenceCode('PRJ', project.reference_number),
+            client_id: project.client_id, verified: input.verified, check_result: check.result, ...(note && { note }) };
         }),
         reviewBrief: founderOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']),
           reason: z.string().trim().max(500).optional() }), async (tx, input) => {
