@@ -102,8 +102,16 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
         const briefs = (await tx.query(`SELECT reference_number,tender_no,recommendation,status,created_at,decided_at,decline_reason,content
           FROM tender_desk.briefs WHERE client_id=$1 ORDER BY created_at DESC, reference_number DESC LIMIT 20`, [actor.client_id])).rows
           .map(({ reference_number, created_at, ...b }) => ({ reference: referenceCode('BRF', reference_number), ...b, submitted_at: created_at }));
-        const advice_refused = (await tx.query(`SELECT tender_no,status FROM tender_desk.conflicts WHERE client_id=$1 ORDER BY created_at`, [actor.client_id])).rows
-          .map((row) => ({ tender_no: row.tender_no, status: row.status === 'open' ? 'awaiting_admin' : 'not_advised' }));
+        // Escalated tenders, plus tenders where the admin stopped advising this client (as holder or challenger).
+        const refusedRows = (await tx.query(`SELECT tender_no, CASE WHEN bool_or(stopped) THEN 'not_advised'
+            WHEN bool_or(open) THEN 'awaiting_admin' ELSE 'not_advised' END AS status, min(at) AS at FROM (
+            SELECT c.tender_no, c.status='open' AS open, COALESCE(h.state='stopped', false) AS stopped, c.created_at AS at
+              FROM tender_desk.conflicts c LEFT JOIN tender_desk.pricing_holds h ON h.tender_no=c.tender_no WHERE c.client_id=$1
+            UNION ALL
+            SELECT h.tender_no, false, true, h.created_at FROM tender_desk.pricing_holds h
+              WHERE h.state='stopped' AND (h.client_id=$1 OR EXISTS (SELECT 1 FROM tender_desk.briefs b WHERE b.client_id=$1 AND b.tender_no=h.tender_no))
+          ) refused GROUP BY tender_no ORDER BY min(at), tender_no`, [actor.client_id])).rows;
+        const advice_refused = refusedRows.map((row) => ({ tender_no: row.tender_no, status: row.status }));
         return { outcome: 'allowed', client: { ...client, max_contract_cents: Number(client.max_contract_cents),
           past_projects: projects.map((p) => ({ ...p, value_cents: p.value_cents === null ? null : Number(p.value_cents) })), shortlist, briefs, advice_refused } };
       },

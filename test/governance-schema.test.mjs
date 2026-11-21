@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { PGlite } from '@electric-sql/pglite';
-import { initializeGovernance } from '../src/governance-db.mjs';
+import { initializeGovernance, rebuildTenderDesk } from '../src/governance-db.mjs';
 
 const migrationUrl = new URL('../db/001-governance.sql', import.meta.url);
 const missingClient = '00000000-0000-0000-0000-000000000099';
@@ -344,4 +344,19 @@ test('disk-backed PGlite retains a client across close/reopen without rerunning 
     if (database) await database.close();
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+test('rebuildTenderDesk drops and migrates in one transaction, so a failure keeps the old schema and data', async () => {
+  const database = new PGlite();
+  try {
+    await initializeGovernance(database);
+    await insert(database, 'clients', clientValues('Survivor Events'));
+    const failing = { transaction: (work) => database.transaction((tx) => work({ query: (...a) => tx.query(...a),
+      exec: (text) => (text.includes('client_ref_seq') ? Promise.reject(new Error('simulated disconnect')) : tx.exec(text)) })) };
+    await assert.rejects(rebuildTenderDesk(failing), /simulated disconnect/);
+    assert.deepEqual((await database.query('SELECT name FROM tender_desk.clients')).rows.map((r) => r.name), ['Survivor Events']);
+    await rebuildTenderDesk(database);
+    assert.equal((await database.query('SELECT count(*)::int AS n FROM tender_desk.clients')).rows[0].n, 0);
+    assert.equal((await database.query("SELECT to_regclass('tender_desk.briefs') IS NOT NULL AS ok")).rows[0].ok, true);
+  } finally { await database.close(); }
 });

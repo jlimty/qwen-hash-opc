@@ -7,6 +7,19 @@ const migrations = [
     WHERE table_schema='tender_desk' AND table_name='clients' AND column_name='reference_number') AS present` },
 ];
 
+const body = async (file) => (await readFile(new URL(`../db/${file}`, import.meta.url), 'utf8'))
+  .replace(/^\s*BEGIN;\s*/, '').replace(/\s*COMMIT;\s*$/, '\n');
+
+// Destructive: drops tender_desk and re-applies every migration in ONE transaction, so a failure part-way
+// (a dropped connection, a bad statement) rolls back to the old schema and data instead of leaving it dropped.
+export async function rebuildTenderDesk(database) {
+  const bodies = await Promise.all(migrations.map(({ file }) => body(file)));
+  await database.transaction(async (tx) => {
+    await tx.query('DROP SCHEMA IF EXISTS tender_desk CASCADE');
+    for (const sql of bodies) await tx.exec(sql);
+  });
+}
+
 export async function initializeGovernance(database) {
   for (const { file, present } of migrations) {
     const { rows } = await database.query(present);

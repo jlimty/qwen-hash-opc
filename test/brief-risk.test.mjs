@@ -45,3 +45,14 @@ test('level follows the number of facts', () => {
   assert.equal(computeRiskFacts({ ...calm, n: 9, citedCount: 0 }).level, 'medium');
   assert.equal(computeRiskFacts({ ...calm, n: 9, citedCount: 0, priorBriefCount: 0 }).level, 'high');
 });
+
+test('a non-round band accepts rounded dollars, raw cents and million wording, and ignores tender numbers', () => {
+  const demo = { low_cents: 20880000, median_cents: 45000000, high_cents: 115310863 };
+  for (const content of ['Band S$208,800 to S$1,153,109.', 'Top S$1,153,108.63, or 115310863 cents.', 'About S$1.15 million at the top.',
+    'Tender DST000ETT26000005 for Brainhack.', 'Top S$1,153,108 when rounded down.']) {
+    const result = computeRiskFacts({ ...calm, band: demo, content });
+    assert.equal(codes(result).includes('unmatched_numbers'), false, content);
+  }
+  assert.equal(message(computeRiskFacts({ ...calm, band: demo, content: 'Tender DST000ETT26000005 in 2026.' }), 'unmatched_numbers'),
+    '1 figure in the text is not a band figure: 2026.');
+});

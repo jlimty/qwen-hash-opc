@@ -25,12 +25,12 @@ export function createPgDatabase(sql) {
     async query(text, params = []) {
       return { rows: [...await target.unsafe(text, params)] };
     },
+    async exec(text) {
+      await target.unsafe(text).simple();
+    },
   });
   return {
     ...runner(sql),
-    async exec(text) {
-      await sql.unsafe(text).simple();
-    },
     transaction: (work) => sql.begin((tx) => work(runner(tx))),
     close: () => sql.end({ timeout: 2 }),
   };

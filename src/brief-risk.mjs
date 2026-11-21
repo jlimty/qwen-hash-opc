@@ -9,18 +9,21 @@ export function formatSgd(cents) {
   return `S$${value.toLocaleString('en-SG', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
-// A number, optionally with a k/m shorthand (not the start of a word) or a percent sign.
-const numberToken = /\d(?:[\d,]*\d)?(?:\.\d+)?(?:\s?[kKmM](?![A-Za-z])|%)?/g;
+// A standalone number (never digits inside a word or code such as a tender number), optionally
+// followed by a k / m / million shorthand or a percent sign.
+const numberToken = /(?<![A-Za-z\d.])(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(million|mil|[kKmM])(?![A-Za-z])|(%)|(?![A-Za-z\d]))/g;
 
 function unmatchedFigures(content, band, n) {
-  const dollars = [band.low_cents, band.median_cents, band.high_cents].map((c) => Number(c) / 100);
-  const exact = new Set([...dollars, ...dollars.map((d) => d * 100), n]);
+  const cents = [band.low_cents, band.median_cents, band.high_cents].map(Number);
+  const dollars = cents.map((c) => c / 100);
+  // Exact matches: dollars as written, rounded or truncated to whole dollars, raw cents, and n.
+  const exact = new Set([...dollars, ...dollars.map(Math.round), ...dollars.map(Math.floor), ...cents, n]);
   const unmatched = [];
-  for (const [raw] of String(content).matchAll(numberToken)) {
+  for (const [raw, digits, word, percent] of String(content).matchAll(numberToken)) {
     const token = raw.replace(/\s+/g, '');
-    if (token.endsWith('%')) { unmatched.push(token); continue; }
-    const suffix = /[kKmM]$/.exec(token)?.[0]?.toLowerCase();
-    const value = Number(token.replace(/[kKmM]$/, '').replaceAll(',', '')) * (suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : 1);
+    if (percent) { unmatched.push(token); continue; }
+    const suffix = word ? (word.toLowerCase() === 'k' ? 'k' : 'm') : undefined;
+    const value = Number(digits.replaceAll(',', '')) * (suffix === 'k' ? 1e3 : suffix === 'm' ? 1e6 : 1);
     const ok = suffix
       ? dollars.some((d) => d > 0 && Math.abs(value - d) / d <= riskThresholds.shorthandTolerance)
       : exact.has(value);

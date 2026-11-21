@@ -47,7 +47,7 @@ The old `demo-baseline` Neon branch is **retired**: it predates schema 002, so r
    npm run site:reseed -- --db-file .local/site/db-unpooled.url --yes-wipe-tender-desk
    ```
 
-   It prints the target host and what it is about to delete, moves the old credential files aside (`*.before-reseed-<time>`), and writes new ones plus QwenWork configs to `.local/site/connectors/`.
+   It prints the target host and what it is about to delete, moves the old credential files aside (`*.before-reseed-<time>`), and writes new ones plus QwenWork configs to `.local/site/connectors/`. The drop and both migrations run as one transaction (a failure leaves the old schema intact); if the seed step after it fails, re-run the same command.
 4. `npm run starter-pack` → `.local/site/starter-pack/` (intake JSON + four skill zips + README) for the Hashmeta Get started section and for the admin's own QwenWork.
 5. In QwenWork: paste the new intake and Birch connectors; reinstall the four skills.
 6. Take the new baseline: `neon branches create --name demo-baseline-v2 --parent production`.

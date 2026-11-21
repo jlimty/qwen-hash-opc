@@ -209,6 +209,18 @@ test('a GeBIZ match verifies without a note', async () => {
   assert.equal((await founder.verifyProject({ project_id: created.projects[0].id, verified: true })).outcome, 'allowed');
 });
 
+test('the holder sees not_advised when the admin stops advising on its tender', async () => {
+  const c = await setup();
+  const mine = await submitAs(c, c.agentA);
+  const conflict = await submitAs(c, c.agentB);
+  await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' });
+  const context = (await c.agentA.invoke('get_client_context', {})).client;
+  assert.deepEqual(context.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
+  assert.equal(context.briefs.find((b) => b.reference && b.tender_no === c.tender_no).status, 'pending_approval');
+  assert.ok(mine.brief_id);
+  assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
+});
+
 test('agent catalogs contain neither founder tools nor an ungated pricing path', async () => {
   const c = await setup();
   assert.equal(c.agentA.toolNames.includes('request_pricing'), true);
