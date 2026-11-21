@@ -8,11 +8,9 @@ Design: `docs/superpowers/specs/2026-11-21-tender-desk-journey-design.md`. Build
 
 ## Where things stand
 
-**Branch `journey-self-service`** holds the new journey (not merged, not deployed). 223 automated tests pass. The full demo storyline passes 12 of 12 steps end to end against a local Postgres with the real GeBIZ data (`npm run site:rehearse`).
+**LIVE (new version, cut over 21 Nov ~15:15 UTC):** `https://tender-desk-bz2oc52nag4.qoder.website` runs branch `journey-self-service` (not yet merged to `main`). 227 automated tests pass; the full storyline passes 12 of 12 on a local Postgres with the real GeBIZ data (`npm run site:rehearse`). Production `tender_desk` was wiped and reseeded: Birch Events (demo) plus a public intake key; the old Amber/Birch/intake keys now get 401. New baseline: Neon branch **`demo-baseline-v2`** (`<neon-branch-id>`, 21 Nov 15:17 UTC). The old `demo-baseline` branch is retired (pre-schema-002); keep it or delete it, never restore it.
 
-**LIVE (old version):** `https://tender-desk-bz2oc52nag4.qoder.website` still runs the pre-branch code and schema. Deploying the branch requires the production reseed below, so the two happen together, with the admin's yes.
-
-**QwenWork:** the old Amber/Birch/intake connectors stop working after the reseed (new keys). After it, paste the new `tender-desk-intake.json` and `tender-desk-birch.json` from `.local/site/connectors/`, and reinstall the four updated skills (zips from `npm run starter-pack`).
+**QwenWork (to do):** paste `.local/site/connectors/tender-desk-intake.json` and `tender-desk-birch.json` into Connectors, replacing the old three; reinstall the four skills from `.local/site/starter-pack/*.zip`.
 
 **Hashmeta site copy:** drafted in `docs/hashmeta/site-content.md` (article, product section, Get started, promo script) by a side session; review before publishing.
 
