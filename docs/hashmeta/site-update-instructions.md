@@ -20,9 +20,15 @@ Customers don't install skills, paste connectors or download anything. The site 
 1. **Data article (section 1).** Keep the article as it is. Change only two things to match `site-content.md` section 1:
    - The call to action under "Get matched" becomes the link **Try a free price check →**, pointing to the app URL above.
    - The sentence before it now begins "Tender Desk reads the same public data. Paste any open tender and see, for free…"
-2. **Product section.** Replace the whole section with `site-content.md` section 2: the heading "Tender Desk: your AI tender assistant, with a person in charge", the two offers (free price check, reviewed brief S$99), the rules table and the "What we never claim" paragraph.
+2. **Product section.** Replace the whole section with `site-content.md` section 2:
+   - the heading "Tender Desk: your AI tender assistant, with a person in charge"
+   - the free price check paragraph
+   - the reviewed brief paragraph (S$29), with its bulleted list of what the report contains
+   - the "If something is missing, we ask before we decline" paragraph
+   - the rules table, which now has seven rows, including "Your credit is safe"
+   - the "What we never claim" paragraph
 3. **Get started section.** Replace the whole section with `site-content.md` section 3:
-   - the three numbered items
+   - the three numbered items (item 2 now mentions the UEN, the confirmation email and the profile assistant; item 3 lists all three prices)
    - the test-mode line
    - item 1 links to the app URL
    - item 2 links to the app URL followed by `/signup`
@@ -44,7 +50,9 @@ Do each check on the published site, not the editor.
 - [ ] Opening `https://tenderdesk.geo.hashmeta.tech/api/media/file/tender-desk-intake.json` no longer returns the file. That file contained an access key, so it must be gone.
 - [ ] "Try a free price check" opens the app, which lists open GeBIZ tenders.
 - [ ] "Create an account" opens the app's sign-up page.
-- [ ] Get started shows the credit price (S$29, first brief free), the sample brief link, and the line "Credit purchases are in test mode while we launch: no card is charged."
+- [ ] Get started shows the prices (S$29 a credit, S$119 for 5, S$399 for 20, first brief free), the sample brief link, and the line "Credit purchases are in test mode while we launch: no card is charged."
+- [ ] The rules table has seven rows, the last two being "Your credit is safe" and "Everything is logged".
+- [ ] The product section mentions "Ask for more": the paragraph that begins "If something is missing, we ask before we decline".
 - [ ] No page says S$99.
 - [ ] The source note under the data article is still there (GeBIZ, Ministry of Finance, data.gov.sg, Singapore Open Data Licence).
 

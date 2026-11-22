@@ -48,11 +48,21 @@ Tender Desk reads the same public data. Paste any open tender and see, for free,
 
 ### Tender Desk: your AI tender assistant, with a person in charge
 
-Tender Desk helps small and medium businesses in Singapore decide which government tenders are worth bidding on, and what price to put in.
+Tender Desk helps small and medium businesses in Singapore decide which government tenders are worth bidding on, and where to price.
 
-**Free price check, no account needed.** Pick an open GeBIZ tender, or paste one. In seconds you see what comparable government contracts were awarded for: the median, the middle half, and the actual past awards behind those numbers, with the agencies that buy this kind of work and how spread out the winners are.
+**Free price check, no account needed.** Pick an open GeBIZ tender, or paste one. In seconds you see what comparable government contracts were awarded for, and the actual past awards behind the figures. When there are enough similar awards, you get the median and the middle half. When there aren't, we show the count and a rough spread, and say so plainly instead of guessing.
 
-**Reviewed brief, one credit (S$29).** Tell us about your company and past projects once. Ask for a brief on any open tender, and you get a visual report: a bid or no-bid recommendation, a suggested price range with charts of the past awards behind it, who usually wins this work, a check of the tender's requirements against your projects, and questions to ask the agency. It cites only projects we have checked against public GeBIZ records. Our AI drafts it. A person reads it and approves it before you see it, usually within one business day. Your first brief is free, and a declined request gives its credit back.
+**Reviewed brief, one credit (S$29).** Tell us about your company once. Paste your capability statement and we fill in the profile for you, including your own past GeBIZ awards. Then ask for a brief on any open tender. You get a visual report:
+
+- a bid or no-bid recommendation, with the reasons
+- where to price, with charts of the past awards behind it
+- who usually wins this work, and how often it is bought
+- a check of the tender's requirements against your past projects
+- questions to ask the agency, and the risks to weigh
+
+It cites only projects we have checked against public GeBIZ records. Our AI drafts it. A person reads it and approves it before you see it, usually within one business day.
+
+**If something is missing, we ask before we decline.** If your profile or the tender details are too thin for a useful brief, we send the request back with a note saying what to add. The tender stays yours while you reply, and resubmitting costs nothing. If you'd rather not, cancel and get your credit back. If we decline, your credit is returned and we tell you why.
 
 All of this runs on public Singapore government data: open tenders from GeBIZ, and five years of contract awards from data.gov.sg.
 
@@ -63,10 +73,11 @@ Each rule is enforced by the system itself, not by asking the AI nicely.
 | Rule | What it means for you |
 |---|---|
 | **Your data stays yours** | Your profile, projects and briefs are visible only to you and the one person who runs Tender Desk. Never to another customer. |
-| **One client per tender** | We advise only one company on any tender. If someone already has our advice on a tender, we tell you before you pay, and we never say who. |
+| **One client per tender** | We advise only one company on any tender. If someone already has our advice on a tender, we tell you before you spend a credit, and we never say who. |
 | **Checked track record** | A brief cites only past projects we have checked against public GeBIZ award records. |
-| **Numbers you can trace** | Every price figure comes from saved statistics over real past awards, and you can see the awards behind it. The AI cannot invent a number. |
-| **A person approves every brief** | AI drafts. A person approves or declines, and a decline always comes with a reason. |
+| **Numbers you can trace** | Every price figure comes from saved statistics over real past awards, and you can see the awards behind it. The AI cannot invent a number. When the evidence is thin, you get no dollar range. |
+| **A person approves every brief** | AI drafts. A person approves, asks you for more, or declines with a reason. |
+| **Your credit is safe** | A declined or cancelled request gives its credit back, and credits don't expire. We don't take requests for tenders closing within two days, because there isn't time to do them properly. |
 | **Everything is logged** | Every step is written to a log that cannot be edited or deleted. |
 
 **What we never claim:** past awards are not a quote, and not a winning price. GeBIZ publishes winning amounts only, not the bids that lost. We do not promise wins. We help you decide where your effort is worth it.
@@ -76,8 +87,8 @@ Each rule is enforced by the system itself, not by asking the AI nicely.
 ## 3. Get started {#get-started}
 
 1. **[Try a free price check](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant).** No account needed.
-2. **[Create an account](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/signup)** and add your past projects. For government work, include the GeBIZ tender number so we can check it.
-3. **Ask for a reviewed brief** on any open tender. Your first one is free; after that, credits are S$29 each, cheaper in packs. [See a sample brief](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/sample).
+2. **[Create an account](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/signup)** with your email and your company's UEN, then confirm the email we send you. Paste your capability statement and we'll fill in your profile, including your past GeBIZ awards. Check it and save.
+3. **Ask for a reviewed brief** on any open tender. Your company's first brief is free. After that, credits are S$29 each, S$119 for 5 or S$399 for 20, and they don't expire. [See a sample brief](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/sample).
 
 Credit purchases are in test mode while we launch: no card is charged.
 
@@ -90,8 +101,9 @@ Credit purchases are in test mode while we launch: no card is charged.
 | 0:00–0:06 | Between April 2021 and March 2026, Singapore's government awarded 195 events and community contracts with a published amount. | **195 events and community awards** · GeBIZ, Apr 2021 to Mar 2026 |
 | 0:06–0:14 | The median award was three hundred and eighty-six thousand five hundred dollars. And no supplier took more than about seven percent. | **Median S$386,500** · Top supplier: 14 of 195 |
 | 0:14–0:22 | Tender Desk is an AI tender assistant for Singapore SMEs. It tells you which tenders are worth your time, and what similar contracts were awarded for. | **Worth bidding? At what price?** |
-| 0:22–0:38 | The rules are kept by the system, not by the AI. Your data stays yours. One client per tender. Only checked projects are cited. Every number traces back to real awards. | Your data · One client per tender · Checked projects · Traceable numbers |
-| 0:38–0:46 | A person approves every brief. Every step is logged. | **AI drafts. A person approves.** |
-| 0:46–0:55 | Paste any tender, see what similar contracts were awarded for. Free. | **Try a free price check** |
+| 0:22–0:32 | Paste your company profile once. We fill in the rest, including your past government awards. | **Set up in minutes** |
+| 0:32–0:42 | The rules are kept by the system, not by the AI. Your data stays yours. One client per tender. Only checked projects are cited. Every number traces back to real awards. | Your data · One client per tender · Checked projects · Traceable numbers |
+| 0:42–0:49 | A person approves every brief. If something's missing, we ask you first. | **AI drafts. A person approves.** |
+| 0:49–0:55 | Paste any tender, see what similar contracts were awarded for. Free. | **Try a free price check** |
 
 *Footer card (final frame): Data: Government Procurement via GeBIZ, Ministry of Finance, data.gov.sg, Singapore Open Data Licence. Past awards, not a quote or a promise of winning.*
