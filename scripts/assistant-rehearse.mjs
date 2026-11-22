@@ -119,7 +119,7 @@ try {
     const s = await owner.post('/signup', { email: 'owner@rehearsal.invalid', password: 'rehearsal password', name: 'Owner' });
     must(s.status === 303, `sign-up returned ${s.status}`);
     await owner.get('/profile');
-    const p = await owner.post('/profile', { name: 'Rehearsal Co (test)', capabilities: `Work of this kind: ${target.title}`, categories: target.category,
+    const p = await owner.post('/profile', { name: 'Rehearsal Co (test)', uen: 'T99TD0101A', capabilities: `Work of this kind: ${target.title}`, categories: target.category,
       team_size: '10', max_contract: '2,000,000', project_title_0: `Past project: ${keywordTerms(target.title).terms.join(' ')}`, project_agency_0: target.agency, project_title_1: 'Unchecked project' });
     must(p.status === 303, `profile returned ${p.status}: ${p.text.slice(0, 200)}`);
     const home = (await owner.get('/home')).text;
@@ -158,7 +158,8 @@ try {
     must((await admin.reviewBrief({ brief_id: after.brief_id, decision: 'approved' })).outcome === 'approved', 'approval refused');
     { const page = (await owner.get(requestPath)).text;
       must(/Our recommendation/.test(page) && !/##/.test(page), 'customer cannot see the approved brief, or it shows raw Markdown');
-      must(/Suggested price range/.test(page) && /<svg class="chart"/.test(page), 'the brief has no suggested range or charts');
+      // A bid on thin evidence shows "Where to price" (no dollar range); a no-bid shows the past awards as context only.
+      must(/Suggested price range|Where to price|for context only/.test(page) && /<svg class="chart"/.test(page), 'the brief has no price section or charts');
       if (!values['fake-llm']) must(/Requirements check/.test(page), 'the pasted requirements were not checked'); }
     console.log(`\n----- approved brief (drafted in ${draftSeconds}s) -----\n${brief.content}\n----- risk facts: ${JSON.stringify(brief.risk_facts)} -----\n`);
   });
@@ -167,7 +168,7 @@ try {
     await rival.get('/signup');
     await rival.post('/signup', { email: 'rival@rehearsal.invalid', password: 'rehearsal password', name: 'Rival' });
     await rival.get('/profile');
-    await rival.post('/profile', { name: 'Rival Co (test)', capabilities: 'Same work.', categories: target.category, team_size: '3', max_contract: '500000' });
+    await rival.post('/profile', { name: 'Rival Co (test)', uen: 'T99TD0102B', capabilities: 'Same work.', categories: target.category, team_size: '3', max_contract: '500000' });
     const page = await rival.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
     must(/This tender isn(&#39;|')t available for a reviewed brief right now/.test(page.text) && !/Use 1 credit/.test(page.text), 'rival was not refused');
     must(!page.text.includes('Rehearsal Co'), 'rival can see the holder');
