@@ -5,6 +5,7 @@ import { packSession, sessionFrom, unpackSession } from './neon-session.mjs';
 export function createCustomerAuth({ baseUrl, origin, adminUserId, fetchImpl = fetch }) {
   if (!/^https:\/\//.test(baseUrl ?? '') && !/^http:\/\/127\.0\.0\.1/.test(baseUrl ?? '')) throw new Error('A Neon Auth base URL is required.');
   const root = baseUrl.replace(/\/+$/, '');
+  const isAdmin = async (id) => typeof adminUserId === 'function' ? id === await adminUserId() : id === adminUserId;
   const headers = (extra = {}) => ({ Origin: origin, 'Content-Type': 'application/json', ...extra });
   const call = (path, init) => fetchImpl(`${root}${path}`, { signal: AbortSignal.timeout(8000), redirect: 'manual', ...init });
   const credentials = (email, password) => {
@@ -20,7 +21,7 @@ export function createCustomerAuth({ baseUrl, origin, adminUserId, fetchImpl = f
     if (!response.ok || !session || typeof userId !== 'string') {
       return { ok: false, message: typeof body?.message === 'string' && response.status < 500 ? body.message.slice(0, 120) : fallback };
     }
-    if (userId === adminUserId) return { ok: false, message: 'This account cannot be used as a customer account.' };
+    if (await isAdmin(userId)) return { ok: false, message: 'This account cannot be used as a customer account.' };
     return { ok: true, userId, session: packSession(session) };
   }
   return {
@@ -45,7 +46,7 @@ export function createCustomerAuth({ baseUrl, origin, adminUserId, fetchImpl = f
       if (!response?.ok) return undefined;
       const body = await response.json().catch(() => undefined);
       const userId = body?.user?.id;
-      if (typeof userId !== 'string' || userId === adminUserId) return undefined;
+      if (typeof userId !== 'string' || await isAdmin(userId)) return undefined;
       if (body.session?.expiresAt && new Date(body.session.expiresAt).getTime() <= Date.now()) return undefined;
       return userId;
     },

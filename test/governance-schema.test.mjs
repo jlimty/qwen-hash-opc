@@ -37,7 +37,7 @@ test('initializer does not execute DDL when every migration is already applied',
     async query() { queries++; return { rows: [{ present: true }] }; },
     async exec() { assert.fail('Existing databases must not rerun a migration'); },
   });
-  assert.equal(queries, 3);
+  assert.equal(queries, 4);
 });
 
 test('003 adds the assistant tables and keeps 001-002 data', async () => {
@@ -89,7 +89,7 @@ describe('PostgreSQL governance schema', () => {
   });
 
   test('initializes twice without rerunning DDL or losing data', async () => {
-    assert.equal(migrationExecutions, 3);
+    assert.equal(migrationExecutions, 4);
     await initializeGovernance({
       query: (...args) => database.query(...args),
       exec: () => assert.fail('Second initialization must not execute DDL'),
@@ -105,6 +105,7 @@ describe('PostgreSQL governance schema', () => {
     const expected = {
       clients: 'id:uuid name:text capabilities:text categories:_text team_size:int4 max_contract_cents:int8 created_at:timestamptz reference_number:int8',
       projects: 'id:uuid client_id:uuid title:text agency:text value_cents:int8 verified:bool reference_number:int8 gebiz_tender_no:text verification_note:text verified_at:timestamptz',
+      settings: 'key:text value:text updated_at:timestamptz',
       agent_credentials: 'id:uuid token_hash:text role:text client_id:uuid created_at:timestamptz',
       pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz',
       stats_snapshots: 'client_id:uuid tender_no:text stat_id:text snapshot:jsonb',
@@ -143,7 +144,7 @@ describe('PostgreSQL governance schema', () => {
       GROUP BY tc.table_name
     `);
     assert.deepEqual(Object.fromEntries(keys.rows.map((row) => [row.table_name, row.columns])), {
-      clients: 'id', projects: 'id', agent_credentials: 'id', pricing_holds: 'tender_no',
+      clients: 'id', projects: 'id', settings: 'key', agent_credentials: 'id', pricing_holds: 'tender_no',
       stats_snapshots: 'client_id,tender_no,stat_id', shortlists: 'client_id,tender_no',
       briefs: 'id', conflicts: 'id', audit_log: 'id',
       open_tenders: 'tender_no', feed_state: 'id', customers: 'user_id', brief_requests: 'id', payments: 'id',

@@ -122,3 +122,17 @@ test('resetPassword distinguishes success, invalid or used tokens, password-poli
   assert.deepEqual(await auth.resetPassword('weak-token-0000000000', 'x'), { ok: false, invalid: false, message: 'Password too short' });
   await assert.rejects(auth.resetPassword('boom-token-0000000000', 'a-fresh-password-1'), /unavailable/);
 });
+
+test('the admin id may be looked up on each call; a changed or missing admin admits nobody', async () => {
+  let current = admin.id;
+  const auth = createNeonAuth({ baseUrl: base, adminUserId: async () => current, origin: 'https://site.example' });
+  const result = await auth.login(form({ email: admin.email, password: admin.password }));
+  assert.ok(result.session);
+  assert.equal(await auth.verify(result.session), true);
+  current = 'someone-else-0002';
+  assert.equal(await auth.verify(result.session), false);
+  assert.equal(await auth.login(form({ email: admin.email, password: admin.password })), undefined);
+  current = undefined;
+  assert.equal(await auth.verify(result.session), false);
+  assert.equal(await auth.login(form({ email: admin.email, password: admin.password })), undefined);
+});

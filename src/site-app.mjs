@@ -25,18 +25,19 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'config';
     const databaseUrl = clean(env('TD_DB_URL'));
     const authUrl = clean(env('TD_AUTH_URL'));
-    const adminUserId = clean(env('TD_ADMIN_USER_ID'));
-    if (!databaseUrl || !authUrl || !adminUserId) return undefined;
+    if (!databaseUrl || !authUrl) return undefined;
     if (!/^postgres(ql)?:\/\//i.test(databaseUrl)) throw new Error(`TD_DB_URL must be a postgres URL (${shape(databaseUrl)})`);
     if (!/^(https:\/\/|http:\/\/127\.0\.0\.1[:/])/i.test(authUrl)) throw new Error(`TD_AUTH_URL must be an https URL (${shape(authUrl)})`);
-    if (!/^[A-Za-z0-9_-]{8,64}$/.test(adminUserId)) throw new Error(`TD_ADMIN_USER_ID is not a valid user ID (${adminUserId.length} characters)`);
     const adminToken = randomBytes(32).toString('hex');
     stage = 'auth';
-    const auth = createNeonAuth({ baseUrl: authUrl, adminUserId, origin, fetchImpl });
     stage = 'dataset';
     const dataset = parseTenderCsv(csv);
     stage = 'database';
     const database = openDatabase(databaseUrl);
+    // Read on every check, so a changed or removed admin takes effect at once; no row means nobody is admin.
+    const adminUserId = async () => (await database.query("SELECT value FROM tender_desk.settings WHERE key = 'admin_user_id'")).rows[0]?.value;
+    stage = 'auth';
+    const auth = createNeonAuth({ baseUrl: authUrl, adminUserId, origin, fetchImpl });
     stage = 'desk';
     const desk = createTenderDesk({ database, dataset, adminToken, backtest: backtestFromJson(backtestJson, dataset),
       connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } });
@@ -58,7 +59,7 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     const segments = url.pathname.split('/').filter(Boolean);
     const route = `/${segments.slice(1).join('/')}`;
     if (request.method === 'GET' && route === '/health') {
-      return json({ ok: true, configured: Boolean(clean(env('TD_DB_URL')) && clean(env('TD_AUTH_URL')) && clean(env('TD_ADMIN_USER_ID'))), ai: Boolean(clean(env('TD_OPENROUTER_KEY'))) });
+      return json({ ok: true, configured: Boolean(clean(env('TD_DB_URL')) && clean(env('TD_AUTH_URL'))), ai: Boolean(clean(env('TD_OPENROUTER_KEY'))) });
     }
     try {
       runtime ??= boot();

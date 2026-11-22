@@ -42,3 +42,13 @@ test('verify rejects a tampered or missing session', async () => {
   assert.equal(await auth.verify('nonsense'), undefined);
   assert.equal(await auth.verify(undefined), undefined);
 });
+
+test('the admin id may be looked up on each call, so the admin can change without a restart', async () => {
+  const fake = fakeNeonAuth();
+  let current = adminUserId;
+  const auth = createCustomerAuth({ baseUrl: 'https://auth.example/auth', origin: 'https://site.example', adminUserId: async () => current, fetchImpl: fake.fetchImpl });
+  const admin = { email: 'admin@example.com', password: 'admin password long' };
+  assert.equal((await auth.signIn(admin)).ok, false);
+  current = 'someone-else-0002';
+  assert.equal((await auth.signIn(admin)).ok, true);
+});

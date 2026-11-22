@@ -2,7 +2,8 @@ import { packSession as pack, sessionFrom, unpackSession as unpack } from './neo
 
 export function createNeonAuth({ baseUrl, adminUserId, origin, fetchImpl = fetch }) {
   if (!/^https:\/\//.test(baseUrl ?? '') && !/^http:\/\/127\.0\.0\.1/.test(baseUrl ?? '')) throw new Error('A Neon Auth base URL is required.');
-  if (!/^[A-Za-z0-9_-]{8,64}$/.test(adminUserId ?? '')) throw new Error('An admin user ID is required.');
+  if (typeof adminUserId !== 'function' && !/^[A-Za-z0-9_-]{8,64}$/.test(adminUserId ?? '')) throw new Error('An admin user ID is required.');
+  const isAdmin = async (id) => typeof id === 'string' && id === (typeof adminUserId === 'function' ? await adminUserId() : adminUserId);
   const root = baseUrl.replace(/\/+$/, '');
   const headers = (extra = {}) => ({ Origin: origin, 'Content-Type': 'application/json', ...extra });
   const call = (path, init) => fetchImpl(`${root}${path}`, { signal: AbortSignal.timeout(8000), redirect: 'manual', ...init });
@@ -17,7 +18,7 @@ export function createNeonAuth({ baseUrl, adminUserId, origin, fetchImpl = fetch
       if (!response.ok) return undefined;
       const body = await response.json().catch(() => undefined);
       const session = sessionFrom(response);
-      if (!session || body?.user?.id !== adminUserId) return undefined;
+      if (!session || !(await isAdmin(body?.user?.id))) return undefined;
       return { session: pack(session), maxAge: 8 * 60 * 60 };
     },
     async verify(packed) {
@@ -26,7 +27,7 @@ export function createNeonAuth({ baseUrl, adminUserId, origin, fetchImpl = fetch
       const response = await call('/get-session', { method: 'GET', headers: headers({ Cookie: `${session.name}=${session.value}` }) });
       if (!response.ok) return false;
       const body = await response.json().catch(() => undefined);
-      return body?.user?.id === adminUserId && (!body.session?.expiresAt || new Date(body.session.expiresAt).getTime() > Date.now());
+      return (await isAdmin(body?.user?.id)) && (!body.session?.expiresAt || new Date(body.session.expiresAt).getTime() > Date.now());
     },
     async requestReset(email, redirectPath) {
       const response = await call('/request-password-reset', { method: 'POST', headers: headers(), body: JSON.stringify({ email, redirectTo: `${origin}${redirectPath}` }) });

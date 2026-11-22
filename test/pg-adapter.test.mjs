@@ -39,7 +39,7 @@ const profile = (name) => ({ name, capabilities: 'Events', categories: ['events-
 
 test('the governance schema migrates once over the Postgres wire protocol', async () => {
   const tables = (await database.query("SELECT table_name FROM information_schema.tables WHERE table_schema='tender_desk' ORDER BY 1")).rows.map((r) => r.table_name);
-  assert.deepEqual(tables, ['agent_credentials', 'audit_log', 'brief_requests', 'briefs', 'clients', 'conflicts', 'customers', 'feed_state', 'open_tenders', 'payments', 'pricing_holds', 'projects', 'shortlists', 'stats_snapshots']);
+  assert.deepEqual(tables, ['agent_credentials', 'audit_log', 'brief_requests', 'briefs', 'clients', 'conflicts', 'customers', 'feed_state', 'open_tenders', 'payments', 'pricing_holds', 'projects', 'settings', 'shortlists', 'stats_snapshots']);
   await initializeGovernance({ query: database.query, exec: () => assert.fail('must not rerun DDL') });
 });
 

@@ -21,6 +21,7 @@
     "site:reseed": "node scripts/site-reseed.mjs",
     "starter-pack": "node scripts/starter-pack.mjs",
     "site:migrate": "node scripts/site-migrate.mjs",
+    "site:set-admin": "node scripts/site-set-admin.mjs",
     "site:test-customers": "node scripts/site-test-customers.mjs",
     "assistant:rehearse": "node scripts/assistant-rehearse.mjs"
   },

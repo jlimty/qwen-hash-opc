@@ -62,6 +62,7 @@ before(async () => {
   databaseUrl = `postgres://postgres:postgres@127.0.0.1:${socket.server.address().port}/postgres`;
   const seedSql = createPgDatabase(connectPg(postgres, databaseUrl, { max: 1, ssl: false }));
   await initializeGovernance(seedSql);
+  await seedSql.query('INSERT INTO tender_desk.settings (key, value) VALUES ($1, $2)', ['admin_user_id', admin.id]);
   const capability = randomBytes(32).toString('hex');
   const seedAdmin = createTenderDesk({ database: seedSql, dataset, adminToken: capability }).admin(capability);
   const client = await seedAdmin.createClient({ name: 'Edge Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project' }] });
@@ -69,7 +70,7 @@ before(async () => {
   intakeToken = (await seedAdmin.issueAgentCredential({ role: 'intake' })).token;
   await seedSql.close();
   backtestJson = backtestToJson(buildBacktest(dataset), dataset);
-  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id };
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl };
   app = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin, feedFetch: async () => { throw new Error('offline'); } });
 });
 after(async () => {
@@ -186,24 +187,44 @@ test('intake through the site returns a connector pointing at this site', async 
 
 test('auth or database outages become safe responses without leaking details', async () => {
   const via = (instance) => (path, init) => instance(new Request(`https://x${physical}${path}`, init));
-  const down = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: 'http://127.0.0.1:1', TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
+  const down = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: 'http://127.0.0.1:1' })[name], csv, backtestJson, origin });
   const signInDown = await form('/login', { email: admin.email, password: admin.password }, undefined, via(down));
   assert.equal(signInDown.status, 503);
   assert.doesNotMatch(await signInDown.text(), /127\.0\.0\.1|ECONNREFUSED/);
 
-  const broken = createSiteApp({ openDatabase: openFast, env: (name) => ({ TD_DB_URL: 'postgres://u:p@127.0.0.1:1/db', TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
-  const cookie = both(await form('/login', { email: admin.email, password: admin.password }, undefined, via(broken)));
+  const broken = createSiteApp({ openDatabase: openFast, env: (name) => ({ TD_DB_URL: 'postgres://u:p@127.0.0.1:1/db', TD_AUTH_URL: authUrl })[name], csv, backtestJson, origin });
+  const signInBroken = await form('/login', { email: admin.email, password: admin.password }, undefined, via(broken));
+  assert.equal(signInBroken.status, 503);
+  assert.doesNotMatch(await signInBroken.text(), /127\.0\.0\.1|ECONNREFUSED|postgres:/);
+  const cookie = both(await signIn());
   const response = await via(broken)('/', { headers: { Cookie: cookie } });
-  assert.equal(response.status, 503);
-  assert.doesNotMatch(await response.text(), /127\.0\.0\.1|ECONNREFUSED|postgres:/);
+  assert.equal(response.status, 303);
+  assert.equal(response.headers.get('location'), `${publicBase}/login`);
 });
 
 test('pasted secrets with stray whitespace or quotes still work', async () => {
-  const padded = { TD_DB_URL: `"${databaseUrl}"\n`, TD_AUTH_URL: `\n  ${authUrl}\n`, TD_ADMIN_USER_ID: ` ${admin.id}\n` };
+  const padded = { TD_DB_URL: `"${databaseUrl}"\n`, TD_AUTH_URL: `\n  ${authUrl}\n` };
   const instance = createSiteApp({ openDatabase, env: (name) => padded[name], csv, backtestJson, origin });
   assert.equal((await instance(new Request(`https://x${physical}/login`))).status, 200);
-  const signedIn = await form('/login', { email: admin.email, password: admin.password }, undefined, (path, init) => instance(new Request(`https://x${physical}${path}`, init)));
-  assert.equal(signedIn.status, 303);
+  assert.equal((await instance(new Request(`https://x${physical}/assistant/signin`))).status, 200);
+});
+
+test('the admin comes from the database: a junk setting never matters, and a change or removal applies at once', async () => {
+  const junk = fresh({ TD_ADMIN_USER_ID: 'not a valid id with spaces!!!!!!' });
+  assert.equal((await junk('/assistant/signin')).status, 200);
+  const cookie = both(await signIn());
+  const open = () => call('/', { headers: { Cookie: cookie } });
+  assert.equal((await open()).status, 200);
+  try {
+    await pglite.query("UPDATE tender_desk.settings SET value = 'someone-else-0002' WHERE key = 'admin_user_id'");
+    assert.equal((await open()).status, 303);
+    await pglite.query("DELETE FROM tender_desk.settings WHERE key = 'admin_user_id'");
+    assert.equal((await open()).status, 303);
+    assert.equal((await call('/assistant/signin')).status, 200);
+  } finally {
+    await pglite.query("INSERT INTO tender_desk.settings (key, value) VALUES ('admin_user_id', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", [admin.id]);
+  }
+  assert.equal((await open()).status, 200);
 });
 
 test('a value in the wrong field is diagnosed by scheme and length only, never leaked', async () => {
@@ -211,7 +232,7 @@ test('a value in the wrong field is diagnosed by scheme and length only, never l
   const original = console.error;
   console.error = (...args) => logged.push(args.join(' '));
   try {
-    const swapped = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: databaseUrl, TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
+    const swapped = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: databaseUrl })[name], csv, backtestJson, origin });
     const response = await swapped(new Request(`https://x${physical}/login`));
     assert.equal(response.status, 503);
   } finally { console.error = original; }
@@ -221,7 +242,7 @@ test('a value in the wrong field is diagnosed by scheme and length only, never l
 });
 
 const fresh = (overrides = {}) => {
-  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id, ...overrides };
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, ...overrides };
   const instance = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
   return (path, init) => instance(new Request(`https://x${physical}${path}`, init));
 };
@@ -298,7 +319,7 @@ test('the assistant is served under /assistant with rewritten links, and health 
   assert.match(html, new RegExp(`href="${publicBase}/assistant/signup"`));
   assert.match(html, new RegExp(`action="${publicBase}/assistant/check"`));
   assert.equal((await call('/assistant/app.css')).status, 200);
-  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id, TD_OPENROUTER_KEY: 'sk-or-test' };
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_OPENROUTER_KEY: 'sk-or-test' };
   const withKey = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
   assert.deepEqual(await (await withKey(new Request(`https://x${physical}/health`))).json(), { ok: true, configured: true, ai: true });
 });

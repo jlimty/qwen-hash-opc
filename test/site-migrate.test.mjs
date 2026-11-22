@@ -30,15 +30,16 @@ test('--check lists the pending migration and changes nothing', async () => {
   const result = await migrate('--check');
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Target host: 127\.0\.0\.1/);
-  assert.match(result.stdout, /Pending: 003-assistant\.sql/);
+  assert.match(result.stdout, /Pending: 003-assistant\.sql, 004-settings\.sql/);
   assert.equal((await pglite.query("SELECT to_regclass('tender_desk.brief_requests') AS r")).rows[0].r, null);
 });
 
-test('migrating applies 003 in place and keeps every client', async () => {
+test('migrating applies 003 and 004 in place and keeps every client', async () => {
   const result = await migrate();
   assert.equal(result.code, 0, result.stderr);
   assert.match(result.stdout, /Clients before: 1, after: 1/);
   assert.notEqual((await pglite.query("SELECT to_regclass('tender_desk.brief_requests') AS r")).rows[0].r, null);
+  assert.notEqual((await pglite.query("SELECT to_regclass('tender_desk.settings') AS r")).rows[0].r, null);
   const again = await migrate('--check');
   assert.match(again.stdout, /Pending: none/);
 });
