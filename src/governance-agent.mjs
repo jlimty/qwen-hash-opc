@@ -170,39 +170,42 @@ export function agentWorkflows(dataset, { connector = localConnector } = {}) {
       roles: ['client'], schema: z.strictObject({ tender_no: tenderNumber, stat_id: z.string().regex(/^stat_[a-f0-9]{64}$/),
         price_band: bandSchema, recommendation: z.enum(['bid', 'no-bid']), content: text(20000),
         credentials_cited: z.array(z.uuid()).max(30).default([]) }),
-      run: async (tx, actor, input) => {
-        const saved = (await tx.query(`SELECT snapshot FROM tender_desk.stats_snapshots
-          WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3`, [actor.client_id, input.tender_no, input.stat_id])).rows[0];
-        if (!saved || Object.keys(input.price_band).some((key) => input.price_band[key] !== saved.snapshot.price_band[key])) {
-          return blocked('G4', 'The price band must match a saved snapshot for this client and tender.');
-        }
-        if (!await hasVerifiedCitations(tx, actor.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
-        const otherNames = (await tx.query('SELECT name FROM tender_desk.clients WHERE id<>$1', [actor.client_id])).rows.map((row) => row.name);
-        if (namesOtherClient(input.content, otherNames)) return blocked('G1', 'Brief content must not name another client.');
-        // G2 last, so a brief blocked by any other rule never takes the advice slot.
-        await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [input.tender_no, actor.client_id]);
-        const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [input.tender_no])).rows[0];
-        if (hold.state === 'stopped') return blocked('G2', 'Tender Desk has stopped advising on this tender.');
-        if (hold.client_id !== actor.client_id) {
-          const { rows } = await tx.query(`INSERT INTO tender_desk.conflicts (tender_no,client_id,holder_client_id) VALUES ($1,$2,$3)
-            ON CONFLICT (tender_no,client_id) DO UPDATE SET tender_no=EXCLUDED.tender_no RETURNING id`,
-          [input.tender_no, actor.client_id, hold.client_id]);
-          return { outcome: 'escalated', rule_id: 'G2', conflict_id: rows[0].id,
-            reason: 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.' };
-        }
-        const counts = (await tx.query(`SELECT
-          (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
-          (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
-          (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1) AS prior`, [actor.client_id])).rows[0];
-        const risk = computeRiskFacts({ n: Number(saved.snapshot.n), band: input.price_band, maxContractCents: Number(counts.max_contract_cents),
-          content: input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
-        const { rows } = await tx.query(`INSERT INTO tender_desk.briefs
-          (client_id,tender_no,stat_id,recommendation,content,credentials_cited,price_band,flags,status,risk_facts,risk_level)
-          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_approval',$9,$10) RETURNING id, reference_number`,
-        [actor.client_id, input.tender_no, input.stat_id, input.recommendation, input.content,
-          input.credentials_cited, JSON.stringify(input.price_band), ['human_review_required'], JSON.stringify(risk.facts), risk.level]);
-        return { outcome: 'allowed', brief_id: rows[0].id, brief_reference: referenceCode('BRF', rows[0].reference_number), status: 'pending_approval' };
-      },
+      run: submitBrief,
     },
   };
+}
+
+// The brief rules (G4, G3, G1, then G2), shared by the MCP submit_brief tool and the console's saved drafts.
+export async function submitBrief(tx, actor, input) {
+    const saved = (await tx.query(`SELECT snapshot FROM tender_desk.stats_snapshots
+      WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3`, [actor.client_id, input.tender_no, input.stat_id])).rows[0];
+    if (!saved || Object.keys(input.price_band).some((key) => input.price_band[key] !== saved.snapshot.price_band[key])) {
+      return blocked('G4', 'The price band must match a saved snapshot for this client and tender.');
+    }
+    if (!await hasVerifiedCitations(tx, actor.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
+    const otherNames = (await tx.query('SELECT name FROM tender_desk.clients WHERE id<>$1', [actor.client_id])).rows.map((row) => row.name);
+    if (namesOtherClient(input.content, otherNames)) return blocked('G1', 'Brief content must not name another client.');
+    // G2 last, so a brief blocked by any other rule never takes the advice slot.
+    await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [input.tender_no, actor.client_id]);
+    const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [input.tender_no])).rows[0];
+    if (hold.state === 'stopped') return blocked('G2', 'Tender Desk has stopped advising on this tender.');
+    if (hold.client_id !== actor.client_id) {
+      const { rows } = await tx.query(`INSERT INTO tender_desk.conflicts (tender_no,client_id,holder_client_id) VALUES ($1,$2,$3)
+        ON CONFLICT (tender_no,client_id) DO UPDATE SET tender_no=EXCLUDED.tender_no RETURNING id`,
+      [input.tender_no, actor.client_id, hold.client_id]);
+      return { outcome: 'escalated', rule_id: 'G2', conflict_id: rows[0].id,
+        reason: 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.' };
+    }
+    const counts = (await tx.query(`SELECT
+      (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
+      (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
+      (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1) AS prior`, [actor.client_id])).rows[0];
+    const risk = computeRiskFacts({ n: Number(saved.snapshot.n), band: input.price_band, maxContractCents: Number(counts.max_contract_cents),
+      content: input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
+    const { rows } = await tx.query(`INSERT INTO tender_desk.briefs
+      (client_id,tender_no,stat_id,recommendation,content,credentials_cited,price_band,flags,status,risk_facts,risk_level)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_approval',$9,$10) RETURNING id, reference_number`,
+    [actor.client_id, input.tender_no, input.stat_id, input.recommendation, input.content,
+      input.credentials_cited, JSON.stringify(input.price_band), ['human_review_required'], JSON.stringify(risk.facts), risk.level]);
+    return { outcome: 'allowed', brief_id: rows[0].id, brief_reference: referenceCode('BRF', rows[0].reference_number), status: 'pending_approval' };
 }

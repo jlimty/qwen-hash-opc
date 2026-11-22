@@ -44,6 +44,7 @@ CREATE TABLE tender_desk.brief_requests (
   status text NOT NULL CHECK (status IN ('requested', 'drafted', 'approved', 'declined', 'cancelled')),
   brief_id uuid REFERENCES tender_desk.briefs (id),
   last_error text CHECK (last_error IS NULL OR length(last_error) <= 1000),
+  decline_reason text CHECK (decline_reason IS NULL OR length(decline_reason) <= 500),
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
