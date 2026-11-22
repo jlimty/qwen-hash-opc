@@ -236,7 +236,8 @@ test("an admin's redraft note reaches the model", async () => {
 });
 
 test('questions and risks may quote tender facts like durations; only invented money figures are refused there', async () => {
-  const ok = await draftBrief(facts, { llm: llmReturning({ ...clean, questions: ['Can the 6-month delivery period start in March?'], risks: ['The 2-year term ties up the team.'] }), model: 'm' });
+  const ok = await draftBrief({ ...facts, requirements_text: 'A 6-month delivery period within a 2-year term.' },
+    { llm: llmReturning({ ...clean, questions: ['Can the 6-month delivery period start in March?'], risks: ['The 2-year term ties up the team.'] }), model: 'm' });
   assert.equal(ok.ok, true, ok.reason);
   const bad = await draftBrief(facts, { llm: llmReturning({ ...clean, risks: ['Rivals may bid near $250k.'] }), model: 'm' });
   assert.equal(bad.ok, false);
@@ -248,4 +249,16 @@ test('digits inside known names (an agency like "Ministry of Defence 6") are not
   assert.equal(ok.ok, true, ok.reason);
   const stillCaught = await draftBrief(named, { llm: llmReturning({ ...clean, reasons: ['Ministry of Defence 6 usually pays 7 suppliers.'] }), model: 'm' });
   assert.equal(stillCaught.ok, false);
+});
+
+test('numbers in requirements, questions and risks must come from the tender or pasted requirements', async () => {
+  const withReq = { ...facts, requirements_text: 'Bidder must have 5 years of experience. Delivery within 6 months.' };
+  const fromTender = await draftBrief(withReq, { llm: llmReturning({ ...clean, questions: ['Can the 6 months start later?'],
+    requirements: [{ requirement: 'At least 5 years of experience', status: 'met', evidence: 'Annual ministry event' }] }), model: 'm' });
+  assert.equal(fromTender.ok, true, fromTender.reason);
+  const invented = await draftBrief(withReq, { llm: llmReturning({ ...clean, risks: ['Only 3 of the last 12 awards went to small firms.'] }), model: 'm' });
+  assert.equal(invented.ok, false);
+  assert.match(invented.reason, /not in the tender/);
+  const money = await draftBrief(withReq, { llm: llmReturning({ ...clean, requirements: [{ requirement: 'Capacity', status: 'gap', evidence: 'Your largest contract, S$2.4M, falls short' }] }), model: 'm' });
+  assert.equal(money.ok, false);
 });

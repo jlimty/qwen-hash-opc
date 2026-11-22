@@ -256,13 +256,13 @@ ${outside ? `<p class="banner">This tender is outside the categories in your pro
 }
 
 const reasonText = { welcome: 'Welcome credit', purchase: 'Bought credits', brief: 'Reviewed brief', refund: 'Credit returned', adjustment: 'Adjustment' };
-export function renderCredits({ company, csrf, credits, notice }) {
+export function renderCredits({ company, csrf, credits, notice, noticeKind = 'bad' }) {
   const sgd = (cents) => `S$${(cents / 100).toFixed(2)}`;
   const packs = credits.packs.map((pack) => `<li><div><strong>${creditWord(pack.credits)}</strong><span class="meta">${sgd(pack.cents)} · ${sgd(Math.round(pack.cents / pack.credits))} a credit</span></div>
 <div class="row-actions"><form method="post" action="/credits/buy">${hidden('csrf', csrf)}${hidden('credits', pack.credits)}<button class="primary" type="submit">Buy ${pack.credits}</button></form></div></li>`).join('');
   const history = credits.history.length ? `<ul class="feed">${credits.history.map((h) => `<li><div class="line"><strong>${esc(h.reason === 'purchase' ? `Bought ${creditWord(h.delta)}` : reasonText[h.reason] ?? h.reason)}</strong>
 <span class="num ${h.delta > 0 ? 'plus' : 'minus'}">${h.delta > 0 ? '+' : ''}${h.delta}</span></div><span class="meta">${esc(day(h.created_at))}${h.reference ? ` · ${esc(h.reference)} · ${esc(h.title ?? '')}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No credit activity yet.</p>';
-  return layout({ title: 'Credits', csrf, company, body: `${banner(notice, 'ok')}<div><h1>You have ${creditWord(credits.balance)}</h1>
+  return layout({ title: 'Credits', csrf, company, body: `${banner(notice, noticeKind)}<div><h1>You have ${creditWord(credits.balance)}</h1>
 <p class="sub">A reviewed brief uses ${creditWord(credits.perBrief)}. Credits don't expire, and a declined request gives its credit back.</p></div>
 <p class="testmode" role="note">Test mode: no card is charged</p>
 <div class="grid"><section class="panel"><header><h2>Buy credits</h2></header><ul class="tenders">${packs}</ul></section>

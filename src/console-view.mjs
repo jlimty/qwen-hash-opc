@@ -233,7 +233,7 @@ export function renderBriefs({ state, dataset, csrf, flash, query = briefQuery(n
   const latestNote = (b) => (state.notes ?? []).find((n) => n.subject === 'brief' && n.subject_id === b.id);
   const eligible = (b) => b.status === 'pending_approval' && ['low', 'medium'].includes(b.risk_level) && latestNote(b)?.suggested_action === 'approve';
   const row = (b) => `<tr>
-<td>${eligible(b) ? `<input type="checkbox" name="brief_ids" value="${esc(b.id)}" aria-label="Select ${esc(recordCode('brief', b))} for batch approval"> ` : ''}<a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
+<td>${eligible(b) ? `<input type="checkbox" name="brief_ids" value="${esc(b.id)}:${esc(b.revision ?? 1)}" aria-label="Select ${esc(recordCode('brief', b))} for batch approval"> ` : ''}<a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
 <td>${esc(clients.get(b.client_id) ?? 'Unknown client')}</td>
 <td>${statusChip(b)} ${riskChip(b.risk_level)}</td>
 <td class="r num nowrap">${money(b.price_band.low_cents)} – ${money(b.price_band.high_cents)}</td>

@@ -223,14 +223,14 @@ test('batch approve covers only low or medium risk briefs the AI reviewer sugges
   await note(two, 'redraft');
   await db.query("UPDATE tender_desk.briefs SET risk_level='medium' WHERE id=ANY($1::uuid[])", [[one.id, two.id]]);
   const list = await c.get('/briefs');
-  assert.match(list.text, new RegExp(`name="brief_ids" value="${one.id}"`));
-  assert.doesNotMatch(list.text, new RegExp(`name="brief_ids" value="${two.id}"`));
-  const done = await c.post('/actions/briefs/batch-approve', { brief_ids: one.id });
+  assert.match(list.text, new RegExp(`name="brief_ids" value="${one.id}:1"`));
+  assert.doesNotMatch(list.text, new RegExp(`name="brief_ids" value="${two.id}:`));
+  const done = await c.post('/actions/briefs/batch-approve', { brief_ids: `${one.id}:1` });
   assert.equal(done.status, 303);
   assert.match((await c.get('/briefs')).text, /Approved 1 brief/);
   assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [one.id])).rows[0].status, 'approved');
   assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [two.id])).rows[0].status, 'pending_approval');
-  await c.post('/actions/briefs/batch-approve', { brief_ids: two.id });
+  await c.post('/actions/briefs/batch-approve', { brief_ids: `${two.id}:1` });
   assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [two.id])).rows[0].status, 'pending_approval', 'not eligible, so not approved');
 });
 

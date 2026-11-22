@@ -90,7 +90,8 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
   async function readFeedTender(row) {
     if (row.terms?.length) return { terms: row.terms, category: row.category };
     const reading = await readTender({ title: row.title, agency: row.agency }, { llm, model: models.read });
-    if (reading.terms.length) await database.query('UPDATE tender_desk.open_tenders SET terms=$1 WHERE tender_no=$2', [reading.terms, row.tender_no]).catch(() => {});
+    // Only the model's reading is stored; a keyword fallback (model down or not configured) is used once and retried next time.
+    if (reading.source === 'model' && reading.terms.length) await database.query('UPDATE tender_desk.open_tenders SET terms=$1 WHERE tender_no=$2', [reading.terms, row.tender_no]).catch(() => {});
     return { terms: reading.terms, category: row.category };
   }
 
@@ -219,7 +220,6 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category });
         return { tender, check, ownRequest: owned.get(tender.tender_no), closesInDays: tender.closes_at ? Math.max(0, Math.ceil((new Date(tender.closes_at) - now()) / 86400000)) : undefined, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
-      for (const match of matches) if (!match.ownRequest) match.taken = (await customer.canRequest(match.tender.tender_no, { now: now() })).reason === 'held';
       return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf, flash }), { cookies: flash ? [`td_cflash=; Max-Age=0; ${cookieFlags}`] : [] });
     }
 

@@ -20,7 +20,7 @@ const securityHeaders = {
 };
 
 const actions = {
-  'brief/approve': (ops, id) => ops.reviewBrief({ brief_id: id, decision: 'approved' }),
+  'brief/approve': (ops, id, form) => ops.reviewBrief({ brief_id: id, decision: 'approved', ...(Number(form.get('revision')) > 0 && { revision: Number(form.get('revision')) }) }),
   'brief/decline': (ops, id, form) => ops.reviewBrief({ brief_id: id, decision: 'declined', reason: String(form.get('reason') ?? '').slice(0, 500) }),
   'conflict/serve-holder': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_holder' }),
   'conflict/stop': (ops, id) => ops.resolveConflict({ conflict_id: id, resolution: 'serve_neither' }),
@@ -242,13 +242,14 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
     }
     if (path === '/actions/briefs/batch-approve') {
       const state = await ops.readConsole();
-      const ids = new Set(form.getAll('brief_ids'));
+      // Each tick carries the revision the admin saw; a brief changed since then is skipped, not approved.
+      const picked = new Map(form.getAll('brief_ids').map((value) => { const [id, revision] = String(value).split(':'); return [id, Number(revision)]; }));
       let approved = 0; let skipped = 0;
-      for (const brief of state.briefs.filter((b) => ids.has(b.id))) {
+      for (const brief of state.briefs.filter((b) => picked.has(b.id))) {
         const note = state.notes.find((n) => n.subject === 'brief' && n.subject_id === brief.id);
         const eligible = brief.status === 'pending_approval' && ['low', 'medium'].includes(brief.risk_level) && note?.suggested_action === 'approve';
         if (!eligible) { skipped++; continue; }
-        const result = await ops.reviewBrief({ brief_id: brief.id, decision: 'approved' }).catch(() => ({ outcome: 'blocked' }));
+        const result = await ops.reviewBrief({ brief_id: brief.id, decision: 'approved', revision: picked.get(brief.id) || -1 }).catch(() => ({ outcome: 'blocked' }));
         if (result.outcome === 'approved') approved++; else skipped++;
       }
       const text = `Approved ${approved} brief${approved === 1 ? '' : 's'}${skipped ? `; ${skipped} not approved (not eligible or blocked by a check)` : ''}.`;

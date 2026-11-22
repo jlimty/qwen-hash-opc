@@ -108,7 +108,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
 <div><button type="submit">Redraft</button></div></form></section>`;
   const actions = decided ? '' : `<div class="decision">
 <p class="muted small">Approval re-checks the advice slot and the citations.</p>
-<div class="row-actions">${form(csrf, `/actions/brief/${brief.id}/approve`, 'Approve', 'primary')}</div>
+<div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}"><button class="primary" type="submit">Approve</button></form></div>
 <form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
 <label for="decline-reason">Reason for declining (sent to the client)</label>
 <textarea id="decline-reason" name="reason" required maxlength="500" rows="3"></textarea>

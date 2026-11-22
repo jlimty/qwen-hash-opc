@@ -130,7 +130,7 @@ describe('PostgreSQL governance schema', () => {
       pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz',
       stats_snapshots: 'client_id:uuid tender_no:text stat_id:text snapshot:jsonb',
       shortlists: 'client_id:uuid tender_no:text fit_score:int4 reasons:_text',
-      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text parts:jsonb',
+      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text parts:jsonb revision:int4',
       conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz reference_number:int8',
       audit_log: 'id:int8 ts:timestamptz actor:text action:text client_id:uuid tender_no:text outcome:text rule_id:text reason:text summary:jsonb',
       open_tenders: 'tender_no:text title:text agency:text published_on:date closes_at:timestamptz gebiz_url:text source_feed:text category:text terms:_text first_seen:timestamptz last_seen:timestamptz',

@@ -39,6 +39,7 @@ Rules:
 - If requirements_text is given, check its key requirements against the client's profile and verified projects (met, partly_met or gap),
   quoting each requirement briefly. If it is not given, return an empty requirements list.
 - Add up to four questions worth asking the agency before the clarification deadline, and up to three risks.
+  In requirements, questions and risks, quote a number only if it appears in the tender or requirements_text.
 - Never state a win probability, a chance of winning, or a "winning price". Past awards are what winners were paid, not what will win.
 - Do not write any digits or numbers at all in reasons or price_position, and no quantities in words either ("a third", "half", "twice",
   "four", "percent"). Code adds every figure to the brief. Describe size and share in plain terms ("the most active buyer").
@@ -97,7 +98,7 @@ export function composeBrief(draft, facts) {
     '## Limits', '', briefLimits,
   ].join('\n');
   // The admin's risk facts look at the model's own words only; code-written figures and quoted requirements are not its claims.
-  const riskText = [...draft.reasons, draft.price_position.why, ...draft.questions, ...draft.risks].join('\n');
+  const riskText = [...draft.reasons, draft.price_position.why, ...draft.questions, ...draft.risks, ...requirements.map((r) => r.evidence)].join('\n');
   return { content, parts, riskText };
 }
 
@@ -120,9 +121,14 @@ export function checkDraft(raw, facts) {
   if (internalId.test(everything)) return { ok: false, reason: 'Draft wrote an internal ID. Name projects by their title. Try Redraft.' };
   const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
   if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
-  // Reasons and price reasoning carry no figures at all; questions and risks may quote tender facts (durations, terms),
-  // so there only money figures are checked against the comparables.
-  const money = [...draft.questions, ...draft.risks].join('\n').match(/(?:S?\$\s?)\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?\b|\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)\b/gi) ?? [];
+  // Questions, risks and the requirements check may quote numbers only from the tender or the pasted requirements
+  // (durations, terms, headcounts); money anywhere is checked against the comparables.
+  const quoted = [...draft.questions, ...draft.risks, ...draft.requirements.flatMap((r) => [r.requirement, r.evidence])].join('\n');
+  const sources = unnamed([facts.requirements_text, facts.tender?.pasted_text, facts.tender?.title, facts.tender?.agency].filter(Boolean).join('\n')).replace(/,/g, '');
+  const stray = [...new Set((unnamed(quoted).replace(/S?\$\s?\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?/gi, ' ').match(/\d+(?:\.\d+)?/g) ?? []))]
+    .filter((n) => !new RegExp(`(?<![\\d.])${n.replace('.', '\\.')}(?![\\d])`).test(sources));
+  if (stray.length) return { ok: false, reason: `Draft quoted a number that is not in the tender or the pasted requirements: ${stray.slice(0, 5).join(', ')}. Try Redraft.` };
+  const money = quoted.match(/(?:S?\$\s?)\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?\b|\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)\b/gi) ?? [];
   const figures = unmatchedFigures([unnamed(prose), money.join(' ')].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
   if (figures.length) return { ok: false, reason: `Draft contained figures not in the comparables: ${figures.slice(0, 5).join(', ')}.` };
   const { content, parts, riskText } = composeBrief(draft, facts);

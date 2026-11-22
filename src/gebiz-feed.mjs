@@ -103,7 +103,7 @@ async function readNewTenders(database, items, reader) {
     await Promise.all(unread.slice(at, at + 4).map(async (row) => {
       try {
         const reading = await reader(row);
-        if (reading?.terms?.length) {
+        if (reading?.terms?.length && reading.source !== 'keywords') {
           await database.query('UPDATE tender_desk.open_tenders SET terms=$1, category=$2 WHERE tender_no=$3 AND terms IS NULL',
             [reading.terms, reading.category ?? row.category, row.tender_no]);
         }

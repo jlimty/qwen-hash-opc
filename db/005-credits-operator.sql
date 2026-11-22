@@ -43,7 +43,8 @@ CREATE TABLE tender_desk.review_notes (
 );
 CREATE INDEX review_notes_subject ON tender_desk.review_notes (subject, subject_id);
 
-ALTER TABLE tender_desk.briefs ADD COLUMN parts jsonb;
+-- revision counts edits to a pending brief, so an approval can name the exact version the admin read.
+ALTER TABLE tender_desk.briefs ADD COLUMN parts jsonb, ADD COLUMN revision integer NOT NULL DEFAULT 1 CHECK (revision > 0);
 ALTER TABLE tender_desk.brief_requests ADD COLUMN requirements_text text CHECK (requirements_text IS NULL OR length(requirements_text) <= 4000);
 
 INSERT INTO tender_desk.settings (key, value) VALUES ('credit_price_cents', '990'), ('credits_per_brief', '1'),

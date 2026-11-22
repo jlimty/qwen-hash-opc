@@ -27,9 +27,13 @@ const draftInputSchema = z.strictObject({ request_id: z.uuid(), recommendation: 
 // Credit settings live in tender_desk.settings so the admin can reprice without a deploy.
 export async function creditSettings(tx) {
   const rows = Object.fromEntries((await tx.query("SELECT key,value FROM tender_desk.settings WHERE key IN ('credit_price_cents','credits_per_brief','welcome_credits','credit_packs')")).rows.map((r) => [r.key, r.value]));
+  // A bad value never mints credits or breaks sign-up: each setting is a whole number in range, or its default.
+  const whole = (value, min, max, fallback) => { const n = Number(value); return Number.isInteger(n) && n >= min && n <= max ? n : fallback; };
   const packs = String(rows.credit_packs ?? '').split(',').map((pack) => pack.split(':').map(Number))
-    .filter(([credits, cents]) => Number.isInteger(credits) && credits > 0 && Number.isInteger(cents) && cents > 0).map(([credits, cents]) => ({ credits, cents }));
-  return { priceCents: Number(rows.credit_price_cents ?? 990), perBrief: Number(rows.credits_per_brief ?? 1), welcome: Number(rows.welcome_credits ?? 0), packs };
+    .filter(([credits, cents]) => Number.isInteger(credits) && credits >= 1 && credits <= 1000 && Number.isInteger(cents) && cents >= 1 && cents <= 100000000)
+    .map(([credits, cents]) => ({ credits, cents }));
+  return { priceCents: whole(rows.credit_price_cents, 1, 100000000, 990), perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
+    welcome: whole(rows.welcome_credits, 0, 1000, 1), packs };
 }
 const creditBalance = async (tx, client_id) => Number((await tx.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
 // Give back whatever a request spent (credits, never cash): used when a request is declined or cancelled.
@@ -101,7 +105,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1 AND id<>$2) AS prior`, [brief.client_id, brief.id])).rows[0];
     const risk = computeRiskFacts({ n: Number(snapshot?.n ?? 0), band: brief.price_band, maxContractCents: Number(counts.max_contract_cents),
       content: input.risk_text ?? input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
-    await tx.query(`UPDATE tender_desk.briefs SET recommendation=$1, content=$2, credentials_cited=$3, parts=COALESCE($4,parts), risk_facts=$5, risk_level=$6 WHERE id=$7`,
+    await tx.query(`UPDATE tender_desk.briefs SET recommendation=$1, content=$2, credentials_cited=$3, parts=COALESCE($4,parts), risk_facts=$5, risk_level=$6, revision=revision+1 WHERE id=$7`,
       [input.recommendation, input.content, input.credentials_cited, input.parts ? JSON.stringify(input.parts) : null, JSON.stringify(risk.facts), risk.level, brief.id]);
     return { outcome: 'allowed', brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number), client_id: brief.client_id, tender_no: brief.tender_no };
   }
@@ -172,7 +176,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             requirements: brief.parts?.requirements ?? [], questions: input.questions, risks: input.risks, credentials_cited: brief.credentials_cited }, await draftFacts(tx, request));
           if (!checked.ok) return { ...blocked('G4', checked.reason.replace(/ Try Redraft\.$/, '')), client_id: brief.client_id, tender_no: brief.tender_no };
           const result = await reviseBrief(tx, { brief_id: brief.id, ...checked.draft });
-          if (result.outcome === 'allowed') await addNote(tx, actor.name ?? 'operator', { subject: 'brief', id: brief.id, note: 'Revised the draft (all checks passed).', suggested_action: 'approve' });
+          // A revision never marks itself approvable: the operator adds an approve note separately, after re-reading.
+          if (result.outcome === 'allowed') await addNote(tx, actor.name ?? 'operator', { subject: 'brief', id: brief.id, note: 'Revised the draft (all checks passed). Read the new version before approving.' });
           return result;
         } },
       prepare_project_check: { roles, description: "Run the GeBIZ cross-check for a client's project and leave a note with a suggested verdict. Does not verify: the admin does.",
@@ -181,9 +186,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const project = (await tx.query('SELECT p.*, c.name AS client_name FROM tender_desk.projects p JOIN tender_desk.clients c ON c.id=p.client_id WHERE p.id=$1', [input.project_id])).rows[0];
           if (!project) return blocked('VALIDATION', 'That project does not exist.');
           const check = crossCheckProject(dataset, project, project.client_name, new Set());
-          await addNote(tx, actor.name ?? 'operator', { subject: 'project', id: project.id, note: `GeBIZ cross-check: ${check.result}. ${(check.lines ?? []).join(' ')}`.slice(0, 2000),
-            suggested_action: check.result === 'match' ? 'verify' : 'do_not_verify' });
-          return { outcome: 'allowed', client_id: project.client_id, check_result: check.result, lines: check.lines ?? [], suggested_action: check.result === 'match' ? 'verify' : 'do_not_verify' };
+          // A hold-out tender can't be checked yet, which is not the same as a failed check.
+          const suggested = check.result === 'match' ? 'verify' : check.result === 'not_checked' ? undefined : 'do_not_verify';
+          await addNote(tx, actor.name ?? 'operator', { subject: 'project', id: project.id, note: `GeBIZ cross-check: ${check.result === 'not_checked' ? "can't check yet" : check.result}. ${(check.lines ?? []).join(' ')}`.slice(0, 2000),
+            suggested_action: suggested });
+          return { outcome: 'allowed', client_id: project.client_id, check_result: check.result, lines: check.lines ?? [], ...(suggested && { suggested_action: suggested }) };
         } },
     };
   }
@@ -438,7 +445,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             client_id: project.client_id, verified: input.verified, check_result: check.result, ...(note && { note }) };
         }),
         reviewBrief: adminOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']),
-          reason: z.string().trim().max(500).optional() }), async (tx, input) => {
+          reason: z.string().trim().max(500).optional(), revision: z.number().int().positive().optional() }), async (tx, input) => {
           if (input.decision === 'declined' && !input.reason) return blocked('VALIDATION', 'A decline needs a reason.');
           const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
           if (!brief) return blocked('G5', 'Brief does not exist.');
@@ -447,6 +454,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             return blocked('G2', 'This brief no longer has an active pricing hold.');
           }
           if (brief.status !== 'pending_approval') return blocked('G5', 'Only pending briefs may be reviewed.');
+          if (input.revision !== undefined && input.revision !== brief.revision) {
+            return blocked('G5', 'This brief changed since you opened it. Read the new version, then decide.');
+          }
           if (input.decision === 'approved' && !await hasVerifiedCitations(tx, brief.client_id, brief.credentials_cited)) {
             return blocked('G3', 'A cited project is no longer verified.');
           }

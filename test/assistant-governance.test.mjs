@@ -293,3 +293,13 @@ test('the admin can revise a pending draft in place; checks still apply and an a
   const audit = (await db.query("SELECT count(*)::int AS n FROM tender_desk.audit_log WHERE action='revise_draft'")).rows[0].n;
   assert.ok(audit >= 1);
 });
+
+test('bad credit settings fall back to safe values instead of minting credits or breaking sign-up', async () => {
+  const { creditSettings } = await import('../src/governance.mjs');
+  const fake = (rows) => ({ query: async () => ({ rows: Object.entries(rows).map(([key, value]) => ({ key, value })) }) });
+  const bad = await creditSettings(fake({ credits_per_brief: '-3', welcome_credits: '2.5', credit_price_cents: 'abc', credit_packs: '5:4950,5000:1,0:10,x' }));
+  assert.equal(bad.perBrief, 1);
+  assert.equal(bad.welcome, 1);
+  assert.equal(bad.priceCents, 990);
+  assert.deepEqual(bad.packs, [{ credits: 5, cents: 4950 }]);
+});

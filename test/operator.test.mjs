@@ -111,3 +111,17 @@ test('every operator tool has an input schema MCP can publish', async () => {
     assert.ok(tool.description.length > 20, tool.name);
   }
 });
+
+test('an approval names the revision the admin saw; a brief revised since then is refused', async () => {
+  const brief = await pendingBrief();
+  const seen = (await db.query('SELECT revision FROM tender_desk.briefs WHERE id=$1', [brief.brief_id])).rows[0].revision;
+  await operator.invoke('propose_revision', { brief_id: brief.brief_id, recommendation: 'bid', reasons: ['Your ministry event is the same kind of work.'],
+    price_position: { band: 'median_to_upper_quartile', why: 'Your direct track record with this buyer justifies sitting above the middle.' }, questions: [], risks: [] });
+  const stale = await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved', revision: seen });
+  assert.equal(stale.outcome, 'blocked');
+  assert.match(stale.reason, /changed since you opened it/);
+  const notes = (await admin.readConsole()).notes.filter((n) => n.subject_id === brief.brief_id);
+  assert.ok(!notes.some((n) => n.suggested_action === 'approve'), 'a revision does not mark itself approvable');
+  const fresh = (await db.query('SELECT revision FROM tender_desk.briefs WHERE id=$1', [brief.brief_id])).rows[0].revision;
+  assert.equal((await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved', revision: fresh })).outcome, 'approved');
+});

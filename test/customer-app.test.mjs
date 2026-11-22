@@ -301,9 +301,10 @@ test('home offers a brief only where one can be made, and links to an existing b
   assert.doesNotMatch(row('MOESCHETQ26006510'), /Reviewed brief/, 'too few awards: no paid brief on offer');
   await b.post('/checkout', { tender_no: 'RPO000ETQ26000129', terms: 'audit' }).catch(() => {});
   const again = await b.get('/home');
-  const owned = await db.query("SELECT 1 FROM tender_desk.brief_requests r JOIN tender_desk.customers c ON c.client_id=r.client_id WHERE r.tender_no='RPO000ETQ26000129'");
-  assert.match(again.text.slice(again.text.indexOf('RPO000ETQ26000129'), again.text.indexOf('</li>', again.text.indexOf('RPO000ETQ26000129'))),
-    owned.rows.length ? /View your brief|available for a reviewed brief/ : /available for a reviewed brief/);
+  const owned = await db.query("SELECT 1 FROM tender_desk.brief_requests r JOIN tender_desk.clients c ON c.id=r.client_id WHERE r.tender_no='RPO000ETQ26000129' AND c.name LIKE 'Kale Audit%' AND r.status IN ('requested','drafted','approved')");
+  const rpoRow = again.text.slice(again.text.indexOf('RPO000ETQ26000129'), again.text.indexOf('</li>', again.text.indexOf('RPO000ETQ26000129')));
+  if (owned.rows.length) assert.match(rpoRow, /View your brief/);
+  assert.doesNotMatch(rpoRow, /available for a reviewed brief/, 'whether someone else holds it is not shown');
 });
 
 test('the terms note explains the most-specific rule, and a wide band carries a warning', async () => {
@@ -485,4 +486,10 @@ test('price checks explain median and quartile in plain words', async () => {
   await b.get('/');
   const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
   assert.match(check.text, /half were above, half below/);
+});
+
+test("home does not reveal which tenders another customer holds; checkout still refuses", async () => {
+  const b = await signedUpCustomer('Tansy');
+  const home = await b.get('/home');
+  assert.doesNotMatch(home.text, /Not available for a reviewed brief/);
 });
