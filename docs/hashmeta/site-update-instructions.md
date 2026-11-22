@@ -44,7 +44,8 @@ Do each check on the published site, not the editor.
 - [ ] Opening `https://tenderdesk.geo.hashmeta.tech/api/media/file/tender-desk-intake.json` no longer returns the file. That file contained an access key, so it must be gone.
 - [ ] "Try a free price check" opens the app, which lists open GeBIZ tenders.
 - [ ] "Create an account" opens the app's sign-up page.
-- [ ] The test-mode line "Payments are in test mode while we launch: no card is charged." is visible in Get started.
+- [ ] Get started shows the credit price (S$9.90, first brief free), the sample brief link, and the line "Credit purchases are in test mode while we launch: no card is charged."
+- [ ] No page says S$99.
 - [ ] The source note under the data article is still there (GeBIZ, Ministry of Finance, data.gov.sg, Singapore Open Data Licence).
 
 Report back to the admin with the checklist results.

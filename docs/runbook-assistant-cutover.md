@@ -72,3 +72,44 @@ Branch `tender-assistant`. Every step that changes production waits for the admi
 - **Search terms decide the comparables.** With the key set, Qwen reads each tender into search terms; without it, a keyword fallback is used, which is cruder. The price-check page always shows the terms used, and the customer can edit them.
 - **Practice runs on production are permanent.** They create real accounts, requests and audit rows. Practise with the test customers, or on a Neon branch.
 - **Audit rows from before the rename** store the old operator name; the console shows them as the admin.
+
+## Tiers 2 and 3 (branch `tier2-3`, on top of `tier1-trust-fixes`)
+
+The admin says yes first. Then:
+
+1. **Safety branch:**
+
+   ```bash
+   neon branches create --name before-tier2-3 --parent production
+   ```
+
+2. **Migrate in place** (004 if missing, then 005: credits, the operator role, review notes, brief parts). Expected output: `Clients before: N, after: N`. Existing customers keep their data, but start with 0 credits, because the welcome credit is only given at sign-up. Grant one with an `adjustment` row if you want.
+
+   ```bash
+   npm run site:migrate -- --db-file .local/site/db-unpooled.url --check
+   ```
+
+   ```bash
+   npm run site:migrate -- --db-file .local/site/db-unpooled.url
+   ```
+
+3. **Build and redeploy.** Follow the redeploy steps in `docs/handoff-assistant-cutover.md`.
+4. **Revoke the old customer and intake connector keys.** This includes the intake key still published on the Hashmeta site. The live site already refuses them; this removes them through the audited admin path.
+
+   ```bash
+   npm run site:revoke-legacy -- --db-file .local/site/db-unpooled.url --check
+   ```
+
+   ```bash
+   npm run site:revoke-legacy -- --db-file .local/site/db-unpooled.url
+   ```
+
+5. **Set up your QwenWork back office.**
+   1. In the console, open **QwenWork** and click **Issue a connector**. Copy the JSON, which is shown once.
+   2. Click **Open QwenWork ↗**, then paste the connector into QwenWork → Connectors.
+   3. Install `skills/tender-desk-operator/SKILL.md` (Install Skill).
+   4. Ask it to "work the queue".
+6. **Prices are settings, not code.** They live in `tender_desk.settings`: `credit_price_cents`, `credits_per_brief`, `welcome_credits` and `credit_packs`, where packs are written as `credits:cents` pairs. Change a row and it applies at once.
+7. **Hashmeta:** pass the updated `docs/hashmeta/site-update-instructions.md` to the Qoder agent.
+
+**Rollback:** restore `before-tier2-3`, and redeploy the previous build.
