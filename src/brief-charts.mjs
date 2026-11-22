@@ -52,10 +52,10 @@ export function priceChart({ awards, band, suggested }) {
 export function winnersChart(winners, n) {
   if (!winners?.length || !n) return '';
   // Drawn narrower than the price chart: it sits in a half-width column, and a narrower viewBox keeps the labels readable.
-  const width = 420; const rowH = 30; const labelW = 170; const barMax = width - labelW - 60;
+  const width = 420; const rowH = 30; const labelW = 190; const barMax = width - labelW - 60;
   const rows = winners.slice(0, 5).map((w, i) => {
     const y = i * rowH + 8; const width = Math.max(4, (w.wins / n) * barMax);
-    return `<text class="label" x="${labelW - 8}" y="${y + 15}" text-anchor="end">${esc(w.name.length > 24 ? `${w.name.slice(0, 23)}…` : w.name)}</text>
+    return `<text class="label" x="${labelW - 8}" y="${y + 15}" text-anchor="end">${esc(w.name.length > 20 ? `${w.name.slice(0, 19).trimEnd()}…` : w.name)}</text>
 <rect class="bar" x="${labelW}" y="${y + 3}" width="${width.toFixed(1)}" height="16" rx="4"><title>${esc(w.name)} · won ${w.wins} of ${n}</title></rect>
 <text class="tick" x="${(labelW + width + 8).toFixed(1)}" y="${y + 15}">${w.wins} of ${n}</text>`;
   });
