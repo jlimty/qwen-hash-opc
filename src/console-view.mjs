@@ -5,7 +5,7 @@ const clock = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Singapore', yea
   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' });
 
-import { recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
+import { isAdminActor, recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
 
 export function money(cents) {
   const total = Number(cents);
@@ -65,10 +65,10 @@ export function renderLogin(message, mode = 'secret', { notice, canReset = false
   const fields = mode === 'email'
     ? `<label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>`
-    : '<label for="token">Founder secret</label><input id="token" name="token" type="password" autocomplete="off" required>';
+    : '<label for="token">Admin secret</label><input id="token" name="token" type="password" autocomplete="off" required>';
   const hint = mode === 'email'
     ? 'Sign in with the admin account. Only that account can use this console.'
-    : 'Paste the founder secret from <code>.local/founder-token.txt</code>. It is checked locally and never stored in the page.';
+    : 'Paste the admin secret from <code>.local/admin-token.txt</code>. It is checked locally and never stored in the page.';
   return authPage('Sign in', `<h1>Admin sign-in</h1>
 <p class="muted small">${hint}</p>
 ${banner(notice, 'ok')}${banner(message)}
@@ -163,7 +163,7 @@ export function renderOverview({ state, dataset, csrf, flash }) {
   const waiting = pendingBriefs.length + openConflicts.length + unverified.length;
 
   const feed = state.audit.slice(0, 10).map((row) => {
-    const who = row.client_id ? name(row.client_id) : row.actor === 'founder' ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
+    const who = row.client_id ? name(row.client_id) : isAdminActor(row.actor) ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
     return `<li><div class="line"><span>${esc(actionLabels[row.action] ?? row.action)}</span>${outcomePill(row)}</div>
 <p class="meta">${who}${row.tender_no ? ` · <span class="num">${esc(row.tender_no)}</span>` : ''} · ${ago(row.ts)}</p></li>`;
   });
@@ -353,7 +353,7 @@ ${select('outcome', 'Outcome', opt(auditFilters.outcome, filters.outcome, 'Any o
 <section class="panel"><div class="table-wrap"><table class="stack">
 <thead><tr><th>Ref</th><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
 <tbody>${rows.length ? rows.map((row) => {
-      const who = row.client_id ? esc(clients.get(row.client_id) ?? 'Client') : row.actor === 'founder' ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
+      const who = row.client_id ? esc(clients.get(row.client_id) ?? 'Client') : isAdminActor(row.actor) ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
       return `<tr><td class="num nowrap">${recordLink('audit', row)}</td><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
     }).join('') : '<tr><td colspan="6"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
 </table></div><div class="panel-foot"><span class="muted">Showing the latest ${plural(rows.length, 'entry')}.</span></div></section>` });

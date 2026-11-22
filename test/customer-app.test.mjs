@@ -17,7 +17,7 @@ const dataset = parseTenderCsv(header + [
   ...[1, 2, 3, 4, 5, 6].map((i) => `AUD-${i},Audit certification services,Agency A,1/${i}/2025,Awarded to Suppliers,Auditor ${i},${i * 50000}.00`),
   ...[1, 2, 3, 4, 5, 6].map((i) => `EVT-${i},Event management services,Agency B,2/${i}/2025,Awarded to Suppliers,Events Co,${i * 90000}.00`),
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
+const adminToken = randomBytes(32).toString('hex');
 const base = '/functions/v1/app/assistant';
 const origin = 'https://site.example';
 const professional = feeds.find((feed) => feed.name === 'Professional Services');
@@ -36,7 +36,7 @@ const llm = async ({ name }) => {
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
+  desk = createTenderDesk({ database: db, dataset, adminToken });
   const fake = fakeNeonAuth();
   const auth = createCustomerAuth({ baseUrl: 'https://auth.example', origin, adminUserId: 'admin-user-0001', fetchImpl: fake.fetchImpl });
   handler = createCustomerHandler({ desk, dataset, auth, llm, models: { read: 'r', draft: 'd' }, database, basePath: base, secureCookies: true,
@@ -89,7 +89,7 @@ test('anonymous visitor sees open tenders and runs a price check', async () => {
   assert.equal(landing.status, 200);
   assert.match(landing.text, /RPO000ETQ26000129/);
   assert.match(landing.text, /Tenders last updated/);
-  assert.doesNotMatch(landing.text, /founder/i);
+  assert.doesNotMatch(landing.text, /admin/i);
   assert.match(landing.headers.get('content-security-policy'), /default-src 'none'/);
   const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
   assert.equal(check.status, 200);
@@ -148,7 +148,7 @@ test('sign up, profile, and home shows projects with their verification state', 
   assert.match(home.text, /Audit for a polytechnic/);
   assert.match(home.text, /Unverified: we check these against GeBIZ before a brief can cite them/);
   assert.match(home.text, /RPO000ETQ26000129/);
-  assert.doesNotMatch(home.text, /founder/i);
+  assert.doesNotMatch(home.text, /admin/i);
   assert.equal((await b.get('/')).location, `${base}/home`);
 });
 

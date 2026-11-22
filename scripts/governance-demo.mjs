@@ -10,10 +10,10 @@ try {
   const dataset = parseTenderCsv(await readFile(new URL('../data/GovernmentProcurementviaGeBIZ.csv', import.meta.url), 'utf8'));
   database = await PGlite.create();
   await initializeGovernance(database);
-  const founderToken = randomBytes(32).toString('hex');
-  const desk = createTenderDesk({ database, dataset, founderToken });
-  const founder = desk.founder(founderToken);
-  const intakeKey = await founder.issueAgentCredential({ role: 'intake' });
+  const adminToken = randomBytes(32).toString('hex');
+  const desk = createTenderDesk({ database, dataset, adminToken });
+  const admin = desk.admin(adminToken);
+  const intakeKey = await admin.issueAgentCredential({ role: 'intake' });
   const intake = await desk.agent(intakeKey.token);
   const steps = [];
   function step(action, result, expected, rule_id) {
@@ -25,8 +25,8 @@ try {
     team_size: 8, max_contract_cents: 50000000, past_projects: [{ title: 'Fictional community festival', value_cents: 15000000 }] });
   const a = step('intake_amber', await intake.invoke('create_client', profile('Amber Events Demo')), 'allowed');
   const b = step('intake_birch', await intake.invoke('create_client', profile('Birch Events Demo')), 'allowed');
-  const keyA = await founder.issueAgentCredential({ role: 'client', client_id: a.client_id });
-  const keyB = await founder.issueAgentCredential({ role: 'client', client_id: b.client_id });
+  const keyA = await admin.issueAgentCredential({ role: 'client', client_id: a.client_id });
+  const keyB = await admin.issueAgentCredential({ role: 'client', client_id: b.client_id });
   const agentA = await desk.agent(keyA.token);
   const agentB = await desk.agent(keyB.token);
   const incoming = await agentA.invoke('get_incoming_tenders', { category: 'events-community', limit: 1 });
@@ -43,13 +43,13 @@ try {
   step('unverified_project', await agentA.invoke('submit_brief', brief), 'blocked', 'G3');
   step('forged_statistics', await agentA.invoke('submit_brief', { ...brief, stat_id: `stat_${'0'.repeat(64)}` }), 'blocked', 'G4');
   step('client_impersonation', await agentA.invoke('get_client_context', { client_id: b.client_id }), 'blocked', 'G1');
-  step('founder_verifies_project', await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' }), 'allowed');
+  step('admin_verifies_project', await admin.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' }), 'allowed');
   const pending = step('submit_valid_brief', await agentA.invoke('submit_brief', brief), 'allowed');
   const conflict = step('birch_brief_escalated', await agentB.invoke('submit_brief', { ...brief, stat_id: birchPricing.stat_id, price_band: birchPricing.price_band, credentials_cited: [] }), 'escalated', 'G2');
   step('agent_cannot_approve', await agentA.invoke('approve_brief', { brief_id: pending.brief_id }), 'blocked', 'G5');
-  step('founder_resolves_conflict', await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' }), 'allowed');
-  step('founder_approves', await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' }), 'approved');
-  const state = await founder.readConsole();
+  step('admin_resolves_conflict', await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' }), 'allowed');
+  step('admin_approves', await admin.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' }), 'approved');
+  const state = await admin.readConsole();
   console.log(JSON.stringify({
     purpose: 'Local scripted backend demo with fictional clients; not a QwenWork run or a backtest accuracy result.',
     dataset_id: dataset.dataset_id,
@@ -58,7 +58,7 @@ try {
     steps,
     final_brief_status: state.briefs.find((item) => item.id === pending.brief_id).status,
     audit: state.audit.toReversed().map(({ action, outcome, rule_id, reason }) => ({ action, outcome, rule_id, reason })),
-    limitations: 'Local embedded PostgreSQL only. No hosted database, business MCP endpoint, founder UI or backtest reveal is included.',
+    limitations: 'Local embedded PostgreSQL only. No hosted database, business MCP endpoint, admin UI or backtest reveal is included.',
   }, null, 2));
 } catch (error) {
   console.error(`Governance demo failed: ${error.message}`);

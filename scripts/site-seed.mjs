@@ -8,7 +8,7 @@ import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { connectPg, createPgDatabase } from '../src/pg-database.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
-import { loadFounderToken, seedDemo, siteConnector } from './lib/seed.mjs';
+import { loadAdminToken, seedDemo, siteConnector } from './lib/seed.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 let database;
@@ -25,18 +25,18 @@ try {
   } else {
     const stateDir = resolve(values['state-dir'] ?? join(root, '.local', 'site'));
     await mkdir(stateDir, { recursive: true, mode: 0o700 });
-    const founderTokenPath = join(stateDir, 'founder-token.txt');
-    const founderToken = await loadFounderToken(founderTokenPath);
+    const adminTokenPath = join(stateDir, 'admin-token.txt');
+    const adminToken = await loadAdminToken(adminTokenPath);
     await initializeGovernance(database);
     const { rows } = await database.query('SELECT count(*)::int AS n FROM tender_desk.clients');
     if (rows[0].n > 0) throw new Error('The database already has clients; it looks seeded. Nothing was changed.');
     const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
-    const desk = createTenderDesk({ database, dataset, founderToken });
+    const desk = createTenderDesk({ database, dataset, adminToken });
     const tokenDir = join(stateDir, 'agent-tokens');
     const connectorDir = join(stateDir, 'connectors');
-    await seedDemo(desk.founder(founderToken), tokenDir, { connector: await siteConnector(root), connectorDir });
+    await seedDemo(desk.admin(adminToken), tokenDir, { connector: await siteConnector(root), connectorDir });
     console.log('Schema migrated and demo clients seeded (fictional).');
-    console.log(`Founder secret file: ${founderTokenPath}`);
+    console.log(`Admin secret file: ${adminTokenPath}`);
     console.log(`Connector credential files: ${tokenDir}`);
     console.log(`QwenWork connector configs (paste into Connectors): ${connectorDir}`);
   }

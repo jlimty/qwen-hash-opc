@@ -18,7 +18,7 @@ const csv = 'tender_no,tender_description,agency,award_date,tender_detail_status
   'NEW-1,Event management services,Agency A,1/1/2026,Awarded to Suppliers,Zebra Secret Pte,98765.43',
 ].join('\n');
 const dataset = parseTenderCsv(csv);
-const founder = { id: 'founder-user-0001', email: 'founder@example.com', password: 'correct horse battery' };
+const admin = { id: 'admin-user-0001', email: 'admin@example.com', password: 'correct horse battery' };
 const physical = '/app-d0abc123';
 const origin = 'https://site.example';
 const sessions = new Map();
@@ -36,7 +36,7 @@ before(async () => {
     const json = (status, payload, headers = {}) => res.writeHead(status, { 'Content-Type': 'application/json', ...headers }).end(JSON.stringify(payload));
     const token = /session_token=([^;]+)/.exec(req.headers.cookie ?? '')?.[1];
     if (req.url === '/sign-in/email') {
-      const user = body.password === founder.password ? (body.email === founder.email ? founder : body.email === 'other@example.com' ? { id: 'other-user-0002' } : undefined) : undefined;
+      const user = body.password === admin.password ? (body.email === admin.email ? admin : body.email === 'other@example.com' ? { id: 'other-user-0002' } : undefined) : undefined;
       if (!user) return json(401, { message: 'Invalid email or password' });
       const value = `tok-${randomBytes(8).toString('hex')}.sig`;
       sessions.set(value, { user: { id: user.id }, expiresAt: new Date(Date.now() + 3600000).toISOString() });
@@ -45,7 +45,7 @@ before(async () => {
     if (req.url === '/request-password-reset') { resetRequests.push({ ...body, origin: req.headers.origin }); return json(200, { status: true }); }
     if (req.url === '/reset-password') {
       if (body.token !== validResetToken) return json(400, { code: 'INVALID_TOKEN', message: 'Invalid token' });
-      founder.password = body.newPassword;
+      admin.password = body.newPassword;
       return json(200, { status: true });
     }
     if (req.url === '/get-session') return json(200, sessions.get(token) ?? null);
@@ -63,13 +63,13 @@ before(async () => {
   const seedSql = createPgDatabase(connectPg(postgres, databaseUrl, { max: 1, ssl: false }));
   await initializeGovernance(seedSql);
   const capability = randomBytes(32).toString('hex');
-  const seedFounder = createTenderDesk({ database: seedSql, dataset, founderToken: capability }).founder(capability);
-  const client = await seedFounder.createClient({ name: 'Edge Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project' }] });
-  clientToken = (await seedFounder.issueAgentCredential({ role: 'client', client_id: client.client_id })).token;
-  intakeToken = (await seedFounder.issueAgentCredential({ role: 'intake' })).token;
+  const seedAdmin = createTenderDesk({ database: seedSql, dataset, adminToken: capability }).admin(capability);
+  const client = await seedAdmin.createClient({ name: 'Edge Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project' }] });
+  clientToken = (await seedAdmin.issueAgentCredential({ role: 'client', client_id: client.client_id })).token;
+  intakeToken = (await seedAdmin.issueAgentCredential({ role: 'intake' })).token;
   await seedSql.close();
   backtestJson = backtestToJson(buildBacktest(dataset), dataset);
-  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: founder.id };
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id };
   app = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
 });
 after(async () => {
@@ -83,7 +83,7 @@ const call = (path, init) => app(new Request(`https://site.example${physical}${p
 const form = (path, fields, cookie, target = call) => target(path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin, ...(cookie && { Cookie: cookie }) }, body: new URLSearchParams(fields) });
 const both = (response) => response.headers.getSetCookie().map((c) => c.split(';')[0]).filter((c) => /^td_(session|csrf)=./.test(c)).join('; ');
 const cookieOf = (response, name) => response.headers.getSetCookie().map((c) => c.split(';')[0]).find((c) => c.startsWith(`${name}=`));
-const signIn = () => form('/login', { email: founder.email, password: founder.password });
+const signIn = () => form('/login', { email: admin.email, password: admin.password });
 
 test('health works without touching the database and reports configuration', async () => {
   assert.deepEqual(await (await call('/health')).json(), { ok: true, configured: true });
@@ -96,11 +96,11 @@ test('the login page asks for email and password, and only the admin account get
   const page = await (await call('/login')).text();
   assert.match(page, /name="email"/);
   assert.match(page, /name="password"/);
-  assert.doesNotMatch(page, /Founder secret/);
+  assert.doesNotMatch(page, /Admin secret/);
   assert.match(page, new RegExp(`action="${publicBase}/login"`));
-  assert.equal((await form('/login', { email: founder.email, password: 'wrong' })).status, 401);
-  assert.equal((await form('/login', { email: 'other@example.com', password: founder.password })).status, 401);
-  assert.equal((await form('/login', { token: founder.password })).status, 401);
+  assert.equal((await form('/login', { email: admin.email, password: 'wrong' })).status, 401);
+  assert.equal((await form('/login', { email: 'other@example.com', password: admin.password })).status, 401);
+  assert.equal((await form('/login', { token: admin.password })).status, 401);
 });
 
 test('the console works behind the gateway prefix with Neon Auth sessions, Secure cookies and rewritten links', async () => {
@@ -186,23 +186,23 @@ test('intake through the site returns a connector pointing at this site', async 
 
 test('auth or database outages become safe responses without leaking details', async () => {
   const via = (instance) => (path, init) => instance(new Request(`https://x${physical}${path}`, init));
-  const down = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: 'http://127.0.0.1:1', TD_ADMIN_USER_ID: founder.id })[name], csv, backtestJson, origin });
-  const signInDown = await form('/login', { email: founder.email, password: founder.password }, undefined, via(down));
+  const down = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: 'http://127.0.0.1:1', TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
+  const signInDown = await form('/login', { email: admin.email, password: admin.password }, undefined, via(down));
   assert.equal(signInDown.status, 503);
   assert.doesNotMatch(await signInDown.text(), /127\.0\.0\.1|ECONNREFUSED/);
 
-  const broken = createSiteApp({ openDatabase: openFast, env: (name) => ({ TD_DB_URL: 'postgres://u:p@127.0.0.1:1/db', TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: founder.id })[name], csv, backtestJson, origin });
-  const cookie = both(await form('/login', { email: founder.email, password: founder.password }, undefined, via(broken)));
+  const broken = createSiteApp({ openDatabase: openFast, env: (name) => ({ TD_DB_URL: 'postgres://u:p@127.0.0.1:1/db', TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
+  const cookie = both(await form('/login', { email: admin.email, password: admin.password }, undefined, via(broken)));
   const response = await via(broken)('/', { headers: { Cookie: cookie } });
   assert.equal(response.status, 503);
   assert.doesNotMatch(await response.text(), /127\.0\.0\.1|ECONNREFUSED|postgres:/);
 });
 
 test('pasted secrets with stray whitespace or quotes still work', async () => {
-  const padded = { TD_DB_URL: `"${databaseUrl}"\n`, TD_AUTH_URL: `\n  ${authUrl}\n`, TD_ADMIN_USER_ID: ` ${founder.id}\n` };
+  const padded = { TD_DB_URL: `"${databaseUrl}"\n`, TD_AUTH_URL: `\n  ${authUrl}\n`, TD_ADMIN_USER_ID: ` ${admin.id}\n` };
   const instance = createSiteApp({ openDatabase, env: (name) => padded[name], csv, backtestJson, origin });
   assert.equal((await instance(new Request(`https://x${physical}/login`))).status, 200);
-  const signedIn = await form('/login', { email: founder.email, password: founder.password }, undefined, (path, init) => instance(new Request(`https://x${physical}${path}`, init)));
+  const signedIn = await form('/login', { email: admin.email, password: admin.password }, undefined, (path, init) => instance(new Request(`https://x${physical}${path}`, init)));
   assert.equal(signedIn.status, 303);
 });
 
@@ -211,7 +211,7 @@ test('a value in the wrong field is diagnosed by scheme and length only, never l
   const original = console.error;
   console.error = (...args) => logged.push(args.join(' '));
   try {
-    const swapped = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: databaseUrl, TD_ADMIN_USER_ID: founder.id })[name], csv, backtestJson, origin });
+    const swapped = createSiteApp({ openDatabase, env: (name) => ({ TD_DB_URL: databaseUrl, TD_AUTH_URL: databaseUrl, TD_ADMIN_USER_ID: admin.id })[name], csv, backtestJson, origin });
     const response = await swapped(new Request(`https://x${physical}/login`));
     assert.equal(response.status, 503);
   } finally { console.error = original; }
@@ -221,7 +221,7 @@ test('a value in the wrong field is diagnosed by scheme and length only, never l
 });
 
 const fresh = (overrides = {}) => {
-  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: founder.id, ...overrides };
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id, ...overrides };
   const instance = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
   return (path, init) => instance(new Request(`https://x${physical}${path}`, init));
 };
@@ -233,13 +233,13 @@ test('forgot password: linked from sign-in, answers every address the same way, 
   const formPage = await target('/forgot');
   assert.equal(formPage.status, 200);
   assert.match(await formPage.text(), /name="email"/);
-  const known = await send(target, '/forgot', { email: founder.email });
+  const known = await send(target, '/forgot', { email: admin.email });
   const unknown = await send(target, '/forgot', { email: 'nobody@example.com' });
   assert.equal(known.status, 200);
   assert.equal(unknown.status, 200);
   assert.equal(await known.text(), await unknown.text(), 'the response must not reveal whether an account exists');
   const last = resetRequests.at(-2);
-  assert.equal(last.email, founder.email);
+  assert.equal(last.email, admin.email);
   assert.equal(last.redirectTo, `${origin}${publicBase}/reset`);
   assert.equal(last.origin, origin);
 });
@@ -262,7 +262,7 @@ test('reset page rejects malformed or missing tokens without echoing them, and v
   const mismatch = await send(target, '/reset', { token: validResetToken, password: 'a-fresh-password-1', confirm: 'a-fresh-password-2' });
   assert.equal(mismatch.status, 400);
   assert.match(await mismatch.text(), /did not match/);
-  assert.equal(founder.password, 'correct horse battery', 'a rejected attempt must not change the password');
+  assert.equal(admin.password, 'correct horse battery', 'a rejected attempt must not change the password');
 });
 
 test('reset round trip: a good token sets the new password, the old one stops working, and a bad or reused token is refused', async () => {
@@ -273,17 +273,17 @@ test('reset round trip: a good token sets the new password, the old one stops wo
   const done = await send(target, '/reset', { token: validResetToken, password: 'a-fresh-password-1', confirm: 'a-fresh-password-1' });
   assert.equal(done.status, 200);
   assert.match(await done.text(), /Password changed\. Sign in with your new password\./);
-  assert.equal((await form('/login', { email: founder.email, password: 'a-fresh-password-1' })).status, 303);
-  assert.equal(founder.password, 'a-fresh-password-1');
+  assert.equal((await form('/login', { email: admin.email, password: 'a-fresh-password-1' })).status, 303);
+  assert.equal(admin.password, 'a-fresh-password-1');
 });
 
 test('forgot and reset requests are throttled, and a Neon outage is reported plainly instead of pretending the email was sent', async () => {
   const target = fresh();
   const statuses = [];
-  for (let i = 0; i < 6; i++) statuses.push((await send(target, '/forgot', { email: founder.email })).status);
+  for (let i = 0; i < 6; i++) statuses.push((await send(target, '/forgot', { email: admin.email })).status);
   assert.deepEqual(statuses, [200, 200, 200, 200, 200, 429]);
   const down = fresh({ TD_AUTH_URL: 'http://127.0.0.1:1' });
-  const outage = await send(down, '/forgot', { email: founder.email });
+  const outage = await send(down, '/forgot', { email: admin.email });
   assert.equal(outage.status, 503);
   const text = await outage.text();
   assert.match(text, /temporarily unavailable/);

@@ -29,8 +29,8 @@ try {
   const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
   database = createPgDatabase(connectPg(postgres, databaseUrl, { max: 1 }));
   const capability = randomBytes(32).toString('hex');
-  const desk = createTenderDesk({ database, dataset, founderToken: capability });
-  const admin = desk.founder(capability);
+  const desk = createTenderDesk({ database, dataset, adminToken: capability });
+  const admin = desk.admin(capability);
   const handle = createMcpWebHandler({ authenticate: (bearer) => desk.agent(bearer) });
 
   const rpc = async (bearer, method, params) => (await handle(new Request('https://rehearsal.invalid/mcp', { method: 'POST', headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))).json();

@@ -18,7 +18,7 @@
 - No agent tool returns risk level, risk facts, another client's identity, or any hold-out supplier/amount.
 - Console: server-rendered, **zero client JavaScript**, CSP unchanged, every POST checks CSRF; filters use plain GET forms with an explicit "Apply" button.
 - No LLM calls in this code.
-- Agent-facing copy says "admin", never "founder". Internal function names may keep "founder".
+- Agent-facing copy says "admin" for the person who runs Tender Desk, everywhere.
 - Reference format `PREFIX00001` (5-digit zero pad); prefixes `CLI`, `PRJ`, `BRF`, `CON`, `AUD`.
 - Risk thresholds: `thin_evidence` n < 15; `wide_band` high > 4 × low; level 0 → low, 1–2 → medium, 3+ → high.
 - Production writes (reseed) happen only with the admin's explicit yes at the time. The implementer never runs a production reseed.
@@ -50,7 +50,7 @@
   - `REVOKE ALL` on the new sequences from PUBLIC, as `001` does.
 
 - [ ] **Step 1: Write failing tests** in `test/governance-schema.test.mjs`:
-  - `002 adds reference numbers that increase per table`: create two clients via `founder.createClient`, assert `reference_number` values are 1 and 2.
+  - `002 adds reference numbers that increase per table`: create two clients via `admin.createClient`, assert `reference_number` values are 1 and 2.
   - `initializeGovernance is idempotent`: call it twice on one PGlite; no error; column count unchanged.
   - `002 backfills existing rows`: run only `001` SQL, insert a client row by SQL, then `initializeGovernance`; assert that row has `reference_number = 1`.
 - [ ] **Step 2: Run** `node --test test/governance-schema.test.mjs` — expect FAIL (column missing).
@@ -92,7 +92,7 @@
   - `connectorConfig({ name: string, url: string, origin: string, timeout: number, token: string }) → { mcpServers: { [name]: { url, headers: { Authorization: 'Bearer <token>', Origin: origin }, timeout } } }`.
   - `connectorSlug(clientName: string) → string` — lowercase ASCII, non-alphanumerics → `-`, collapsed and trimmed, max 40 chars, prefixed `tender-desk-`; empty → `tender-desk-client`.
   - `createTenderDesk` option `connector: { url, origin, timeout }`. Site: `{ url: \`${origin}${publicBase}/mcp\`, origin, timeout: 60 }`. Local server: `{ url: 'http://127.0.0.1:<mcp port>/mcp', origin: 'http://127.0.0.1:<mcp port>', timeout: 60 }`. Tests: any fixed values.
-  - Intake `create_client` result adds `client_reference` (`CLI…`), `connector_name`, `connector_config`. Founder `createClient` is unchanged (no credential).
+  - Intake `create_client` result adds `client_reference` (`CLI…`), `connector_name`, `connector_config`. Admin `createClient` is unchanged (no credential).
   - `clientProfileSchema.past_projects[]` adds optional `gebiz_tender_no: text(100)`, stored in `projects.gebiz_tender_no`.
   - Duplicate name → `blocked('G1', 'That company name is not available. If this is your company, contact Tender Desk.')`.
   - Audit summary for `create_client` gains `client_reference` and `credential_id`; add both keys to the `record()` whitelist. The token key is never whitelisted.
@@ -104,7 +104,7 @@
   - `duplicate name gets the neutral message`.
   - In `test/site-app.test.mjs`: `site connector url uses origin and publicBase`.
 - [ ] **Step 2: Run** — FAIL.
-- [ ] **Step 3: Implement.** In `createClient`'s agent path, issue the credential with the same SQL `issueAgentCredential` uses, inside the same transaction; build the config with `connectorConfig`. Keep `createClient(tx, input)` for the founder path; add `createClientWithConnector(tx, input, connector)` for intake.
+- [ ] **Step 3: Implement.** In `createClient`'s agent path, issue the credential with the same SQL `issueAgentCredential` uses, inside the same transaction; build the config with `connectorConfig`. Keep `createClient(tx, input)` for the admin path; add `createClientWithConnector(tx, input, connector)` for intake.
 - [ ] **Step 4: Run** `npm test` — PASS (update any existing test that asserted the old duplicate message).
 - [ ] **Step 5: Commit** `"Issue a client connector at intake"`
 
@@ -120,13 +120,13 @@
 - `request_pricing`: no hold insert or check; same outputs as today minus escalation. Description drops the hold sentence and says the band is open to every client.
 - `submit_brief` order: G4 → G3 → G1 → G2. G2 inserts the hold (`ON CONFLICT DO NOTHING`), locks it, then: own + `held` → save brief; `stopped` → `blocked('G2', 'Tender Desk has stopped advising on this tender.')`; other holder → upsert conflict as today, **no brief saved**, return `{ outcome: 'escalated', rule_id: 'G2', conflict_id, reason: 'Tender Desk already advises another client on this tender. The admin has been notified. No advice can be given to you on it.' }`.
 - G1: `namesOtherClient(content: string, names: string[]) → boolean` exported from `governance-agent.mjs`: NFKC + lowercase both sides, escape regex metacharacters in the name, match with `(?<![\p{L}\p{N}])name(?![\p{L}\p{N}])` (`u` flag).
-- `get_policies` G2 text exactly: title `Exclusive advice`, policy `Tender Desk advises only one client per tender. A second client is escalated to the admin; advice already given is never transferred.` Replace "founder" with "admin" in all six policies.
+- `get_policies` G2 text exactly: title `Exclusive advice`, policy `Tender Desk advises only one client per tender. A second client is escalated to the admin; advice already given is never transferred.` Replace "admin" with "admin" in all six policies.
 
 - [ ] **Step 1: Write failing tests:**
   - `two clients can both get the band`: A and B `request_pricing` on one tender → both `allowed`, identical `price_band`.
   - `second brief escalates and is not saved`: A submits → `pending_approval`; B submits → `escalated`, `G2`; `briefs` has no row for B; `conflicts` has one open row.
   - `blocked brief takes no hold`: A submits citing an unverified project → `G3`; then B submits valid → `pending_approval` (B is holder).
-  - `holder resubmits after decline`: A submits, founder declines, A submits again → `pending_approval`, no conflict row.
+  - `holder resubmits after decline`: A submits, admin declines, A submits again → `pending_approval`, no conflict row.
   - `stopped tender refuses briefs but still prices`.
   - `G1 matches whole words only`: with another client named `Birch Events`, content `"Birch Eventsful planning"` → not blocked; content `"we met birch events last year"` → `blocked`, `G1`.
   - `G1 tolerates regex characters`: other client `A+B Events (Pte.) Ltd`; content containing that exact name → blocked; no throw.
@@ -205,7 +205,7 @@
     - unknown: `Not found in GeBIZ awards 2021-04 to 2026-03.` → `no_match`
     - hold-out not revealed: `In the backtest hold-out; not checked until revealed.` → `not_checked`
     - else: `Tender ${no} exists · awarded ${last_award_date} · ${agency}`, `Agency claimed: ${claimed ?? 'not given'}`, `Supplier on record: ${names joined ' / '} — ${matches ? 'matches' : 'does not match'} "${clientName}"`, `Claimed ${formatSgd|'no value'} · awarded ${formatSgd(matching row or total)}` → `match` iff a supplier normalises equal.
-  - `verifyProject({ project_id, verified, note? })`: `note: text(500)` optional in schema; the founder op computes the cross-check (needs `dataset` and revealed set, both already in `createTenderDesk`) and returns `blocked('G3', 'A note is required to verify a project without a GeBIZ match.')` when verifying, result ≠ `match`, and no note. Sets `verification_note`, `verified_at` (null on unverify). Audit summary adds `project_reference`, `check_result`, `note` (whitelist).
+  - `verifyProject({ project_id, verified, note? })`: `note: text(500)` optional in schema; the admin op computes the cross-check (needs `dataset` and revealed set, both already in `createTenderDesk`) and returns `blocked('G3', 'A note is required to verify a project without a GeBIZ match.')` when verifying, result ≠ `match`, and no note. Sets `verification_note`, `verified_at` (null on unverify). Audit summary adds `project_reference`, `check_result`, `note` (whitelist).
 
 - [ ] **Step 1: Write failing tests** with a fixture dataset row `OLD-9` suppliers `CEDAR MARKETS PTE. LTD.` (S$90,000) and `OTHER CO` (S$10,000):
   - `normaliseCompany('Cedar Markets Pte. Ltd.') === normaliseCompany('CEDAR MARKETS')`.
@@ -277,9 +277,9 @@
 - Analyst: pricing is open (no hold, no confirmation needed for pricing); **confirm before `submit_brief`** with: "Submitting takes the advice slot for this tender. If Tender Desk already advises another client on it, you will be escalated to the admin and no advice can be given."; escalation handled on `submit_brief`; new section "Where's my brief?" → `get_client_context`, report status, show approved content or decline reason.
 - Scout: remove "it takes an exclusive hold"; keep "Never call `request_pricing`".
 - Proposal: if `get_client_context.briefs` has an approved brief for the tender, use its recommendation.
-- All skills: "founder" → "admin".
+- All skills: "admin" → "admin".
 
-- [ ] **Step 1: Write failing test** `test/skills.test.mjs`: each SKILL.md has frontmatter `name` matching its folder; no file contains `founder`; analyst contains `Where's my brief`; intake contains `It will not be shown again.`; scout does not contain `exclusive hold`.
+- [ ] **Step 1: Write failing test** `test/skills.test.mjs`: each SKILL.md has frontmatter `name` matching its folder; no file contains `admin`; analyst contains `Where's my brief`; intake contains `It will not be shown again.`; scout does not contain `exclusive hold`.
 - [ ] **Step 2: Run** — FAIL.
 - [ ] **Step 3: Edit the skills.**
 - [ ] **Step 4: Run** `npm test` — PASS.
@@ -313,7 +313,7 @@
 - Modify: `HANDOFF.md`, `PRODUCT.md`
 
 - [ ] **Step 1:** Rewrite HANDOFF storyline to spec §8; replace the reset section with: (1) the admin's yes; (2) `npm run site:build` and redeploy; (3) `npm run site:reseed -- --db-file .local/site/db-unpooled.url --yes-wipe-tender-desk`; (4) re-paste Birch connector in QwenWork; (5) `neon branches create --name demo-baseline-v2 --parent production`; (6) reset before recording = `neon branches restore production demo-baseline-v2 --preserve-under-name production-before-reset`. Mark old `demo-baseline` retired. Add known limitations from spec.
-- [ ] **Step 2:** PRODUCT.md: hosted, admin (not founder), backtest built, self-service SMEs in QwenWork chat, chat is the SME UI.
+- [ ] **Step 2:** PRODUCT.md: hosted, admin (not admin), backtest built, self-service SMEs in QwenWork chat, chat is the SME UI.
 - [ ] **Step 3: Run** `npm test` — PASS.
 - [ ] **Step 4: Commit** `"Update handoff and product docs for the self-service journey"`
 

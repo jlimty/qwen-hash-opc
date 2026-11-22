@@ -15,15 +15,15 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   ...[1, 2, 3, 4, 5].map((i) => `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Historical supplier,${i * 100}`),
   ...Array.from({ length: 12 }, (_, i) => `NEW-${i + 1},Event management services,Agency A,1/1/2026,Awarded to Suppliers,Hidden winner,9876543`),
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let db; let desk; let founder; let server; let url; let sequence = 0;
+const adminToken = randomBytes(32).toString('hex');
+let db; let desk; let admin; let server; let url; let sequence = 0;
 const clients = [];
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
-  founder = desk.founder(founderToken);
+  desk = createTenderDesk({ database: db, dataset, adminToken });
+  admin = desk.admin(adminToken);
   server = createTenderDeskServer({ authenticate: desk.agent });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -39,10 +39,10 @@ const profile = (name) => ({ name, capabilities: 'Events', categories: ['events-
   past_projects: [{ title: 'Verified festival' }] });
 async function provision() {
   const suffix = randomUUID().slice(0, 8);
-  const a = await founder.createClient(profile(`Amber ${suffix}`));
-  const b = await founder.createClient(profile(`Birch ${suffix}`));
-  return { a, b, keyA: await founder.issueAgentCredential({ role: 'client', client_id: a.client_id }),
-    keyB: await founder.issueAgentCredential({ role: 'client', client_id: b.client_id }), tender_no: `NEW-${++sequence}` };
+  const a = await admin.createClient(profile(`Amber ${suffix}`));
+  const b = await admin.createClient(profile(`Birch ${suffix}`));
+  return { a, b, keyA: await admin.issueAgentCredential({ role: 'client', client_id: a.client_id }),
+    keyB: await admin.issueAgentCredential({ role: 'client', client_id: b.client_id }), tender_no: `NEW-${++sequence}` };
 }
 async function connect(token) {
   const client = new Client({ name: 'tender-desk-business-test', version: '1.0.0' });
@@ -67,17 +67,17 @@ function raw({ method = 'POST', headers = {}, body = method === 'POST' ? '{}' : 
   });
 }
 
-test('requires a stored agent credential: missing, wrong, founder and revoked tokens get 401', async () => {
+test('requires a stored agent credential: missing, wrong, admin and revoked tokens get 401', async () => {
   const c = await provision();
   for (const method of ['GET', 'POST', 'DELETE']) {
-    for (const authorization of [undefined, 'Bearer wrong', `Bearer ${founderToken}`, `Basic ${c.keyA.token}`]) {
+    for (const authorization of [undefined, 'Bearer wrong', `Bearer ${adminToken}`, `Basic ${c.keyA.token}`]) {
       const result = await raw({ method, headers: authorization ? { Authorization: authorization } : {} });
       assert.equal(result.status, 401);
-      assert.ok(!result.text.includes(founderToken));
+      assert.ok(!result.text.includes(adminToken));
     }
   }
   assert.equal((await raw({ target: new URL(`${url}?token=${c.keyA.token}`) })).status, 401);
-  await founder.revokeAgentCredential({ credential_id: c.keyA.credential_id });
+  await admin.revokeAgentCredential({ credential_id: c.keyA.credential_id });
   assert.equal((await raw({ headers: { Authorization: `Bearer ${c.keyA.token}` } })).status, 401);
 });
 
@@ -92,7 +92,7 @@ test('rejects foreign hosts, foreign origins, unknown paths and unsupported meth
   assert.equal((await raw({ headers: { ...auth, }, body: 'x'.repeat(300000) })).status, 413);
 });
 
-test('each connector sees only the tools of its credential and no identity or founder fields', async () => {
+test('each connector sees only the tools of its credential and no identity or admin fields', async () => {
   const c = await provision();
   const agent = await connect(c.keyA.token);
   const { tools } = await agent.listTools();
@@ -104,7 +104,7 @@ test('each connector sees only the tools of its credential and no identity or fo
     assert.equal(tool.inputSchema.additionalProperties, false);
     assert.equal('client_id' in tool.inputSchema.properties, false);
   }
-  const intake = await connect((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await connect((await admin.issueAgentCredential({ role: 'intake' })).token);
   assert.deepEqual((await intake.listTools()).tools.map((tool) => tool.name).sort(), ['create_client', 'get_policies']);
 });
 
@@ -120,7 +120,7 @@ test('an agent can only act as its own client, and spoof attempts are audited wi
   assert.doesNotMatch(JSON.stringify(spoof.data), new RegExp(c.b.client_id));
   const missing = await call(agentA, 'approve_brief', { brief_id: randomUUID() }).catch((error) => ({ error }));
   assert.ok(missing.error || missing.isError);
-  const audit = JSON.stringify((await founder.readConsole()).audit);
+  const audit = JSON.stringify((await admin.readConsole()).audit);
   assert.match(audit, /G1/);
   assert.doesNotMatch(audit, /sensitive-http-marker/);
 });
@@ -139,7 +139,7 @@ test('competing clients over HTTP: both priced, one brief escalated with no pric
   assert.doesNotMatch(JSON.stringify(escalated.data), /price_band|stat_id|low_cents|Amber|Birch|client_id/);
 });
 
-test('the full agent journey works through MCP and ends pending founder approval', async () => {
+test('the full agent journey works through MCP and ends pending admin approval', async () => {
   const c = await provision();
   const agent = await connect(c.keyA.token);
   const incoming = await call(agent, 'get_incoming_tenders', { limit: 3 });
@@ -164,7 +164,7 @@ test('tool failures do not leak internal details', async () => {
   assert.doesNotMatch(result.content[0].text, /at .*\.mjs|node_modules|SELECT |tender_desk\./);
 });
 
-test('the server module receives only the authentication function, never founder actions', () => {
+test('the server module receives only the authentication function, never admin actions', () => {
   assert.throws(() => createTenderDeskServer({ desk }), /authenticate/i);
 });
 
@@ -204,7 +204,7 @@ test('local Origins are accepted, and intake tools carry no client identity fiel
   const auth = { Authorization: `Bearer ${c.keyA.token}`, Origin: origin, Accept: 'application/json, text/event-stream' };
   const init = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} });
   assert.equal((await raw({ headers: auth, body: init })).status, 200);
-  const intake = await connect((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await connect((await admin.issueAgentCredential({ role: 'intake' })).token);
   const create = (await intake.listTools()).tools.find((tool) => tool.name === 'create_client');
   assert.equal('client_id' in create.inputSchema.properties, false);
 });
@@ -213,7 +213,7 @@ test('a connected client loses access immediately when its credential is revoked
   const c = await provision();
   const agent = await connect(c.keyA.token);
   assert.equal((await call(agent, 'get_client_context')).data.outcome, 'allowed');
-  await founder.revokeAgentCredential({ credential_id: c.keyA.credential_id });
+  await admin.revokeAgentCredential({ credential_id: c.keyA.credential_id });
   await assert.rejects(call(agent, 'get_client_context'));
 });
 

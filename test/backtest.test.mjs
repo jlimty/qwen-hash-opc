@@ -17,15 +17,15 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   'NEW-3,Event management services,Agency A,1/1/2026,Awarded to No Suppliers,,0',
   'NEW-4,Lorry rental,Agency Z,1/1/2026,Awarded to Suppliers,Lone Lorry,1000.00',
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let db; let desk; let founder; let server; let port;
+const adminToken = randomBytes(32).toString('hex');
+let db; let desk; let admin; let server; let port;
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
-  founder = desk.founder(founderToken);
-  server = createConsoleServer({ founder: desk.founder, founderToken, dataset });
+  desk = createTenderDesk({ database: db, dataset, adminToken });
+  admin = desk.admin(adminToken);
+  server = createConsoleServer({ admin: desk.admin, adminToken, dataset });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   port = server.address().port;
@@ -50,7 +50,7 @@ function http({ method = 'GET', path = '/', headers = {}, form } = {}) {
   });
 }
 async function login() {
-  const result = await http({ method: 'POST', path: '/login', headers: { Origin: `http://127.0.0.1:${port}` }, form: { token: founderToken } });
+  const result = await http({ method: 'POST', path: '/login', headers: { Origin: `http://127.0.0.1:${port}` }, form: { token: adminToken } });
   const cookie = result.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
   const page = await http({ path: '/', headers: { Cookie: cookie } });
   return { cookie, csrf: /name="csrf" value="([a-f0-9]{64})"/.exec(page.text)[1], page };
@@ -70,8 +70,8 @@ test('scores only hold-out tenders that have an amount and at least five compara
   assert.equal(first.incumbent, 'Past supplier');
 });
 
-test('hides actual winners and amounts from the console read model until the founder reveals them', async () => {
-  const before = await founder.readConsole();
+test('hides actual winners and amounts from the console read model until the admin reveals them', async () => {
+  const before = await admin.readConsole();
   assert.equal(before.backtest.revealed, 0);
   assert.equal(before.backtest.pending.length, 2);
   const text = JSON.stringify(before.backtest);
@@ -85,16 +85,16 @@ test('hides actual winners and amounts from the console read model until the fou
 });
 
 test('revealing one tender shows the real award, scores it, and is recorded in the append-only audit log', async () => {
-  const result = await founder.revealBacktest({ tender_no: 'NEW-1' });
+  const result = await admin.revealBacktest({ tender_no: 'NEW-1' });
   assert.equal(result.outcome, 'allowed');
-  const state = await founder.readConsole();
+  const state = await admin.readConsole();
   assert.equal(state.backtest.revealed, 1);
   assert.equal(state.backtest.rows[0].prediction.actual_suppliers[0], 'Zebra Secret Pte');
   assert.equal(state.backtest.rows[0].in_band, false);
   assert.equal(state.backtest.rows[0].incumbent_won, false);
   assert.doesNotMatch(JSON.stringify(state.backtest.pending), /Zebra|actual/);
   const audit = state.audit.find((row) => row.action === 'reveal_backtest');
-  assert.equal(audit.actor, 'founder');
+  assert.equal(audit.actor, 'admin');
   assert.equal(audit.tender_no, 'NEW-1');
   assert.equal(audit.outcome, 'allowed');
   await assert.rejects(db.query("DELETE FROM tender_desk.audit_log WHERE action='reveal_backtest'"), { code: '55000' });
@@ -102,19 +102,19 @@ test('revealing one tender shows the real award, scores it, and is recorded in t
 
 test('blocks revealing a tender that is not a scoreable hold-out tender, and rejects malformed input', async () => {
   for (const tender_no of ['OLD-1', 'NEW-3', 'NEW-4', 'NOPE']) {
-    const result = await founder.revealBacktest({ tender_no });
+    const result = await admin.revealBacktest({ tender_no });
     assert.equal(result.outcome, 'blocked', tender_no);
     assert.equal(result.rule_id, 'G6');
   }
-  const malformed = await founder.revealBacktest({ tender_no: 'NEW-2', extra: true });
+  const malformed = await admin.revealBacktest({ tender_no: 'NEW-2', extra: true });
   assert.equal(malformed.outcome, 'blocked');
   assert.equal(malformed.rule_id, 'VALIDATION');
-  assert.equal((await founder.readConsole()).backtest.revealed, 1);
+  assert.equal((await admin.readConsole()).backtest.revealed, 1);
 });
 
-test('agent tools never return outcomes, even after the founder reveals them', async () => {
-  const client = await founder.createClient({ name: 'Wall Test Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 1000000 });
-  const key = await founder.issueAgentCredential({ role: 'client', client_id: client.client_id });
+test('agent tools never return outcomes, even after the admin reveals them', async () => {
+  const client = await admin.createClient({ name: 'Wall Test Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 1000000 });
+  const key = await admin.issueAgentCredential({ role: 'client', client_id: client.client_id });
   const agent = await desk.agent(key.token);
   const incoming = JSON.stringify(await agent.invoke('get_incoming_tenders', {}));
   assert.doesNotMatch(incoming, /Zebra Secret|9876543/);
@@ -134,7 +134,7 @@ test('the console reveal button works over HTTP, then a reveal-all completes the
   const unconfirmed = await post(session, '/actions/backtest/all/reveal');
   assert.equal(unconfirmed.status, 303);
   assert.equal(unconfirmed.headers.location, '/backtest/reveal-all');
-  assert.equal((await founder.readConsole()).backtest.revealed, 1, 'an unconfirmed reveal-all must change nothing');
+  assert.equal((await admin.readConsole()).backtest.revealed, 1, 'an unconfirmed reveal-all must change nothing');
   const confirmPage = await http({ path: '/backtest/reveal-all', headers: { Cookie: session.cookie } });
   assert.equal(confirmPage.status, 200);
   assert.match(confirmPage.text, /This cannot be undone/);
@@ -151,15 +151,15 @@ test('the console reveal button works over HTTP, then a reveal-all completes the
   assert.match(page.text, /50%/);
   assert.match(page.text, /by design/);
   assert.doesNotMatch(page.text, /Reveal all/);
-  const state = await founder.readConsole();
+  const state = await admin.readConsole();
   assert.equal(state.backtest.band_hits, 1);
   assert.equal(state.backtest.incumbent_hits, 1);
   assert.equal(state.backtest.band_rate, 0.5);
 });
 
 test('reveal state survives a restart because it is derived from the audit log', async () => {
-  const again = createTenderDesk({ database: db, dataset, founderToken });
-  const state = await again.founder(founderToken).readConsole();
+  const again = createTenderDesk({ database: db, dataset, adminToken });
+  const state = await again.admin(adminToken).readConsole();
   assert.equal(state.backtest.revealed, 2);
   assert.equal(state.backtest.pending.length, 0);
 });

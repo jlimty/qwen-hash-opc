@@ -35,9 +35,9 @@ const successText = { 'brief/approve': 'Brief approved.', 'brief/decline': 'Brie
   'conflict/stop': 'Conflict resolved: advice on this tender has stopped.', 'project/verify': 'Project verified.', 'project/unverify': 'Project verification revoked.', 'credential/revoke': 'Connector revoked.' };
 const briefBackPattern = /^\/briefs(?:\?(?:status|risk|sort)=[a-z]+(?:&(?:status|risk|sort)=[a-z]+){0,2})?$/;
 
-export function createSecretAuth(founderToken) {
-  const expected = digest(founderToken);
-  const key = digest(`td-console-session:${founderToken}`);
+export function createSecretAuth(adminToken) {
+  const expected = digest(adminToken);
+  const key = digest(`td-console-session:${adminToken}`);
   const sign = (value) => createHmac('sha256', key).update(value).digest('hex');
   const revoked = new Set();
   return {
@@ -57,10 +57,10 @@ export function createSecretAuth(founderToken) {
   };
 }
 
-export function createConsoleHandler({ founder, founderToken, auth, dataset, basePath = '', secureCookies = false }) {
-  if (typeof founder !== 'function') throw new Error('A founder function is required.');
-  const ops = founder(founderToken);
-  const provider = auth ?? createSecretAuth(founderToken);
+export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false }) {
+  if (typeof admin !== 'function') throw new Error('A admin function is required.');
+  const ops = admin(adminToken);
+  const provider = auth ?? createSecretAuth(adminToken);
   const canReset = typeof provider.requestReset === 'function' && typeof provider.resetPassword === 'function';
   const loginPage = (message, notice) => renderLogin(message, provider.mode, { notice, canReset });
   let failures = [];

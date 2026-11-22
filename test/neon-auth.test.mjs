@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import test, { after, before } from 'node:test';
 import { createNeonAuth, signUpAdmin } from '../src/neon-auth.mjs';
 
-const founder = { id: 'founder-user-0001', email: 'founder@example.com', password: 'correct horse battery' };
+const admin = { id: 'admin-user-0001', email: 'admin@example.com', password: 'correct horse battery' };
 const sessions = new Map();
 const seen = [];
 let server; let base;
@@ -17,7 +17,7 @@ before(async () => {
     seen.push({ method: req.method, path: req.url, origin: req.headers.origin });
     const json = (status, payload, headers = {}) => res.writeHead(status, { 'Content-Type': 'application/json', ...headers }).end(JSON.stringify(payload));
     if (req.url === '/sign-in/email') {
-      const user = body.email === founder.email && body.password === founder.password ? founder
+      const user = body.email === admin.email && body.password === admin.password ? admin
         : body.email === 'other@example.com' ? { id: 'other-user-0002', email: 'other@example.com' } : undefined;
       if (!user) return json(401, { message: 'Invalid email or password' });
       const token = `tok-${user.id}.sig`;
@@ -49,11 +49,11 @@ before(async () => {
 after(() => { server.closeAllConnections(); server.close(); });
 
 const form = (fields) => new URLSearchParams(fields);
-const make = () => createNeonAuth({ baseUrl: base, adminUserId: founder.id, origin: 'https://site.example' });
+const make = () => createNeonAuth({ baseUrl: base, adminUserId: admin.id, origin: 'https://site.example' });
 
 test('the admin signs in and the session is verified, then revoked on logout', async () => {
   const auth = make();
-  const result = await auth.login(form({ email: founder.email, password: founder.password }));
+  const result = await auth.login(form({ email: admin.email, password: admin.password }));
   assert.ok(result.session);
   assert.equal(result.maxAge, 28800);
   assert.equal(await auth.verify(result.session), true);
@@ -71,13 +71,13 @@ test('a valid Neon Auth user who is not the admin is refused, so open sign-up gr
 
 test('wrong passwords, empty input, forged or malformed sessions are all rejected', async () => {
   const auth = make();
-  assert.equal(await auth.login(form({ email: founder.email, password: 'wrong' })), undefined);
+  assert.equal(await auth.login(form({ email: admin.email, password: 'wrong' })), undefined);
   assert.equal(await auth.login(form({ email: '', password: '' })), undefined);
   for (const forged of ['', 'nope', 'a~b', '%E0%A4%A~x']) assert.equal(await auth.verify(forged), false, forged);
 });
 
 test('configuration is validated and sign-up returns the new user id', async () => {
-  assert.throws(() => createNeonAuth({ baseUrl: 'ftp://x', adminUserId: founder.id, origin: 'https://s' }), /base URL/);
+  assert.throws(() => createNeonAuth({ baseUrl: 'ftp://x', adminUserId: admin.id, origin: 'https://s' }), /base URL/);
   assert.throws(() => createNeonAuth({ baseUrl: base, adminUserId: '', origin: 'https://s' }), /admin user ID/);
   assert.deepEqual(await signUpAdmin({ baseUrl: base, origin: 'https://site.example', email: 'a@b.co', password: 'pw-pw-pw-pw' }), { userId: 'new-user-0003', emailVerified: false });
 });
@@ -87,7 +87,7 @@ test('the admin setup script creates the account from a password file and never 
   const { mkdtemp, readFile, rm, stat, writeFile } = await import('node:fs/promises');
   const { tmpdir } = await import('node:os');
   const { join } = await import('node:path');
-  const dir = await mkdtemp(join(tmpdir(), 'td-founder-'));
+  const dir = await mkdtemp(join(tmpdir(), 'td-admin-'));
   try {
     await writeFile(join(dir, 'auth-url'), `${base}\n`);
     await writeFile(join(dir, 'pw'), 'a-long-private-password\n', { mode: 0o600 });
@@ -108,10 +108,10 @@ test('the admin setup script creates the account from a password file and never 
 
 test('requestReset asks Neon to email a link that returns to our page, and treats outages as errors', async () => {
   const auth = make();
-  await auth.requestReset('founder@example.com', '/functions/v1/app/reset');
+  await auth.requestReset('admin@example.com', '/functions/v1/app/reset');
   const call = seen.filter((c) => c.path === '/request-password-reset').at(-1);
   assert.equal(call.origin, 'https://site.example');
-  assert.deepEqual(call.body, { email: 'founder@example.com', redirectTo: 'https://site.example/functions/v1/app/reset' });
+  assert.deepEqual(call.body, { email: 'admin@example.com', redirectTo: 'https://site.example/functions/v1/app/reset' });
   await assert.rejects(auth.requestReset('down@example.com', '/x'), /unavailable/);
 });
 

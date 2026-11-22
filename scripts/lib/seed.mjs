@@ -11,10 +11,10 @@ export const seedClients = [
     past_projects: [{ title: 'Industry conference series', value_cents: 12000000 }] }, verifyFirstOnly: true },
 ];
 
-export async function loadFounderToken(path) {
+export async function loadAdminToken(path) {
   if (!await exists(path)) await writeFile(path, `${randomBytes(32).toString('hex')}\n`, { flag: 'wx', mode: 0o600 });
   const token = (await readFile(path, 'utf8')).trim();
-  if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('The founder secret file is not a 64-character hexadecimal secret.');
+  if (!/^[a-f0-9]{64}$/.test(token)) throw new Error('The admin secret file is not a 64-character hexadecimal secret.');
   return token;
 }
 
@@ -31,19 +31,19 @@ async function writeConnector(dir, label, connector, token) {
 }
 
 // connector: { url, origin, timeout } — when given, paste-ready QwenWork configs are written to connectorDir.
-export async function seedDemo(founder, tokenDir, { connector, connectorDir } = {}) {
+export async function seedDemo(admin, tokenDir, { connector, connectorDir } = {}) {
   const intakePath = join(tokenDir, 'intake.txt');
   for (const path of [intakePath, ...seedClients.map(({ label }) => join(tokenDir, `${label}.txt`))]) {
     if (await exists(path)) throw new Error('Demo credentials already exist; remove the agent-tokens directory and database together to reseed.');
   }
-  const intake = (await founder.issueAgentCredential({ role: 'intake' })).token;
+  const intake = (await admin.issueAgentCredential({ role: 'intake' })).token;
   await writeCredential(intakePath, intake);
   if (connector) await writeConnector(connectorDir, 'intake', connector, intake);
   for (const { label, profile, verifyFirstOnly } of seedClients) {
-    const created = await founder.createClient(profile);
+    const created = await admin.createClient(profile);
     if (created.outcome !== 'allowed') throw new Error(`Could not create demo client ${label}.`);
-    if (verifyFirstOnly) await founder.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' });
-    const credential = await founder.issueAgentCredential({ role: 'client', client_id: created.client_id });
+    if (verifyFirstOnly) await admin.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Seeded demo client (fictional).' });
+    const credential = await admin.issueAgentCredential({ role: 'client', client_id: created.client_id });
     await writeCredential(join(tokenDir, `${label}.txt`), credential.token);
     if (connector) await writeConnector(connectorDir, label, connector, credential.token);
   }

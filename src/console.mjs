@@ -17,8 +17,8 @@ function readBody(req) {
   });
 }
 
-export function createConsoleServer({ founder, founderToken, dataset }) {
-  const handle = createConsoleHandler({ founder, founderToken, dataset });
+export function createConsoleServer({ admin, adminToken, dataset }) {
+  const handle = createConsoleHandler({ admin, adminToken, dataset });
   return createServer(async (req, res) => {
     const port = req.socket.localPort;
     const hosts = [`127.0.0.1:${port}`, `localhost:${port}`];

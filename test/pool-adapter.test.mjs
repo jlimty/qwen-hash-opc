@@ -13,8 +13,8 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   ...[1, 2, 3, 4, 5].map((i) => `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 123456}.00`),
   'NEW-1,Event management services,Agency A,1/1/2026,Awarded to Suppliers,Hidden winner,98765.43',
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let pglite; let socket; let database; let desk; let founder;
+const adminToken = randomBytes(32).toString('hex');
+let pglite; let socket; let database; let desk; let admin;
 
 before(async () => {
   pglite = await PGlite.create();
@@ -23,8 +23,8 @@ before(async () => {
   const pool = new pg.Pool({ connectionString: `postgres://postgres:postgres@127.0.0.1:${socket.server.address().port}/postgres`, max: 1, ssl: false, types: poolTypes(pg.types) });
   database = createPoolDatabase(pool);
   await initializeGovernance(database);
-  desk = createTenderDesk({ database, dataset, founderToken });
-  founder = desk.founder(founderToken);
+  desk = createTenderDesk({ database, dataset, adminToken });
+  admin = desk.admin(adminToken);
 });
 after(async () => {
   await database?.close();
@@ -34,11 +34,11 @@ after(async () => {
 
 test('the pool adapter migrates once and runs the full governed journey with JSON, bigint, array and timestamp types intact', async () => {
   await initializeGovernance({ query: database.query, exec: () => assert.fail('must not rerun DDL') });
-  const a = await founder.createClient({ name: 'Amber Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project', value_cents: 12500000 }] });
-  const b = await founder.createClient({ name: 'Birch Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [] });
-  await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
-  const agentA = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
-  const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
+  const a = await admin.createClient({ name: 'Amber Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project', value_cents: 12500000 }] });
+  const b = await admin.createClient({ name: 'Birch Pool', capabilities: 'Events', categories: ['events-community'], team_size: 4, max_contract_cents: 100000000, past_projects: [] });
+  await admin.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  const agentA = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
+  const agentB = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
   const context = await agentA.invoke('get_client_context', {});
   assert.equal(context.client.max_contract_cents, 100000000);
   assert.deepEqual(context.client.categories, ['events-community']);
@@ -48,13 +48,13 @@ test('the pool adapter migrates once and runs the full governed journey with JSO
   assert.equal(brief.outcome, 'allowed');
   const pricingB = await agentB.invoke('request_pricing', { tender_no: 'NEW-1', query: 'event management' });
   assert.equal((await agentB.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricingB.stat_id, price_band: pricingB.price_band, recommendation: 'bid', content: 'Check capacity.' })).outcome, 'escalated');
-  const state = await founder.readConsole();
+  const state = await admin.readConsole();
   const stored = state.briefs.find((x) => x.id === brief.brief_id);
   assert.deepEqual(stored.price_band, pricing.price_band);
   assert.deepEqual(stored.credentials_cited, [a.projects[0].id]);
   assert.ok(stored.created_at instanceof Date);
   assert.equal(typeof state.projects[0].value_cents, 'number');
-  assert.equal((await founder.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' })).outcome, 'approved');
+  assert.equal((await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' })).outcome, 'approved');
 });
 
 test('a rolled-back pool transaction leaves nothing behind, row locks work, and append-only triggers hold', async () => {

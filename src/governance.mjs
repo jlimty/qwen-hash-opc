@@ -36,9 +36,9 @@ function validate(schema, input) {
   return { denial: blocked(keys.includes('client_id') ? 'G1' : keys.includes('verified') ? 'G3' : 'VALIDATION', 'Input does not match the permitted tool schema.') };
 }
 
-export function createTenderDesk({ database, dataset, founderToken, backtest: precomputed, connector }) {
-  if (typeof founderToken !== 'string' || !/^[a-f0-9]{64}$/.test(founderToken)) throw new Error('A 32-byte hexadecimal founder token is required.');
-  const expectedFounder = digest(founderToken);
+export function createTenderDesk({ database, dataset, adminToken, backtest: precomputed, connector }) {
+  if (typeof adminToken !== 'string' || !/^[a-f0-9]{64}$/.test(adminToken)) throw new Error('A 32-byte hexadecimal admin token is required.');
+  const expectedAdmin = digest(adminToken);
   const workflows = agentWorkflows(dataset, connector ? { connector } : {});
   const tenderNumbers = new Set(dataset.contracts.map((contract) => contract.tender_no));
   const backtest = precomputed ?? buildBacktest(dataset);
@@ -82,12 +82,12 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
     await record(tx, { name: 'unauthenticated' }, action, blocked('G1', 'Invalid or revoked credential.'));
     return { unauthorized: true };
   }
-  const founderActor = { name: 'founder' };
-  function founderOperation(action, schema, handler) {
+  const adminActor = { name: 'admin' };
+  function adminOperation(action, schema, handler) {
     return (input = {}) => database.transaction(async (tx) => {
       const checked = validate(schema, input);
       const result = checked.denial ?? await handler(tx, checked.input);
-      return record(tx, founderActor, action, result, checked.input);
+      return record(tx, adminActor, action, result, checked.input);
     });
   }
 
@@ -233,23 +233,23 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
         },
       });
     },
-    founder(token) {
-      if (typeof token !== 'string' || !timingSafeEqual(expectedFounder, digest(token))) throw new Error('Unauthorized');
+    admin(token) {
+      if (typeof token !== 'string' || !timingSafeEqual(expectedAdmin, digest(token))) throw new Error('Unauthorized');
       return Object.freeze({
-        createClient: founderOperation('create_client', clientProfileSchema, createClient),
-        issueAgentCredential: founderOperation('issue_agent_credential', credentialSchema, async (tx, input) => {
+        createClient: adminOperation('create_client', clientProfileSchema, createClient),
+        issueAgentCredential: adminOperation('issue_agent_credential', credentialSchema, async (tx, input) => {
           if (input.role === 'client' && !(await tx.query('SELECT id FROM tender_desk.clients WHERE id=$1', [input.client_id])).rows.length) {
             return blocked('G1', 'Client does not exist.');
           }
           const { credential_id, token } = await insertAgentCredential(tx, input.role, input.client_id ?? null);
           return { outcome: 'allowed', credential_id, token, role: input.role, client_id: input.client_id ?? null };
         }),
-        revokeAgentCredential: founderOperation('revoke_agent_credential', z.strictObject({ credential_id: z.uuid() }), async (tx, input) => {
+        revokeAgentCredential: adminOperation('revoke_agent_credential', z.strictObject({ credential_id: z.uuid() }), async (tx, input) => {
           const { rows } = await tx.query('DELETE FROM tender_desk.agent_credentials WHERE id=$1 RETURNING client_id', [input.credential_id]);
           return rows.length ? { outcome: 'allowed', credential_id: input.credential_id, client_id: rows[0].client_id }
             : blocked('G1', 'Credential does not exist.');
         }),
-        verifyProject: founderOperation('verify_project', z.strictObject({ project_id: z.uuid(), verified: z.boolean(),
+        verifyProject: adminOperation('verify_project', z.strictObject({ project_id: z.uuid(), verified: z.boolean(),
           note: z.string().trim().max(500).optional() }), async (tx, input) => {
           const project = (await tx.query(`SELECT p.*, c.name AS client_name FROM tender_desk.projects p
             JOIN tender_desk.clients c ON c.id = p.client_id WHERE p.id=$1 FOR UPDATE OF p`, [input.project_id])).rows[0];
@@ -262,7 +262,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           return { outcome: 'allowed', project_id: project.id, project_reference: referenceCode('PRJ', project.reference_number),
             client_id: project.client_id, verified: input.verified, check_result: check.result, ...(note && { note }) };
         }),
-        reviewBrief: founderOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']),
+        reviewBrief: adminOperation('review_brief', z.strictObject({ brief_id: z.uuid(), decision: z.enum(['approved', 'declined']),
           reason: z.string().trim().max(500).optional() }), async (tx, input) => {
           if (input.decision === 'declined' && !input.reason) return blocked('VALIDATION', 'A decline needs a reason.');
           const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
@@ -282,7 +282,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           return { outcome: input.decision, status: input.decision, brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number),
             client_id: brief.client_id, tender_no: brief.tender_no, ...(decline_reason && { decline_reason }) };
         }),
-        resolveConflict: founderOperation('resolve_conflict', z.strictObject({ conflict_id: z.uuid(), resolution: z.enum(['serve_holder', 'serve_neither']) }), async (tx, input) => {
+        resolveConflict: adminOperation('resolve_conflict', z.strictObject({ conflict_id: z.uuid(), resolution: z.enum(['serve_holder', 'serve_neither']) }), async (tx, input) => {
           const conflict = (await tx.query('SELECT * FROM tender_desk.conflicts WHERE id=$1', [input.conflict_id])).rows[0];
           if (!conflict) return blocked('G2', 'Conflict does not exist.');
           const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [conflict.tender_no])).rows[0];
@@ -293,7 +293,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           await tx.query("UPDATE tender_desk.conflicts SET status='resolved',resolution=$1 WHERE id=$2", [input.resolution, conflict.id]);
           return { outcome: 'allowed', conflict_id: conflict.id, client_id: conflict.client_id, tender_no: conflict.tender_no, resolution: input.resolution };
         }),
-        revealBacktest: founderOperation('reveal_backtest', revealSchema, async (tx, input) => {
+        revealBacktest: adminOperation('reveal_backtest', revealSchema, async (tx, input) => {
           const already = await revealedTenders(tx);
           if (input.all) return { outcome: 'allowed', scope: 'all', revealed_count: backtest.scoreable - already.size, reason: 'Revealed every scoreable backtest outcome.' };
           if (!backtest.predictions.has(input.tender_no)) return blocked('G6', 'Only scoreable backtest tenders can be revealed.');
@@ -325,7 +325,7 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           return { request, tender, snapshot, query_used, client: clientFacts, verifiedProjects,
             fit: fitFacts({ client: clientFacts, verifiedProjects, tender, check: { status: snapshot?.status, snapshot, query_used } }) };
         }),
-        saveDraft: founderOperation('save_draft', draftInputSchema, async (tx, input) => {
+        saveDraft: adminOperation('save_draft', draftInputSchema, async (tx, input) => {
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 FOR UPDATE', [input.request_id])).rows[0];
           if (!request || request.status !== 'requested') return blocked('G5', 'Only a waiting request can be drafted.');
           const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
@@ -340,14 +340,14 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
           await tx.query("UPDATE tender_desk.brief_requests SET status='drafted', brief_id=$1, last_error=NULL, updated_at=now() WHERE id=$2", [result.brief_id, request.id]);
           return { ...result, ...ids };
         }),
-        recordDraftFailure: founderOperation('draft_failed', z.strictObject({ request_id: z.uuid(), reason: short(1000) }), async (tx, input) => {
+        recordDraftFailure: adminOperation('draft_failed', z.strictObject({ request_id: z.uuid(), reason: short(1000) }), async (tx, input) => {
           const { rows } = await tx.query(`UPDATE tender_desk.brief_requests SET last_error=$1, updated_at=now() WHERE id=$2
             RETURNING id, reference_number, client_id, tender_no`, [input.reason, input.request_id]);
           if (!rows.length) return blocked('G5', 'Request does not exist.');
           return { ...blocked('G4', input.reason), request_id: rows[0].id, request_reference: referenceCode('REQ', rows[0].reference_number),
             client_id: rows[0].client_id, tender_no: rows[0].tender_no };
         }),
-        declineRequest: founderOperation('decline_request', z.strictObject({ request_id: z.uuid(), reason: z.string().trim().max(500).optional() }), async (tx, input) => {
+        declineRequest: adminOperation('decline_request', z.strictObject({ request_id: z.uuid(), reason: z.string().trim().max(500).optional() }), async (tx, input) => {
           if (!input.reason) return blocked('VALIDATION', 'A decline needs a reason.');
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 FOR UPDATE', [input.request_id])).rows[0];
           if (!request || request.status !== 'requested') return blocked('G5', 'Only a waiting request can be declined here; decline a drafted brief from its brief page.');

@@ -9,16 +9,16 @@ import { parseTenderCsv } from '../src/tender-data.mjs';
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = parseTenderCsv(header + [1, 2, 3, 4, 5, 6].map((i) =>
   `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 100000}.00`).join('\n'));
-const founderToken = randomBytes(32).toString('hex');
+const adminToken = randomBytes(32).toString('hex');
 const now = new Date('2026-11-22T02:00:00Z');
 const refusal = 'Tender Desk already advises a client on this tender.';
-let db; let desk; let founder;
+let db; let desk; let admin;
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
-  founder = desk.founder(founderToken);
+  desk = createTenderDesk({ database: db, dataset, adminToken });
+  admin = desk.admin(adminToken);
 });
 after(async () => { await db?.close(); });
 
@@ -30,7 +30,7 @@ async function customer(label) {
   const name = `${label} Events ${randomUUID().slice(0, 6)}`;
   const created = await desk.registerCustomer(userId, profile(name));
   assert.equal(created.outcome, 'allowed');
-  await founder.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Checked.' });
+  await admin.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Checked.' });
   return { userId, name, client_id: created.client_id, projects: created.projects, ops: await desk.customer(userId) };
 }
 
@@ -133,9 +133,9 @@ test('declining a request releases the hold for the next customer', async () => 
   const b = await customer('Iris');
   const tender_no = await openTender();
   const requested = await ask(a, tender_no);
-  const blank = await founder.declineRequest({ request_id: requested.request_id });
+  const blank = await admin.declineRequest({ request_id: requested.request_id });
   assert.equal(blank.outcome, 'blocked');
-  const declined = await founder.declineRequest({ request_id: requested.request_id, reason: 'We cannot advise on this scope.' });
+  const declined = await admin.declineRequest({ request_id: requested.request_id, reason: 'We cannot advise on this scope.' });
   assert.equal(declined.outcome, 'declined');
   const mine = (await a.ops.context()).requests.find((request) => request.reference === requested.request_reference);
   assert.equal(mine.status, 'declined');
@@ -148,10 +148,10 @@ test('declining a drafted brief also releases the hold and closes the request', 
   const b = await customer('Kale');
   const tender_no = await openTender();
   const requested = await ask(a, tender_no);
-  const prepared = await founder.prepareDraft(requested.request_id);
-  const saved = await founder.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const saved = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
   assert.equal(saved.outcome, 'allowed');
-  await founder.reviewBrief({ brief_id: saved.brief_id, decision: 'declined', reason: 'Not a fit.' });
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'declined', reason: 'Not a fit.' });
   const mine = (await a.ops.context()).requests[0];
   assert.equal(mine.status, 'declined');
   assert.equal(mine.decline_reason, 'Not a fit.');
@@ -162,7 +162,7 @@ test('prepareDraft gives the facts a draft needs, with verified projects only', 
   const a = await customer('Laurel');
   const tender_no = await openTender();
   const requested = await ask(a, tender_no);
-  const prepared = await founder.prepareDraft(requested.request_id);
+  const prepared = await admin.prepareDraft(requested.request_id);
   assert.equal(prepared.tender.tender_no, tender_no);
   assert.equal(prepared.tender.title, 'Event management for a community festival');
   assert.equal(prepared.snapshot.status, 'ready');
@@ -176,15 +176,15 @@ test('saveDraft enforces verified citations and leaves the request open with the
   const a = await customer('Maple');
   const tender_no = await openTender();
   const requested = await ask(a, tender_no);
-  const prepared = await founder.prepareDraft(requested.request_id);
-  const result = await founder.saveDraft({ request_id: requested.request_id, ...draft(prepared, { credentials_cited: [a.projects[1].id] }) });
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const result = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared, { credentials_cited: [a.projects[1].id] }) });
   assert.equal(result.outcome, 'blocked');
   assert.equal(result.rule_id, 'G3');
   const row = (await db.query('SELECT status,last_error FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0];
   assert.equal(row.status, 'requested');
   assert.match(row.last_error, /verified/);
-  await founder.recordDraftFailure({ request_id: requested.request_id, reason: 'The model was unavailable. Try Redraft.' });
-  const listed = (await founder.listBriefRequests({ now })).find((request) => request.id === requested.request_id);
+  await admin.recordDraftFailure({ request_id: requested.request_id, reason: 'The model was unavailable. Try Redraft.' });
+  const listed = (await admin.listBriefRequests({ now })).find((request) => request.id === requested.request_id);
   assert.equal(listed.last_error, 'The model was unavailable. Try Redraft.');
   assert.equal(listed.payment_status, 'test');
   assert.equal(listed.client_name, a.name);
@@ -195,11 +195,11 @@ test('approval marks the request approved and the customer sees the brief', asyn
   const a = await customer('Nettle');
   const tender_no = await openTender();
   const requested = await ask(a, tender_no);
-  const prepared = await founder.prepareDraft(requested.request_id);
-  const saved = await founder.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const saved = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
   assert.equal((await a.ops.context()).requests[0].status, 'drafted');
   assert.equal((await a.ops.context()).requests[0].content, undefined);
-  await founder.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
   const [mine] = (await a.ops.context()).requests;
   assert.equal(mine.status, 'approved');
   assert.equal(mine.content, 'Bid: the scope fits the team.');

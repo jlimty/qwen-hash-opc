@@ -43,8 +43,8 @@ test('seeding creates Birch and a public intake only, with private credential an
   assert.deepEqual(clients, ['Birch Events (demo)']);
   assert.equal((await pglite.query('SELECT count(*)::int AS n FROM tender_desk.agent_credentials')).rows[0].n, 2);
   assert.equal((await pglite.query("SELECT verification_note FROM tender_desk.projects WHERE verified")).rows[0].verification_note, 'Seeded demo client (fictional).');
-  const founder = (await readFile(join(dir, 'state', 'founder-token.txt'), 'utf8')).trim();
-  assert.match(founder, /^[a-f0-9]{64}$/);
+  const admin = (await readFile(join(dir, 'state', 'admin-token.txt'), 'utf8')).trim();
+  assert.match(admin, /^[a-f0-9]{64}$/);
   const tokens = await readdir(join(dir, 'state', 'agent-tokens'));
   assert.deepEqual(tokens.sort(), ['birch.txt', 'intake.txt']);
   const connectors = (await readdir(join(dir, 'state', 'connectors'))).sort();
@@ -57,7 +57,7 @@ test('seeding creates Birch and a public intake only, with private credential an
     const secret = (await readFile(join(dir, 'state', 'agent-tokens', file), 'utf8')).trim().replace('Bearer ', '');
     assert.doesNotMatch(result.stdout + result.stderr, new RegExp(secret));
   }
-  assert.doesNotMatch(result.stdout + result.stderr, new RegExp(founder));
+  assert.doesNotMatch(result.stdout + result.stderr, new RegExp(admin));
 });
 
 test('a second run refuses to reseed and a missing URL file is reported plainly', async () => {
@@ -113,6 +113,6 @@ test('reseed into a fresh state folder works, and prepares everything before dro
   const result = await run(process.execPath, [reseedScript, '--db-file', dbFile, '--state-dir', fresh, '--yes-wipe-tender-desk'])
     .then((r) => ({ ...r, code: 0 }), (e) => ({ stdout: e.stdout, stderr: e.stderr, code: e.code }));
   assert.equal(result.code, 0, result.stderr);
-  assert.equal((await stat(join(fresh, 'founder-token.txt'))).mode & 0o777, 0o600);
+  assert.equal((await stat(join(fresh, 'admin-token.txt'))).mode & 0o777, 0o600);
   assert.deepEqual((await pglite.query('SELECT name FROM tender_desk.clients')).rows.map((r) => r.name), ['Birch Events (demo)']);
 });

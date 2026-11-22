@@ -5,12 +5,12 @@ import test from 'node:test';
 const root = new URL('../skills/', import.meta.url);
 const skill = (name) => readFile(new URL(`${name}/SKILL.md`, root), 'utf8');
 
-test('every skill names its own folder in frontmatter and never says founder', async () => {
+test('every skill names its own folder in frontmatter and never says the retired operator title', async () => {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const text = await skill(entry.name);
     assert.match(text, new RegExp(`^---\\nname: ${entry.name}\\n`), entry.name);
-    assert.doesNotMatch(text, /founder/i, entry.name);
+    assert.doesNotMatch(text, new RegExp('fou' + 'nder', 'i'), entry.name);
   }
 });
 

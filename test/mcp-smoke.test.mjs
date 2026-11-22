@@ -121,7 +121,7 @@ test('rejects missing, oversized, and multiline nonces without invoking the tool
   assert.equal(probe.calls.length, 0);
 });
 
-test('does not expose founder actions or filesystem tools', async (t) => {
+test('does not expose admin actions or filesystem tools', async (t) => {
   const probe = await startProbe(t);
   const client = await connectProbe(t, probe);
   for (const name of ['approve_brief', 'read_file']) {

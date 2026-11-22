@@ -24,6 +24,6 @@ test('local governance demo runs the real dataset journey without exposing crede
   assert.ok(result.steps.some((s) => s.action === 'submit_valid_brief' && s.status === 'pending_approval'));
   assert.ok(result.audit.some((s) => s.action === 'review_brief' && s.outcome === 'approved'));
   assert.ok(result.audit.every((s) => !('client_id' in s) && !('actor' in s)));
-  assert.doesNotMatch(stdout, /Bearer\s|"token"\s*:|token_hash|founderToken|"actual_award"|"suppliers"/);
+  assert.doesNotMatch(stdout, /Bearer\s|"token"\s*:|token_hash|adminToken|"actual_award"|"suppliers"/);
   assert.ok(stdout.length < 15000);
 });

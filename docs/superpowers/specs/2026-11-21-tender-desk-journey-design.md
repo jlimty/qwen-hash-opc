@@ -190,7 +190,7 @@ Visual direction stays as today (Stripe Dashboard × Attio, cobalt accent, statu
 - **analyst:** pricing no longer takes a hold, so the confirmation moves to *before submitting the brief* ("submitting takes the advice slot for this tender; if another client already has it you'll be escalated"); the escalation message comes from `submit_brief`; adds "Where's my brief?".
 - **scout:** remove the claim that pricing takes a hold; still never calls `request_pricing`.
 - **proposal:** unchanged except reading approved briefs from `get_client_context` when present.
-- `get_policies` text updated (G2 wording, "admin" not "founder" in agent-facing copy).
+- `get_policies` text updated (G2 wording, "admin" not "admin" in agent-facing copy).
 
 ### 8. Demo storyline (≤ 3 min)
 

@@ -4,6 +4,10 @@ import { crossCheckProject } from './gebiz-check.mjs';
 import { referenceCode, referenceLabel } from './references.mjs';
 import { actionLabels, ago, esc, form, icon, money, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
 
+// Audit rows written by the admin: 'admin' today, an older operator name on rows from before the rename. Agents,
+// customers and rejected callers always carry their own prefix, so anything else is the admin.
+export const isAdminActor = (actor) => !/^(agent|customer):|^unauthenticated$/.test(String(actor ?? ''));
+
 export const recordKinds = Object.freeze({
   client: { prefix: 'CLI', path: '/clients', list: 'Clients', active: 'clients' },
   project: { prefix: 'PRJ', path: '/projects', list: 'Clients', listPath: '/clients', active: 'clients' },
@@ -195,7 +199,7 @@ export function renderAuditDetail({ state, csrf, flash, entry }) {
     s.conflict_id && recordLink('conflict', state.conflicts.find((c) => c.id === s.conflict_id), ''),
     s.project_id && recordLink('project', state.projects.find((p) => p.id === s.project_id), ''),
   ].filter(Boolean);
-  const who = entry.actor === 'founder' ? 'You (admin)' : entry.actor === 'unauthenticated' ? 'Unknown caller' : esc(entry.actor);
+  const who = isAdminActor(entry.actor) ? 'You (admin)' : entry.actor === 'unauthenticated' ? 'Unknown caller' : esc(entry.actor);
   return renderShell({ state, csrf, active: 'audit', title: `${code} - ${actionLabels[entry.action] ?? entry.action}`, flash, crumbs: crumbs('audit', code),
     actions: outcomePill(entry),
     body: panel('Entry', props([

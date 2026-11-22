@@ -26,7 +26,7 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     if (!/^postgres(ql)?:\/\//i.test(databaseUrl)) throw new Error(`TD_DB_URL must be a postgres URL (${shape(databaseUrl)})`);
     if (!/^(https:\/\/|http:\/\/127\.0\.0\.1[:/])/i.test(authUrl)) throw new Error(`TD_AUTH_URL must be an https URL (${shape(authUrl)})`);
     if (!/^[A-Za-z0-9_-]{8,64}$/.test(adminUserId)) throw new Error(`TD_ADMIN_USER_ID is not a valid user ID (${adminUserId.length} characters)`);
-    const founderToken = randomBytes(32).toString('hex');
+    const adminToken = randomBytes(32).toString('hex');
     stage = 'auth';
     const auth = createNeonAuth({ baseUrl: authUrl, adminUserId, origin, fetchImpl });
     stage = 'dataset';
@@ -34,10 +34,10 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'database';
     const database = openDatabase(databaseUrl);
     stage = 'desk';
-    const desk = createTenderDesk({ database, dataset, founderToken, backtest: backtestFromJson(backtestJson, dataset),
+    const desk = createTenderDesk({ database, dataset, adminToken, backtest: backtestFromJson(backtestJson, dataset),
       connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } });
     return {
-      console: createConsoleHandler({ founder: desk.founder, founderToken, auth, dataset, basePath: publicBase, secureCookies: true }),
+      console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true }),
       mcp: createMcpWebHandler({ authenticate: (token) => desk.agent(token) }),
     };
   }

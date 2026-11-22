@@ -17,7 +17,7 @@ New pure modules handle:
 - price checks and fit facts
 - brief drafting
 
-The governance core (`createTenderDesk`) gains `customer` and `registerCustomer` entry points and four founder operations. All writes stay transactional with their audit row. The existing `submit_brief` workflow is reused to save drafts, so every guardrail still applies.
+The governance core (`createTenderDesk`) gains `customer` and `registerCustomer` entry points and four admin operations. All writes stay transactional with their audit row. The existing `submit_brief` workflow is reused to save drafts, so every guardrail still applies.
 
 **Tech Stack:**
 - Node ≥22 ESM (`.mjs`) for source and tests (`node --test`, PGlite)
@@ -119,7 +119,7 @@ The governance core (`createTenderDesk`) gains `customer` and `registerCustomer`
 
 - [ ] **Step 1: Write the failing tests.**
   - `governance-schema.test.mjs › 'migration 003 creates the assistant tables and keeps 001-002 data'`: create a client on a 001+002 database, run `initializeGovernance` again, and assert that the five tables exist and the client row is still there.
-  - `governance.test.mjs › 'audit keeps a live GeBIZ tender number that is not in the dataset'`: call `founder.revealBacktest({ tender_no: 'RPO000ETQ26000129' })`, which is blocked G6, and assert that the newest audit row has `tender_no === 'RPO000ETQ26000129'`.
+  - `governance.test.mjs › 'audit keeps a live GeBIZ tender number that is not in the dataset'`: call `admin.revealBacktest({ tender_no: 'RPO000ETQ26000129' })`, which is blocked G6, and assert that the newest audit row has `tender_no === 'RPO000ETQ26000129'`.
   - `'a second active request for the same client and tender violates the partial unique index'`: two raw inserts; the second throws code `23505`.
 - [ ] **Step 2: Run them.** `node --test test/governance-schema.test.mjs test/governance.test.mjs`. Expected: the new tests FAIL.
 - [ ] **Step 3: Write `db/003-assistant.sql`** (wrapped in `BEGIN; … COMMIT;`, ending with `REVOKE ALL ON ALL SEQUENCES IN SCHEMA tender_desk FROM PUBLIC;`), then register it and change `record()` and `references.mjs`.
@@ -267,7 +267,7 @@ The governance core (`createTenderDesk`) gains `customer` and `registerCustomer`
 
     A duplicate active request hits the partial unique index. Catch `23505` and return the existing request's result, so the checkout is idempotent.
   - **`cancelRequest(request_id)`** → only when `requested`. Sets `cancelled` and deletes the hold if this client holds it and no brief is approved.
-- **Founder additions** (on the object `founder(token)` returns):
+- **Admin additions** (on the object `admin(token)` returns):
   - **`listBriefRequests()`** → rows joined with client name, the payment status, and `closed` (closes_at ≤ now).
   - **`prepareDraft(request_id)`** → `{ request, tender:{ tender_no, title, agency, closes_at }, snapshot, client, verifiedProjects, fit }`. Read only; not audited.
   - **`saveDraft(request_id, { recommendation, content, credentials_cited })`:**
@@ -297,7 +297,7 @@ The governance core (`createTenderDesk`) gains `customer` and `registerCustomer`
   - `'approval marks the request approved and context() shows the brief content'`.
   - `'existing MCP submit_brief behaviour is unchanged'`: `npm test` keeps `test/governance.test.mjs` green.
 - [ ] **Step 2: Run** `node --test test/assistant-governance.test.mjs`. Expected: FAIL.
-- [ ] **Step 3: Implement** in `governance.mjs`. Reuse `validate`, `record` and `founderOperation`, and add a `customerOperation(action, schema, handler)` that sets the actor.
+- [ ] **Step 3: Implement** in `governance.mjs`. Reuse `validate`, `record` and `adminOperation`, and add a `customerOperation(action, schema, handler)` that sets the actor.
 - [ ] **Step 4: Run** `npm test`. Expected: all PASS.
 - [ ] **Step 5: Commit.** `git add -A src test && git commit -m "Add customer operations: sign-up link, request-time exclusivity, test payments, draft and decline paths"`
 
@@ -450,7 +450,7 @@ The governance core (`createTenderDesk`) gains `customer` and `registerCustomer`
     - `aster`: events, all projects verified
     - `bramble`: cleaning, one verified and one unverified
     - `clover`: ICT, none verified
-  - Registers each with `registerCustomer` (company names end in `(test)`) and verifies projects with the founder op, with the note `Seeded test customer (fictional).`
+  - Registers each with `registerCustomer` (company names end in `(test)`) and verifies projects with the admin op, with the note `Seeded test customer (fictional).`
   - Writes `.local/site/test-customers.json` (mode 0600) with email, password and client reference.
   - Refuses to run if that file exists.
 

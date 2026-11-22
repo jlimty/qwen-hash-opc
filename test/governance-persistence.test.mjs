@@ -18,17 +18,17 @@ const profile = (name) => ({ name, capabilities: 'Events', categories: ['events-
 
 test('pricing, pending briefs, credential bindings and audit survive a database restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'tender-desk-workflow-'));
-  const founderToken = randomBytes(32).toString('hex');
+  const adminToken = randomBytes(32).toString('hex');
   let db;
   try {
     db = await PGlite.create(directory);
     await initializeGovernance(db);
-    let desk = createTenderDesk({ database: db, dataset, founderToken });
-    let founder = desk.founder(founderToken);
-    const a = await founder.createClient(profile('Persistent Amber'));
-    const b = await founder.createClient(profile('Persistent Birch'));
-    const keyA = await founder.issueAgentCredential({ role: 'client', client_id: a.client_id });
-    const keyB = await founder.issueAgentCredential({ role: 'client', client_id: b.client_id });
+    let desk = createTenderDesk({ database: db, dataset, adminToken });
+    let admin = desk.admin(adminToken);
+    const a = await admin.createClient(profile('Persistent Amber'));
+    const b = await admin.createClient(profile('Persistent Birch'));
+    const keyA = await admin.issueAgentCredential({ role: 'client', client_id: a.client_id });
+    const keyB = await admin.issueAgentCredential({ role: 'client', client_id: b.client_id });
     const agent = await desk.agent(keyA.token);
     const pricing = await agent.invoke('request_pricing', { tender_no: 'NEW-1' });
     assert.equal(pricing.outcome, 'allowed');
@@ -42,8 +42,8 @@ test('pricing, pending briefs, credential bindings and audit survive a database 
 
     db = await PGlite.create(directory);
     await initializeGovernance(db);
-    desk = createTenderDesk({ database: db, dataset, founderToken });
-    founder = desk.founder(founderToken);
+    desk = createTenderDesk({ database: db, dataset, adminToken });
+    admin = desk.admin(adminToken);
     assert.deepEqual((await db.query('SELECT * FROM tender_desk.audit_log ORDER BY id')).rows, originalAudit);
     const recoveredA = await desk.agent(keyA.token);
     const recoveredB = await desk.agent(keyB.token);
@@ -52,7 +52,7 @@ test('pricing, pending briefs, credential bindings and audit survive a database 
     assert.equal(pricingB.outcome, 'allowed');
     assert.equal((await recoveredB.invoke('submit_brief', { tender_no: 'NEW-1', stat_id: pricingB.stat_id, price_band: pricingB.price_band,
       recommendation: 'bid', content: 'Subject to capacity review.' })).outcome, 'escalated');
-    assert.equal((await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).outcome, 'approved');
+    assert.equal((await admin.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).outcome, 'approved');
 
     const failingDatabase = {
       transaction: (handler) => db.transaction((tx) => handler({
@@ -62,7 +62,7 @@ test('pricing, pending briefs, credential bindings and audit survive a database 
         },
       })),
     };
-    const failingDesk = createTenderDesk({ database: failingDatabase, dataset, founderToken });
+    const failingDesk = createTenderDesk({ database: failingDatabase, dataset, adminToken });
     const failingAgent = await failingDesk.agent(keyA.token);
     const countBefore = (await db.query('SELECT count(*) AS n FROM tender_desk.audit_log')).rows[0].n;
     await assert.rejects(failingAgent.invoke('request_pricing', { tender_no: 'NEW-2' }), /Simulated audit write failure/);
@@ -80,15 +80,15 @@ test('a tool that throws still leaves an audit row and no partial state', async 
   const db = await PGlite.create();
   try {
     await initializeGovernance(db);
-    const founderToken = randomBytes(32).toString('hex');
-    const founder = createTenderDesk({ database: db, dataset, founderToken }).founder(founderToken);
-    const client = await founder.createClient(profile('Throwing Amber'));
-    const key = await founder.issueAgentCredential({ role: 'client', client_id: client.client_id });
+    const adminToken = randomBytes(32).toString('hex');
+    const admin = createTenderDesk({ database: db, dataset, adminToken }).admin(adminToken);
+    const client = await admin.createClient(profile('Throwing Amber'));
+    const key = await admin.issueAgentCredential({ role: 'client', client_id: client.client_id });
     const failing = { transaction: (handler) => db.transaction((tx) => handler({ query: (sql, params) => {
       if (sql.startsWith('INSERT INTO tender_desk.stats_snapshots')) throw new Error('Simulated database failure');
       return tx.query(sql, params);
     } })) };
-    const agent = await createTenderDesk({ database: failing, dataset, founderToken }).agent(key.token);
+    const agent = await createTenderDesk({ database: failing, dataset, adminToken }).agent(key.token);
     await assert.rejects(agent.invoke('request_pricing', { tender_no: 'NEW-1' }), /Simulated database failure/);
     assert.equal((await db.query('SELECT * FROM tender_desk.stats_snapshots')).rows.length, 0);
     const rows = (await db.query("SELECT outcome,rule_id,reason FROM tender_desk.audit_log WHERE action='request_pricing'")).rows;

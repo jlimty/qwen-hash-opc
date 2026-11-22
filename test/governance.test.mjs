@@ -13,17 +13,17 @@ const dataset = parseTenderCsv(header + [
   ...[1, 2, 3, 4, 5].map((i) => `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Historical supplier,${i * 100}`),
   ...Array.from({ length: 40 }, (_, i) => `NEW-${i + 1},Event management services,Agency A,1/1/2026,Awarded to Suppliers,Hidden winner,9876543`),
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
+const adminToken = randomBytes(32).toString('hex');
 let db;
 let desk;
-let founder;
+let admin;
 let sequence = 0;
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
-  founder = desk.founder(founderToken);
+  desk = createTenderDesk({ database: db, dataset, adminToken });
+  admin = desk.admin(adminToken);
 });
 after(async () => { await db?.close(); });
 
@@ -31,10 +31,10 @@ const profile = (name) => ({ name, capabilities: 'Event production', categories:
   max_contract_cents: 50000000, past_projects: [{ title: 'Community festival', agency: 'Agency A', value_cents: 100000 }] });
 async function setup() {
   const suffix = randomUUID().slice(0, 8);
-  const a = await founder.createClient(profile(`Amber Events ${suffix}`));
-  const b = await founder.createClient(profile(`Birch Events ${suffix}`));
-  const keyA = await founder.issueAgentCredential({ role: 'client', client_id: a.client_id });
-  const keyB = await founder.issueAgentCredential({ role: 'client', client_id: b.client_id });
+  const a = await admin.createClient(profile(`Amber Events ${suffix}`));
+  const b = await admin.createClient(profile(`Birch Events ${suffix}`));
+  const keyA = await admin.issueAgentCredential({ role: 'client', client_id: a.client_id });
+  const keyB = await admin.issueAgentCredential({ role: 'client', client_id: b.client_id });
   return { a, b, keyA, keyB, agentA: await desk.agent(keyA.token), agentB: await desk.agent(keyB.token), tender_no: `NEW-${++sequence}` };
 }
 const submitAs = async (context, agent, overrides = {}) => agent.invoke('submit_brief', brief(context, await price(context, agent), overrides));
@@ -45,7 +45,7 @@ function brief(context, pricing, overrides = {}) {
 }
 
 test('audit keeps a live GeBIZ tender number that is not in the dataset', async () => {
-  const result = await founder.revealBacktest({ tender_no: 'RPO000ETQ26000129' });
+  const result = await admin.revealBacktest({ tender_no: 'RPO000ETQ26000129' });
   assert.equal(result.outcome, 'blocked');
   const { rows } = await db.query('SELECT tender_no FROM tender_desk.audit_log ORDER BY id DESC LIMIT 1');
   assert.equal(rows[0].tender_no, 'RPO000ETQ26000129');
@@ -69,16 +69,16 @@ test('credentials are stored only as hashes and revoked sessions lose access', a
   const stored = await db.query('SELECT token_hash FROM tender_desk.agent_credentials WHERE id=$1', [c.keyA.credential_id]);
   assert.equal(stored.rows[0].token_hash, createHash('sha256').update(c.keyA.token).digest('hex'));
   await assert.rejects(desk.agent('wrong'), /Unauthorized/);
-  await assert.rejects(desk.agent(founderToken), /Unauthorized/);
-  assert.throws(() => desk.founder(c.keyA.token), /Unauthorized/);
-  await founder.revokeAgentCredential({ credential_id: c.keyA.credential_id });
+  await assert.rejects(desk.agent(adminToken), /Unauthorized/);
+  assert.throws(() => desk.admin(c.keyA.token), /Unauthorized/);
+  await admin.revokeAgentCredential({ credential_id: c.keyA.credential_id });
   await assert.rejects(c.agentA.invoke('get_client_context', {}), /Unauthorized/);
-  const audit = (await founder.readConsole()).audit;
-  assert.doesNotMatch(JSON.stringify(audit), new RegExp(`${c.keyA.token}|${c.keyB.token}|${founderToken}`));
+  const audit = (await admin.readConsole()).audit;
+  assert.doesNotMatch(JSON.stringify(audit), new RegExp(`${c.keyA.token}|${c.keyB.token}|${adminToken}`));
 });
 
 test('intake can create a client but cannot verify projects or access client work', async () => {
-  const { token } = await founder.issueAgentCredential({ role: 'intake' });
+  const { token } = await admin.issueAgentCredential({ role: 'intake' });
   const intake = await desk.agent(token);
   const created = await intake.invoke('create_client', profile(`New Intake ${randomUUID()}`));
   assert.equal(created.outcome, 'allowed');
@@ -93,7 +93,7 @@ test('intake can create a client but cannot verify projects or access client wor
 });
 
 test('intake create_client returns a working connector bound to the new client', async () => {
-  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await desk.agent((await admin.issueAgentCredential({ role: 'intake' })).token);
   const name = `Cedar Markets ${randomUUID().slice(0, 8)}`;
   const created = await intake.invoke('create_client', profile(name));
   assert.equal(created.outcome, 'allowed');
@@ -107,7 +107,7 @@ test('intake create_client returns a working connector bound to the new client',
 });
 
 test('the connector token never reaches the audit log', async () => {
-  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await desk.agent((await admin.issueAgentCredential({ role: 'intake' })).token);
   const created = await intake.invoke('create_client', profile(`Token Audit ${randomUUID()}`));
   const token = created.connector_config.mcpServers[created.connector_name].headers.Authorization.slice(7);
   const { rows } = await db.query('SELECT * FROM tender_desk.audit_log');
@@ -117,7 +117,7 @@ test('the connector token never reaches the audit log', async () => {
 });
 
 test('a GeBIZ tender number given at intake is stored on the project', async () => {
-  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await desk.agent((await admin.issueAgentCredential({ role: 'intake' })).token);
   const input = profile(`GeBIZ Intake ${randomUUID()}`);
   input.past_projects[0].gebiz_tender_no = 'OLD-1';
   const created = await intake.invoke('create_client', input);
@@ -126,7 +126,7 @@ test('a GeBIZ tender number given at intake is stored on the project', async () 
 });
 
 test('a duplicate company name gets a neutral message', async () => {
-  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await desk.agent((await admin.issueAgentCredential({ role: 'intake' })).token);
   const name = `Twin Events ${randomUUID()}`;
   await intake.invoke('create_client', profile(name));
   const again = await intake.invoke('create_client', profile(name.toUpperCase()));
@@ -143,7 +143,7 @@ test('connectorSlug makes a safe bounded name', () => {
 test('the client sees an approved brief in its context', async () => {
   const c = await setup();
   const submitted = await submitAs(c, c.agentA, { content: 'Bid, subject to capacity.' });
-  await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
+  await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
   const { client } = await c.agentA.invoke('get_client_context', {});
   const mine = client.briefs.find((b) => b.tender_no === c.tender_no);
   assert.match(mine.reference, /^BRF\d{5,}$/);
@@ -155,7 +155,7 @@ test('the client sees an approved brief in its context', async () => {
 test('the client sees the decline reason', async () => {
   const c = await setup();
   const submitted = await submitAs(c, c.agentA);
-  await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Scope is beyond the team size.' });
+  await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Scope is beyond the team size.' });
   const mine = (await c.agentA.invoke('get_client_context', {})).client.briefs[0];
   assert.equal(mine.status, 'declined');
   assert.equal(mine.decline_reason, 'Scope is beyond the team size.');
@@ -164,7 +164,7 @@ test('the client sees the decline reason', async () => {
 test('a decline without a reason is blocked', async () => {
   const c = await setup();
   const submitted = await submitAs(c, c.agentA);
-  const result = await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined' });
+  const result = await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined' });
   assert.equal(result.outcome, 'blocked');
   assert.equal(result.reason, 'A decline needs a reason.');
 });
@@ -174,7 +174,7 @@ test('an escalated client sees awaiting_admin, then not_advised', async () => {
   await submitAs(c, c.agentA);
   const conflict = await submitAs(c, c.agentB);
   assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'awaiting_admin' }]);
-  await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
+  await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
   assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
 });
 
@@ -191,7 +191,7 @@ test('client context never leaks the holder, risk or another client', async () =
 
 test('verifying a project without a GeBIZ match needs a note', async () => {
   const c = await setup();
-  const result = await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true });
+  const result = await admin.verifyProject({ project_id: c.a.projects[0].id, verified: true });
   assert.equal(result.outcome, 'blocked');
   assert.equal(result.rule_id, 'G3');
   assert.equal(result.reason, 'A note is required to verify a project without a GeBIZ match.');
@@ -200,27 +200,27 @@ test('verifying a project without a GeBIZ match needs a note', async () => {
 test('verifying with a note stores the note and time, and unverifying clears the time', async () => {
   const c = await setup();
   const id = c.a.projects[0].id;
-  assert.equal((await founder.verifyProject({ project_id: id, verified: true, note: 'Saw the signed contract.' })).outcome, 'allowed');
+  assert.equal((await admin.verifyProject({ project_id: id, verified: true, note: 'Saw the signed contract.' })).outcome, 'allowed');
   let row = (await db.query('SELECT verified, verification_note, verified_at FROM tender_desk.projects WHERE id=$1', [id])).rows[0];
   assert.deepEqual([row.verified, row.verification_note, Boolean(row.verified_at)], [true, 'Saw the signed contract.', true]);
   const audit = (await db.query("SELECT summary FROM tender_desk.audit_log WHERE action='verify_project' ORDER BY id DESC LIMIT 1")).rows[0].summary;
   assert.deepEqual([audit.check_result, audit.note], ['no_match', 'Saw the signed contract.']);
   assert.match(audit.project_reference, /^PRJ\d{5,}$/);
-  await founder.verifyProject({ project_id: id, verified: false });
+  await admin.verifyProject({ project_id: id, verified: false });
   row = (await db.query('SELECT verified, verified_at FROM tender_desk.projects WHERE id=$1', [id])).rows[0];
   assert.deepEqual([row.verified, row.verified_at], [false, null]);
 });
 
 test('a GeBIZ match verifies without a note', async () => {
-  const created = await founder.createClient({ ...profile(`Historical Supplier`), past_projects: [{ title: 'Past event', gebiz_tender_no: 'OLD-1' }] });
-  assert.equal((await founder.verifyProject({ project_id: created.projects[0].id, verified: true })).outcome, 'allowed');
+  const created = await admin.createClient({ ...profile(`Historical Supplier`), past_projects: [{ title: 'Past event', gebiz_tender_no: 'OLD-1' }] });
+  assert.equal((await admin.verifyProject({ project_id: created.projects[0].id, verified: true })).outcome, 'allowed');
 });
 
 test('the holder sees not_advised when the admin stops advising on its tender', async () => {
   const c = await setup();
   const mine = await submitAs(c, c.agentA);
   const conflict = await submitAs(c, c.agentB);
-  await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' });
+  await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' });
   const context = (await c.agentA.invoke('get_client_context', {})).client;
   assert.deepEqual(context.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
   assert.equal(context.briefs.find((b) => b.reference && b.tender_no === c.tender_no).status, 'pending_approval');
@@ -228,7 +228,7 @@ test('the holder sees not_advised when the admin stops advising on its tender', 
   assert.deepEqual((await c.agentB.invoke('get_client_context', {})).client.advice_refused, [{ tender_no: c.tender_no, status: 'not_advised' }]);
 });
 
-test('agent catalogs contain neither founder tools nor an ungated pricing path', async () => {
+test('agent catalogs contain neither admin tools nor an ungated pricing path', async () => {
   const c = await setup();
   assert.equal(c.agentA.toolNames.includes('request_pricing'), true);
   for (const name of ['approve_brief', 'verify_project', 'resolve_conflict', 'reveal_outcome', 'market_stats', 'list_clients']) {
@@ -296,7 +296,7 @@ test('a blocked brief takes no hold', async () => {
 test('holder resubmits after decline without escalating against itself', async () => {
   const c = await setup();
   const first = await submitAs(c, c.agentA);
-  await founder.reviewBrief({ brief_id: first.brief_id, decision: 'declined', reason: 'Tighten the risks section.' });
+  await admin.reviewBrief({ brief_id: first.brief_id, decision: 'declined', reason: 'Tighten the risks section.' });
   const again = await submitAs(c, c.agentA);
   assert.equal(again.status, 'pending_approval');
   assert.equal((await db.query('SELECT * FROM tender_desk.conflicts WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
@@ -305,7 +305,7 @@ test('holder resubmits after decline without escalating against itself', async (
 test('G1 matches another client name as whole words only', async () => {
   const c = await setup();
   const name = `Birch Events ${randomUUID().slice(0, 8)}`;
-  await founder.createClient({ ...profile(name), past_projects: [] });
+  await admin.createClient({ ...profile(name), past_projects: [] });
   assert.equal((await submitAs(c, c.agentA, { content: `${name}ful planning ahead.` })).outcome, 'allowed');
   const leak = await submitAs(c, c.agentA, { content: `We met ${name.toLowerCase()} last year.` });
   assert.equal(leak.outcome, 'blocked');
@@ -315,7 +315,7 @@ test('G1 matches another client name as whole words only', async () => {
 test('G1 tolerates regex characters in client names', async () => {
   const c = await setup();
   const name = `A+B Events (Pte.) Ltd ${randomUUID().slice(0, 4)}`;
-  await founder.createClient({ ...profile(name), past_projects: [] });
+  await admin.createClient({ ...profile(name), past_projects: [] });
   assert.equal(namesOtherClient(`Partner: ${name}.`, [name]), true);
   assert.equal(namesOtherClient('A Events Pte Ltd', [name]), false);
   assert.equal((await submitAs(c, c.agentA, { content: `Partner: ${name}.` })).rule_id, 'G1');
@@ -337,7 +337,7 @@ test('NUL characters are rejected as audited validation blocks without side effe
   const pricing = await c.agentA.invoke('request_pricing', { tender_no: c.tender_no, query: 'event\u0000' });
   assert.equal(pricing.outcome, 'blocked');
   assert.equal(pricing.rule_id, 'VALIDATION');
-  const intake = await desk.agent((await founder.issueAgentCredential({ role: 'intake' })).token);
+  const intake = await desk.agent((await admin.issueAgentCredential({ role: 'intake' })).token);
   assert.equal((await intake.invoke('create_client', profile('Nul\u0000 Client'))).rule_id, 'VALIDATION');
   assert.equal((await c.agentA.invoke('save_shortlist', { items: [{ tender_no: c.tender_no, fit_score: 1, reasons: ['a\u0000b'] }] })).rule_id, 'VALIDATION');
   assert.equal((await db.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1', [c.tender_no])).rows.length, 0);
@@ -345,12 +345,12 @@ test('NUL characters are rejected as audited validation blocks without side effe
   assert.ok(after - before >= 3);
 });
 
-test('a founder-resolved conflict stays resolved when the challenger asks again', async () => {
+test('a admin-resolved conflict stays resolved when the challenger asks again', async () => {
   const c = await setup();
   await price(c);
   await submitAs(c, c.agentA);
   const conflict = await submitAs(c, c.agentB);
-  await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
+  await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' });
   const again = await submitAs(c, c.agentB);
   assert.equal(again.outcome, 'escalated');
   const { rows } = await db.query('SELECT status,resolution FROM tender_desk.conflicts WHERE id=$1', [conflict.conflict_id]);
@@ -362,7 +362,7 @@ test('briefs may cite no projects, and a repeated verified project ID is still v
   const pricing = await price(c);
   const none = await c.agentA.invoke('submit_brief', brief(c, pricing, { recommendation: 'no-bid', credentials_cited: [] }));
   assert.equal(none.outcome, 'allowed');
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  await admin.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const id = c.a.projects[0].id;
   const duplicate = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [id, id] }));
   assert.equal(duplicate.outcome, 'allowed');
@@ -404,7 +404,7 @@ test('briefs reject unverified credentials, forged snapshots and altered price b
 test('snapshot and verified-project identities cannot be reused for a different client or tender', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.b.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  await admin.verifyProject({ project_id: c.b.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   assert.equal((await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.b.projects[0].id] }))).rule_id, 'G3');
   const another = `NEW-${++sequence}`;
   await c.agentA.invoke('request_pricing', { tender_no: another, query: 'management', same_agency: true });
@@ -426,49 +426,49 @@ test('briefs naming another client are blocked and uncited prose numbers are fla
   assert.equal(stored[0].risk_level, 'high');
 });
 
-test('only founder verification and approval release a valid pending brief', async () => {
+test('only admin verification and approval release a valid pending brief', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  await admin.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   assert.equal((await c.agentA.invoke('get_client_context', {})).client.past_projects.length, 1);
   const submitted = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.a.projects[0].id] }));
   assert.equal(submitted.status, 'pending_approval');
   assert.equal((await c.agentA.invoke('approve_brief', { brief_id: submitted.brief_id })).outcome, 'blocked');
-  const approved = await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
+  const approved = await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' });
   assert.equal(approved.outcome, 'approved');
-  assert.equal((await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Too late.' })).outcome, 'blocked');
+  assert.equal((await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'declined', reason: 'Too late.' })).outcome, 'blocked');
 });
 
 test('approval rechecks a project that was revoked after the brief was submitted', async () => {
   const c = await setup();
   const pricing = await price(c);
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  await admin.verifyProject({ project_id: c.a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
   const submitted = await c.agentA.invoke('submit_brief', brief(c, pricing, { credentials_cited: [c.a.projects[0].id] }));
-  await founder.verifyProject({ project_id: c.a.projects[0].id, verified: false });
-  assert.equal((await founder.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' })).rule_id, 'G3');
+  await admin.verifyProject({ project_id: c.a.projects[0].id, verified: false });
+  assert.equal((await admin.reviewBrief({ brief_id: submitted.brief_id, decision: 'approved' })).rule_id, 'G3');
 });
 
-test('founder may stop further pricing but cannot transfer advice already disclosed', async () => {
+test('admin may stop further pricing but cannot transfer advice already disclosed', async () => {
   const c = await setup();
   const pricing = await price(c);
   const pending = await c.agentA.invoke('submit_brief', brief(c, pricing));
   const conflict = await submitAs(c, c.agentB);
-  const transfer = await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_challenger' });
+  const transfer = await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_challenger' });
   assert.equal(transfer.outcome, 'blocked');
-  assert.equal((await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' })).outcome, 'allowed');
+  assert.equal((await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_neither' })).outcome, 'allowed');
   assert.equal((await price(c)).outcome, 'allowed');
   const stopped = await submitAs(c, c.agentA);
   assert.equal(stopped.rule_id, 'G2');
   assert.equal(stopped.reason, 'Tender Desk has stopped advising on this tender.');
   assert.equal((await submitAs(c, c.agentB)).rule_id, 'G2');
-  assert.equal((await founder.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).rule_id, 'G2');
+  assert.equal((await admin.reviewBrief({ brief_id: pending.brief_id, decision: 'approved' })).rule_id, 'G2');
 });
 
 test('serving the existing holder never gives the competing client access', async () => {
   const c = await setup();
   await submitAs(c, c.agentA);
   const conflict = await submitAs(c, c.agentB);
-  assert.equal((await founder.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' })).outcome, 'allowed');
+  assert.equal((await admin.resolveConflict({ conflict_id: conflict.conflict_id, resolution: 'serve_holder' })).outcome, 'allowed');
   assert.equal((await submitAs(c, c.agentA)).outcome, 'allowed');
   assert.equal((await submitAs(c, c.agentB)).outcome, 'escalated');
 });

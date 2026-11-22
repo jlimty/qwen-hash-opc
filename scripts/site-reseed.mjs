@@ -10,7 +10,7 @@ import { rebuildTenderDesk } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { connectPg, createPgDatabase } from '../src/pg-database.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
-import { exists, loadFounderToken, seedDemo, siteConnector } from './lib/seed.mjs';
+import { exists, loadAdminToken, seedDemo, siteConnector } from './lib/seed.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const hostOf = (url) => /@([^/:?]+)/.exec(url)?.[1] ?? 'unknown host';
@@ -35,7 +35,7 @@ try {
   // seed runs after it, so the worst failure leaves an empty new schema, and re-running the reseed recovers.
   const stateDir = resolve(values['state-dir'] ?? join(root, '.local', 'site'));
   await mkdir(stateDir, { recursive: true, mode: 0o700 });
-  const founderToken = await loadFounderToken(join(stateDir, 'founder-token.txt'));
+  const adminToken = await loadAdminToken(join(stateDir, 'admin-token.txt'));
   const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
   const connector = await siteConnector(root);
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -44,8 +44,8 @@ try {
   }
 
   await rebuildTenderDesk(database);
-  const desk = createTenderDesk({ database, dataset, founderToken });
-  await seedDemo(desk.founder(founderToken), join(stateDir, 'agent-tokens'), { connector, connectorDir: join(stateDir, 'connectors') });
+  const desk = createTenderDesk({ database, dataset, adminToken });
+  await seedDemo(desk.admin(adminToken), join(stateDir, 'agent-tokens'), { connector, connectorDir: join(stateDir, 'connectors') });
   console.log('Rebuilt tender_desk and seeded the demo baseline (Birch Events, fictional; one public intake connector).');
   console.log(`New credential files: ${join(stateDir, 'agent-tokens')}. QwenWork configs: ${join(stateDir, 'connectors')}. Re-paste Birch's connector in QwenWork.`);
 } catch (error) {

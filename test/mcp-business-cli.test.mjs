@@ -55,12 +55,12 @@ test('launcher seeds fictional clients, protects credential files, persists acro
       assert.match(tokens[label], /^Bearer [a-f0-9]{64}$/);
     }
     assert.equal(new Set(Object.values(tokens)).size, 2);
-    assert.equal((await stat(join(stateDir, 'founder-token.txt'))).mode & 0o777, 0o600);
-    const founderSecret = (await readFile(join(stateDir, 'founder-token.txt'), 'utf8')).trim();
-    assert.match(founderSecret, /^[a-f0-9]{64}$/);
-    const consoleUrl = /Founder console at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(server.output())[1];
+    assert.equal((await stat(join(stateDir, 'admin-token.txt'))).mode & 0o777, 0o600);
+    const adminSecret = (await readFile(join(stateDir, 'admin-token.txt'), 'utf8')).trim();
+    assert.match(adminSecret, /^[a-f0-9]{64}$/);
+    const consoleUrl = /Admin console at (http:\/\/127\.0\.0\.1:\d+\/)/.exec(server.output())[1];
     assert.match(await (await fetch(`${consoleUrl}login`)).text(), /Admin sign-in/);
-    assert.ok(!server.output().includes(founderSecret));
+    assert.ok(!server.output().includes(adminSecret));
 
     const intake = await connect(url, tokens.intake);
     const created = await call(intake, 'create_client', { name: 'Cedar Markets (test)', capabilities: 'Night markets', categories: ['events-community'], team_size: 6, max_contract_cents: 20000000 });

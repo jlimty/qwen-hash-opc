@@ -16,19 +16,19 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   ...[1, 2, 3, 4, 5].map((i) => `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 123456}.00`),
   'NEW-1,Event management services,Agency A,1/1/2026,Awarded to Suppliers,Zebra Secret Pte,98765.43',
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let db; let desk; let founder; let server; let url; let clientToken; let intakeToken;
+const adminToken = randomBytes(32).toString('hex');
+let db; let desk; let admin; let server; let url; let clientToken; let intakeToken;
 const clients = [];
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
   const backtest = backtestFromJson(JSON.parse(JSON.stringify(backtestToJson(buildBacktest(dataset), dataset))), dataset);
-  desk = createTenderDesk({ database: db, dataset, founderToken, backtest });
-  founder = desk.founder(founderToken);
-  const created = await founder.createClient({ name: 'Wire Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [] });
-  clientToken = (await founder.issueAgentCredential({ role: 'client', client_id: created.client_id })).token;
-  intakeToken = (await founder.issueAgentCredential({ role: 'intake' })).token;
+  desk = createTenderDesk({ database: db, dataset, adminToken, backtest });
+  admin = desk.admin(adminToken);
+  const created = await admin.createClient({ name: 'Wire Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [] });
+  clientToken = (await admin.issueAgentCredential({ role: 'client', client_id: created.client_id })).token;
+  intakeToken = (await admin.issueAgentCredential({ role: 'intake' })).token;
   const handle = createMcpWebHandler({ authenticate: (token) => desk.agent(token) });
   server = createServer(async (req, res) => {
     const chunks = [];
@@ -94,8 +94,8 @@ test('blocked outcomes are flagged as tool errors, and spoofed client_id is reje
   assert.ok(unknown instanceof Error || unknown.isError);
 });
 
-test('missing, wrong and founder credentials get 401, and the founder secret is never accepted', async () => {
-  for (const authorization of [undefined, 'Bearer nope', `Bearer ${founderToken}`, 'Basic abc']) {
+test('missing, wrong and admin credentials get 401, and the admin secret is never accepted', async () => {
+  for (const authorization of [undefined, 'Bearer nope', `Bearer ${adminToken}`, 'Basic abc']) {
     const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(authorization && { Authorization: authorization }) }, body: '{}' });
     assert.equal(response.status, 401, String(authorization));
   }

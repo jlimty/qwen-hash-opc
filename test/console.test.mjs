@@ -13,15 +13,15 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   ...[1, 2, 3, 4, 5].map((i) => `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 12345678}`),
   ...Array.from({ length: 30 }, (_, i) => `NEW-${i + 1},Event <b>management</b> services,Agency A,1/1/2026,Awarded to Suppliers,Hidden winner,9876543`),
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let db; let desk; let founder; let server; let port; let sequence = 0;
+const adminToken = randomBytes(32).toString('hex');
+let db; let desk; let admin; let server; let port; let sequence = 0;
 
 before(async () => {
   db = await PGlite.create();
   await initializeGovernance(db);
-  desk = createTenderDesk({ database: db, dataset, founderToken });
-  founder = desk.founder(founderToken);
-  server = createConsoleServer({ founder: desk.founder, founderToken, dataset });
+  desk = createTenderDesk({ database: db, dataset, adminToken });
+  admin = desk.admin(adminToken);
+  server = createConsoleServer({ admin: desk.admin, adminToken, dataset });
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
   port = server.address().port;
@@ -47,7 +47,7 @@ function http({ method = 'GET', path = '/', headers = {}, form } = {}) {
 }
 const sameOrigin = () => ({ Origin: `http://127.0.0.1:${port}` });
 async function login() {
-  const result = await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: founderToken } });
+  const result = await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: adminToken } });
   assert.equal(result.status, 303);
   const cookie = result.headers['set-cookie'].map((c) => c.split(';')[0]).join('; ');
   const page = await http({ path: '/', headers: { Cookie: cookie } });
@@ -68,11 +68,11 @@ const profile = (name) => ({ name, capabilities: 'Events', categories: ['events-
   past_projects: [{ title: 'Festival project', value_cents: 12500000 }] });
 async function pendingBrief(content = 'Check scope and capacity before bidding.', cite = false) {
   const suffix = randomUUID().slice(0, 6);
-  const a = await founder.createClient(profile(`Amber ${suffix}`));
-  const b = await founder.createClient(profile(`Birch ${suffix}`));
-  if (cite) await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
-  const agentA = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
-  const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
+  const a = await admin.createClient(profile(`Amber ${suffix}`));
+  const b = await admin.createClient(profile(`Birch ${suffix}`));
+  if (cite) await admin.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  const agentA = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
+  const agentB = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
   const tender_no = `NEW-${++sequence}`;
   const pricing = await agentA.invoke('request_pricing', { tender_no, query: 'event management' });
   const brief = await agentA.invoke('submit_brief', { tender_no, stat_id: pricing.stat_id, price_band: pricing.price_band, recommendation: 'bid',
@@ -84,16 +84,16 @@ async function pendingBrief(content = 'Check scope and capacity before bidding.'
 }
 const status = async (id) => (await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [id])).rows[0].status;
 
-test('requires the founder secret: anonymous visits go to login and wrong secrets get no session', async () => {
+test('requires the admin secret: anonymous visits go to login and wrong secrets get no session', async () => {
   const anonymous = await http({ path: '/' });
   assert.equal(anonymous.status, 303);
   assert.equal(anonymous.headers.location, '/login');
   const wrong = await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: 'a'.repeat(64) } });
   assert.equal(wrong.status, 401);
   assert.equal(wrong.headers['set-cookie'], undefined);
-  assert.doesNotMatch(wrong.text, new RegExp(founderToken));
+  assert.doesNotMatch(wrong.text, new RegExp(adminToken));
   const { cookie } = await login();
-  const flags = (await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: founderToken } })).headers['set-cookie'][0];
+  const flags = (await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: adminToken } })).headers['set-cookie'][0];
   assert.match(flags, /HttpOnly/);
   assert.match(flags, /SameSite=Strict/);
   assert.match(flags, /Path=\//);
@@ -164,7 +164,7 @@ test('shows a pending brief with tender, client, band and escaped agent text', a
   assert.match(detail.text, /Cites no projects/);
 });
 
-test('the founder can approve and decline briefs, with a visible result and an audit entry', async () => {
+test('the admin can approve and decline briefs, with a visible result and an audit entry', async () => {
   const one = await pendingBrief('Brief one.');
   const two = await pendingBrief('Brief two.');
   const session = await login();
@@ -183,13 +183,13 @@ test('the founder can approve and decline briefs, with a visible result and an a
   const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.' });
   assert.equal(declined.status, 303);
   assert.equal(await status(two.brief.brief_id), 'declined');
-  const audit = (await founder.readConsole()).audit.filter((row) => row.actor === 'founder' && row.action === 'review_brief');
+  const audit = (await admin.readConsole()).audit.filter((row) => row.actor === 'admin' && row.action === 'review_brief');
   assert.ok(audit.length >= 2);
 });
 
 test('a blocked approval is explained, not hidden', async () => {
   const brief = await pendingBrief('Cites a project.', true);
-  await founder.verifyProject({ project_id: brief.a.projects[0].id, verified: false });
+  await admin.verifyProject({ project_id: brief.a.projects[0].id, verified: false });
   const session = await login();
   const blocked = await act(session, `/actions/brief/${brief.brief.brief_id}/approve`);
   assert.equal(await status(brief.brief.brief_id), 'pending_approval');
@@ -229,6 +229,17 @@ test('projects can be verified and revoked from the console', async () => {
   await act(session, `/actions/project/${id}/unverify`);
   assert.equal((await db.query('SELECT verified FROM tender_desk.projects WHERE id=$1', [id])).rows[0].verified, false);
   assert.equal((await act(session, '/actions/project/not-a-uuid/verify')).status, 404);
+});
+
+test('an audit row from before the rename shows as the admin, never by its stored actor name', async () => {
+  const legacy = 'fou' + 'nder';
+  await db.query(`INSERT INTO tender_desk.audit_log (actor,action,outcome,reason) VALUES ($1,'verify_project','allowed','Legacy row.')`, [legacy]);
+  const id = (await db.query('SELECT max(id) AS id FROM tender_desk.audit_log')).rows[0].id;
+  const session = await login();
+  const list = await http({ path: '/audit', headers: { Cookie: session.cookie } });
+  const detail = await http({ path: `/audit/AUD${String(id).padStart(5, '0')}`, headers: { Cookie: session.cookie } });
+  for (const page of [list.text, detail.text]) assert.doesNotMatch(page, new RegExp(legacy, 'i'));
+  assert.match(detail.text, /You \(admin\)/);
 });
 
 test('the audit log shows plain-language actions with rule IDs, and reading it writes nothing', async () => {
@@ -406,8 +417,8 @@ test('the tender page gathers briefs and conflicts and hides the outcome until r
 
 test('the client page shows the shortlist, and revoking a connector stops the agent', async () => {
   const suffix = randomUUID().slice(0, 6);
-  const c = await founder.createClient(profile(`Revoke ${suffix}`));
-  const key = await founder.issueAgentCredential({ role: 'client', client_id: c.client_id });
+  const c = await admin.createClient(profile(`Revoke ${suffix}`));
+  const key = await admin.issueAgentCredential({ role: 'client', client_id: c.client_id });
   const agent = await desk.agent(key.token);
   await agent.invoke('save_shortlist', { items: [{ tender_no: 'NEW-1', fit_score: 77, reasons: ['Good fit'] }] });
   const session = await login();
@@ -429,5 +440,6 @@ test('logging out ends the session, and repeated wrong secrets are throttled', a
   const results = [];
   for (let i = 0; i < 8; i++) results.push((await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: 'c'.repeat(64) } })).status);
   assert.ok(results.includes(429), results.join());
-  assert.equal((await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: founderToken } })).status, 429);
+  assert.equal((await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: adminToken } })).status, 429);
 });
+

@@ -14,8 +14,8 @@ const dataset = parseTenderCsv('tender_no,tender_description,agency,award_date,t
   'NEW-1,Event management services,Agency A,1/1/2026,Awarded to Suppliers,Hidden winner,98765.43',
   'NEW-2,Event management services,Agency A,1/1/2026,Awarded to Suppliers,Past supplier,300000.00',
 ].join('\n'));
-const founderToken = randomBytes(32).toString('hex');
-let pglite; let server; let sql; let database; let desk; let founder;
+const adminToken = randomBytes(32).toString('hex');
+let pglite; let server; let sql; let database; let desk; let admin;
 
 before(async () => {
   pglite = await PGlite.create();
@@ -25,8 +25,8 @@ before(async () => {
   sql = connectPg(postgres, `postgres://postgres:postgres@127.0.0.1:${port}/postgres`, { max: 1, ssl: false });
   database = createPgDatabase(sql);
   await initializeGovernance(database);
-  desk = createTenderDesk({ database, dataset, founderToken });
-  founder = desk.founder(founderToken);
+  desk = createTenderDesk({ database, dataset, adminToken });
+  admin = desk.admin(adminToken);
 });
 after(async () => {
   await database?.close();
@@ -44,11 +44,11 @@ test('the governance schema migrates once over the Postgres wire protocol', asyn
 });
 
 test('the full governed journey works: pricing hold, escalation, brief, approval, with JSON, bigint and arrays intact', async () => {
-  const a = await founder.createClient(profile('Amber Wire'));
-  const b = await founder.createClient(profile('Birch Wire'));
-  await founder.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
-  const agentA = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
-  const agentB = await desk.agent((await founder.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
+  const a = await admin.createClient(profile('Amber Wire'));
+  const b = await admin.createClient(profile('Birch Wire'));
+  await admin.verifyProject({ project_id: a.projects[0].id, verified: true, note: 'Checked by the admin (test).' });
+  const agentA = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: a.client_id })).token);
+  const agentB = await desk.agent((await admin.issueAgentCredential({ role: 'client', client_id: b.client_id })).token);
 
   const context = await agentA.invoke('get_client_context', {});
   assert.equal(context.client.max_contract_cents, 100000000);
@@ -65,16 +65,16 @@ test('the full governed journey works: pricing hold, escalation, brief, approval
     recommendation: 'bid', content: 'Check capacity before bidding.' });
   assert.equal(escalated.outcome, 'escalated');
 
-  const state = await founder.readConsole();
+  const state = await admin.readConsole();
   const stored = state.briefs.find((x) => x.id === brief.brief_id);
   assert.deepEqual(stored.price_band, pricing.price_band);
   assert.deepEqual(stored.credentials_cited, [a.projects[0].id]);
   assert.deepEqual(stored.flags, ['human_review_required']);
   assert.ok(state.comparables.every((row) => Number.isInteger(row.n)));
 
-  const approved = await founder.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' });
+  const approved = await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' });
   assert.equal(approved.outcome, 'approved');
-  const blocked = await founder.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' });
+  const blocked = await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved' });
   assert.equal(blocked.outcome, 'blocked');
 });
 
@@ -88,9 +88,9 @@ test('a rolled-back transaction leaves no partial state, and append-only trigger
   await assert.rejects(database.query('DELETE FROM tender_desk.audit_log'), { code: '55000' });
 });
 
-test('founder actions persist: reveal state survives a new desk over the same database', async () => {
-  assert.equal((await founder.revealBacktest({ tender_no: 'NEW-1' })).outcome, 'allowed');
-  const again = createTenderDesk({ database, dataset, founderToken }).founder(founderToken);
+test('admin actions persist: reveal state survives a new desk over the same database', async () => {
+  assert.equal((await admin.revealBacktest({ tender_no: 'NEW-1' })).outcome, 'allowed');
+  const again = createTenderDesk({ database, dataset, adminToken }).admin(adminToken);
   assert.equal((await again.readConsole()).backtest.revealed, 1);
 });
 

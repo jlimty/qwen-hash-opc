@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { PGlite } from '@electric-sql/pglite';
 import { initializeGovernance } from '../src/governance-db.mjs';
-import { loadFounderToken, seedDemo } from './lib/seed.mjs';
+import { loadAdminToken, seedDemo } from './lib/seed.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { createConsoleServer } from '../src/console.mjs';
 import { createTenderDeskServer } from '../src/mcp-business.mjs';
@@ -24,14 +24,14 @@ try {
   const dataset = parseTenderCsv(await readFile(join(root, 'data', 'GovernmentProcurementviaGeBIZ.csv'), 'utf8'));
   database = await PGlite.create(join(stateDir, 'db'));
   await initializeGovernance(database);
-  const founderTokenPath = join(stateDir, 'founder-token.txt');
-  const founderToken = await loadFounderToken(founderTokenPath);
+  const adminTokenPath = join(stateDir, 'admin-token.txt');
+  const adminToken = await loadAdminToken(adminTokenPath);
   const consolePort = Number(process.env.TENDER_DESK_CONSOLE_PORT ?? 8789);
   if (!Number.isInteger(consolePort) || consolePort < 0 || consolePort > 65535) throw new Error('TENDER_DESK_CONSOLE_PORT must be an integer from 0 to 65535.');
   // Read lazily: with port 0 the real port is known only after listening.
   const connector = { get url() { return `http://127.0.0.1:${server.address().port}/mcp`; },
     get origin() { return `http://127.0.0.1:${server.address().port}`; }, timeout: 60 };
-  const desk = createTenderDesk({ database, dataset, founderToken, connector });
+  const desk = createTenderDesk({ database, dataset, adminToken, connector });
   const tokenDir = join(stateDir, 'agent-tokens');
 
   server = createTenderDeskServer({ authenticate: desk.agent });
@@ -45,17 +45,17 @@ try {
   };
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
-  consoleServer = createConsoleServer({ founder: desk.founder, founderToken, dataset });
+  consoleServer = createConsoleServer({ admin: desk.admin, adminToken, dataset });
   for (const [listener, listenPort] of [[server, port], [consoleServer, consolePort]]) {
     listener.listen(listenPort, '127.0.0.1');
     await new Promise((resolveListening, reject) => { listener.once('listening', resolveListening); listener.once('error', reject); });
   }
   if (values['seed-demo']) {
-    try { await seedDemo(desk.founder(founderToken), tokenDir); }
+    try { await seedDemo(desk.admin(adminToken), tokenDir); }
     catch (error) { throw new Error(`${error.message} If seeding stopped partway, delete the state directory's db and agent-tokens folders before retrying.`); }
   }
   console.log(`Tender Desk MCP listening at http://127.0.0.1:${server.address().port}/mcp`);
-  console.log(`Founder console at http://127.0.0.1:${consoleServer.address().port}/ (secret file: ${founderTokenPath})`);
+  console.log(`Admin console at http://127.0.0.1:${consoleServer.address().port}/ (secret file: ${adminTokenPath})`);
   console.log(`Agent credential files (one connector each, mode 0600): ${tokenDir}`);
 
 } catch (error) {
