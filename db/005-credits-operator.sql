@@ -47,8 +47,8 @@ CREATE INDEX review_notes_subject ON tender_desk.review_notes (subject, subject_
 ALTER TABLE tender_desk.briefs ADD COLUMN parts jsonb, ADD COLUMN revision integer NOT NULL DEFAULT 1 CHECK (revision > 0);
 ALTER TABLE tender_desk.brief_requests ADD COLUMN requirements_text text CHECK (requirements_text IS NULL OR length(requirements_text) <= 4000);
 
-INSERT INTO tender_desk.settings (key, value) VALUES ('credit_price_cents', '990'), ('credits_per_brief', '1'),
-  ('welcome_credits', '1'), ('credit_packs', '5:4950,20:17900,50:39900') ON CONFLICT (key) DO NOTHING;
+INSERT INTO tender_desk.settings (key, value) VALUES ('credit_price_cents', '2900'), ('credits_per_brief', '1'),
+  ('welcome_credits', '1'), ('credit_packs', '5:11900,20:39900') ON CONFLICT (key) DO NOTHING;
 
 REVOKE ALL ON ALL TABLES IN SCHEMA tender_desk FROM PUBLIC;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA tender_desk FROM PUBLIC;

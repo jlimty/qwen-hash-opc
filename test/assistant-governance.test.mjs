@@ -242,14 +242,14 @@ test('a new customer starts with one free credit, and a request without credits 
 test('buying a pack adds its credits in test mode, and only listed packs can be bought', async () => {
   const a = await customer('Peach');
   const credits = await a.ops.credits();
-  assert.deepEqual(credits.packs, [{ credits: 5, cents: 4950 }, { credits: 20, cents: 17900 }, { credits: 50, cents: 39900 }]);
+  assert.deepEqual(credits.packs, [{ credits: 5, cents: 11900 }, { credits: 20, cents: 39900 }]);
   assert.equal(credits.perBrief, 1);
   const bought = await a.ops.buyCredits({ credits: 5 });
   assert.equal(bought.outcome, 'allowed');
   assert.equal((await a.ops.credits()).balance, 6);
   const purchase = (await db.query('SELECT * FROM tender_desk.credit_purchases WHERE client_id=$1', [a.client_id])).rows[0];
   assert.equal(purchase.status, 'test');
-  assert.equal(Number(purchase.amount_cents), 4950);
+  assert.equal(Number(purchase.amount_cents), 11900);
   assert.equal((await a.ops.buyCredits({ credits: 7 })).outcome, 'blocked');
   assert.deepEqual((await a.ops.credits()).history.map((h) => h.reason), ['purchase', 'welcome']);
 });
@@ -300,6 +300,6 @@ test('bad credit settings fall back to safe values instead of minting credits or
   const bad = await creditSettings(fake({ credits_per_brief: '-3', welcome_credits: '2.5', credit_price_cents: 'abc', credit_packs: '5:4950,5000:1,0:10,x' }));
   assert.equal(bad.perBrief, 1);
   assert.equal(bad.welcome, 1);
-  assert.equal(bad.priceCents, 990);
+  assert.equal(bad.priceCents, 2900);
   assert.deepEqual(bad.packs, [{ credits: 5, cents: 4950 }]);
 });

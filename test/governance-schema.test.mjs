@@ -48,10 +48,10 @@ test('005 adds credits, the operator role, review notes and brief parts', async 
       AND table_name = ANY($1::text[]) ORDER BY table_name`, [['credit_ledger', 'credit_purchases', 'review_notes']])).rows.map((r) => r.table_name);
     assert.deepEqual(tables, ['credit_ledger', 'credit_purchases', 'review_notes']);
     const settings = Object.fromEntries((await database.query('SELECT key,value FROM tender_desk.settings')).rows.map((r) => [r.key, r.value]));
-    assert.equal(settings.credit_price_cents, '990');
+    assert.equal(settings.credit_price_cents, '2900');
     assert.equal(settings.credits_per_brief, '1');
     assert.equal(settings.welcome_credits, '1');
-    assert.equal(settings.credit_packs, '5:4950,20:17900,50:39900');
+    assert.equal(settings.credit_packs, '5:11900,20:39900');
     await database.query("INSERT INTO tender_desk.agent_credentials (token_hash,role) VALUES ($1,'operator')", ['a'.repeat(64)]);
     await assert.rejects(database.query("INSERT INTO tender_desk.agent_credentials (token_hash,role) VALUES ($1,'admin')", ['b'.repeat(64)]));
     const columns = (await database.query(`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='tender_desk'

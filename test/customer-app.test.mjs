@@ -380,7 +380,7 @@ test('the credits page shows the balance, sells packs in test mode, and keeps a 
   const page = await b.get('/credits');
   assert.match(page.text, /You have 1 credit/);
   assert.match(page.text, /Test mode: no card is charged/);
-  assert.match(page.text, /5 credits[\s\S]*S\$49\.50/);
+  assert.match(page.text, /5 credits[\s\S]*S\$119/);
   const bought = await b.post('/credits/buy', { credits: '5' });
   assert.equal(bought.status, 303);
   const after = await b.get('/credits');
@@ -501,4 +501,23 @@ test('a no-bid report shows no suggested range or outlined band', async () => {
       parts: { recommendation: 'no-bid', n: 7, reasons: ['Outside your trade.'], price_position: null, suggested_range: null, winners: [], requirements: [], questions: [], risks: [], cited: [] } } });
   assert.match(html, /Do not bid/);
   assert.doesNotMatch(html, /Suggested price range|Suggested range/);
+});
+
+test('with email verification on, sign-up asks the customer to check their email and opens no session', async () => {
+  const fake = fakeNeonAuth({ requireVerification: true });
+  const auth = createCustomerAuth({ baseUrl: 'https://auth.example', origin, adminUserId: 'admin-user-0001', fetchImpl: fake.fetchImpl });
+  const verifying = createCustomerHandler({ desk, dataset, auth, llm, models: { read: 'r', draft: 'd' }, database, basePath: base, secureCookies: true,
+    refresh: async () => {}, now: () => new Date('2026-11-22T02:00:00Z') });
+  const page = await verifying(new Request(`${origin}${base}/signup`, { headers: { Origin: origin } }), '/signup');
+  const csrf = /name="csrf" value="([^"]+)"/.exec(await page.text())[1];
+  const cookie = page.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+  const email = `verify-${randomBytes(3).toString('hex')}@sme.example`;
+  const done = await verifying(new Request(`${origin}${base}/signup`, { method: 'POST', headers: { Cookie: cookie, Origin: origin, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ csrf, email, password: 'a long password', name: 'Owner' }).toString() }), '/signup');
+  assert.equal(done.status, 200);
+  const text = await done.text();
+  assert.match(text, /Check your email/);
+  assert.match(text, new RegExp(email.replace(/[.+]/g, '\\$&')));
+  assert.ok(!done.headers.getSetCookie().some((c) => c.startsWith('td_customer=') && !c.includes('Max-Age=0')));
+  assert.equal(fake.calls.find((c) => c.path === '/sign-up/email').body.callbackURL, `${origin}${base}/signin`);
 });

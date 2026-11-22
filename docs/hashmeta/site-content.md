@@ -52,7 +52,7 @@ Tender Desk helps small and medium businesses in Singapore decide which governme
 
 **Free price check, no account needed.** Pick an open GeBIZ tender, or paste one. In seconds you see what comparable government contracts were awarded for: the median, the middle half, and the actual past awards behind those numbers, with the agencies that buy this kind of work and how spread out the winners are.
 
-**Reviewed brief, one credit (S$9.90).** Tell us about your company and past projects once. Ask for a brief on any open tender, and you get a visual report: a bid or no-bid recommendation, a suggested price range with charts of the past awards behind it, who usually wins this work, a check of the tender's requirements against your projects, and questions to ask the agency. It cites only projects we have checked against public GeBIZ records. Our AI drafts it. A person reads it and approves it before you see it, usually within one business day. Your first brief is free, and a declined request gives its credit back.
+**Reviewed brief, one credit (S$29).** Tell us about your company and past projects once. Ask for a brief on any open tender, and you get a visual report: a bid or no-bid recommendation, a suggested price range with charts of the past awards behind it, who usually wins this work, a check of the tender's requirements against your projects, and questions to ask the agency. It cites only projects we have checked against public GeBIZ records. Our AI drafts it. A person reads it and approves it before you see it, usually within one business day. Your first brief is free, and a declined request gives its credit back.
 
 All of this runs on public Singapore government data: open tenders from GeBIZ, and five years of contract awards from data.gov.sg.
 
@@ -77,7 +77,7 @@ Each rule is enforced by the system itself, not by asking the AI nicely.
 
 1. **[Try a free price check](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant).** No account needed.
 2. **[Create an account](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/signup)** and add your past projects. For government work, include the GeBIZ tender number so we can check it.
-3. **Ask for a reviewed brief** on any open tender. Your first one is free; after that, credits are S$9.90 each, cheaper in packs. [See a sample brief](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/sample).
+3. **Ask for a reviewed brief** on any open tender. Your first one is free; after that, credits are S$29 each, cheaper in packs. [See a sample brief](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/sample).
 
 Credit purchases are in test mode while we launch: no card is charged.
 

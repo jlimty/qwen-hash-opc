@@ -3,7 +3,7 @@
 // page's CSRF token, matched against a cookie scoped to this app.
 import { randomBytes } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { assistantCss, creditWord, layout, renderCheck, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
+import { assistantCss, creditWord, layout, renderCheck, renderCheckEmail, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
 import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mjs';
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
@@ -168,8 +168,10 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     if (path === '/signup' && !post) return customer ? redirect('/home') : html(200, renderSignup({ csrf }));
     if (path === '/signup' && post) {
       let result;
-      try { result = await auth.signUp({ email: form.get('email'), password: form.get('password'), name: form.get('name') }); } catch { result = { ok: false, message: 'Sign-up is unavailable right now. Try again shortly.' }; }
+      try { result = await auth.signUp({ email: form.get('email'), password: form.get('password'), name: form.get('name'), callbackPath: `${basePath}/signin` }); } catch { result = { ok: false, message: 'Sign-up is unavailable right now. Try again shortly.' }; }
       if (!result.ok) return html(400, renderSignup({ csrf, message: result.message }));
+      // Email verification on: the account exists but signs in only after the link is clicked.
+      if (!result.session) return html(200, renderCheckEmail({ csrf, email: String(form.get('email') ?? '').trim() }));
       return redirect('/profile', { cookies: [sessionCookie(result.session)] });
     }
     if (path === '/signin' && !post) return customer ? redirect('/home') : html(200, renderSignin({ csrf }));

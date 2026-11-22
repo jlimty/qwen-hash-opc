@@ -52,3 +52,19 @@ test('the admin id may be looked up on each call, so the admin can change withou
   current = 'someone-else-0002';
   assert.equal((await auth.signIn(admin)).ok, true);
 });
+
+test('with email verification on, sign-up opens no session and sign-in waits for the link', async () => {
+  const fake = fakeNeonAuth({ requireVerification: true });
+  const auth = createCustomerAuth({ baseUrl: 'https://auth.example/auth', origin: 'https://site.example', adminUserId, fetchImpl: fake.fetchImpl });
+  const signed = await auth.signUp({ email: 'new@sme.example', password: 'a long password', name: 'New', callbackPath: '/app/signin' });
+  assert.equal(signed.ok, true);
+  assert.equal(signed.verifyEmail, true);
+  assert.equal(signed.session, null);
+  assert.match(signed.userId, /^user-/);
+  assert.equal(fake.calls[0].body.callbackURL, 'https://site.example/app/signin');
+  const early = await auth.signIn({ email: 'new@sme.example', password: 'a long password' });
+  assert.equal(early.ok, false);
+  assert.match(early.message, /verify your email/i);
+  fake.verifyEmail('new@sme.example');
+  assert.equal((await auth.signIn({ email: 'new@sme.example', password: 'a long password' })).ok, true);
+});

@@ -175,6 +175,13 @@ export function renderSignup({ csrf, message }) {
 <p class="small">Already have an account? <a href="/signin">Sign in</a></p></form></section>` });
 }
 
+export function renderCheckEmail({ csrf, email }) {
+  return layout({ title: 'Check your email', csrf, body: `<section class="panel narrow"><header><h2>Check your email</h2></header>
+<div class="form"><p>We sent a link to <strong>${esc(email)}</strong>. Open it to confirm your email, then sign in to set up your company.</p>
+<p class="small muted">No email after a few minutes? Check spam, or sign in and we will send a new link.</p>
+<div><a class="btn primary" href="/signin">Go to sign in</a></div></div></section>` });
+}
+
 export function renderSignin({ csrf, message }) {
   return layout({ title: 'Sign in', csrf, body: `<section class="panel narrow"><header><h2>Sign in</h2></header>
 <form class="form" method="post" action="/signin">${hidden('csrf', csrf)}${banner(message)}

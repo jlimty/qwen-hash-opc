@@ -14,10 +14,18 @@ export function createCustomerAuth({ baseUrl, origin, adminUserId, fetchImpl = f
     if (String(password ?? '').length < 8 || String(password).length > 256) return { message: 'Use a password of at least 8 characters.' };
     return { email: cleanEmail, password: String(password) };
   };
-  async function finish(response, fallback) {
+  async function finish(response, fallback, { allowPending = false } = {}) {
     const body = await response.json().catch(() => undefined);
     const session = sessionFrom(response);
     const userId = body?.user?.id;
+    if (response.status === 403 && body?.code === 'EMAIL_NOT_VERIFIED') {
+      return { ok: false, unverified: true, message: 'Verify your email first: open the link we sent you, then sign in.' };
+    }
+    // With email verification on, Neon Auth creates the account but opens no session until the link is clicked.
+    if (allowPending && response.ok && !session && typeof userId === 'string') {
+      if (await isAdmin(userId)) return { ok: false, message: 'This account cannot be used as a customer account.' };
+      return { ok: true, userId, session: null, verifyEmail: true };
+    }
     if (!response.ok || !session || typeof userId !== 'string') {
       return { ok: false, message: typeof body?.message === 'string' && response.status < 500 ? body.message.slice(0, 120) : fallback };
     }
@@ -25,19 +33,20 @@ export function createCustomerAuth({ baseUrl, origin, adminUserId, fetchImpl = f
     return { ok: true, userId, session: packSession(session) };
   }
   return {
-    async signUp({ email, password, name }) {
+    async signUp({ email, password, name, callbackPath }) {
       const checked = credentials(email, password);
       if (checked.message) return { ok: false, message: checked.message };
       const response = await call('/sign-up/email', { method: 'POST', headers: headers(),
-        body: JSON.stringify({ email: checked.email, password: checked.password, name: String(name ?? '').trim().slice(0, 100) || checked.email }) });
-      return finish(response, 'Sign-up is unavailable right now. Try again shortly.');
+        body: JSON.stringify({ email: checked.email, password: checked.password, name: String(name ?? '').trim().slice(0, 100) || checked.email,
+          ...(callbackPath && { callbackURL: `${origin}${callbackPath}` }) }) });
+      return finish(response, 'Sign-up is unavailable right now. Try again shortly.', { allowPending: true });
     },
     async signIn({ email, password }) {
       const checked = credentials(email, password);
       if (checked.message) return { ok: false, message: 'Email or password is incorrect.' };
       const response = await call('/sign-in/email', { method: 'POST', headers: headers(), body: JSON.stringify(checked) });
       const result = await finish(response, 'Email or password is incorrect.');
-      return result.ok || result.message.startsWith('This account') ? result : { ok: false, message: 'Email or password is incorrect.' };
+      return result.ok || result.unverified || result.message.startsWith('This account') ? result : { ok: false, message: 'Email or password is incorrect.' };
     },
     async verify(packed) {
       const session = unpackSession(packed);

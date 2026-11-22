@@ -32,7 +32,7 @@ export async function creditSettings(tx) {
   const packs = String(rows.credit_packs ?? '').split(',').map((pack) => pack.split(':').map(Number))
     .filter(([credits, cents]) => Number.isInteger(credits) && credits >= 1 && credits <= 1000 && Number.isInteger(cents) && cents >= 1 && cents <= 100000000)
     .map(([credits, cents]) => ({ credits, cents }));
-  return { priceCents: whole(rows.credit_price_cents, 1, 100000000, 990), perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
+  return { priceCents: whole(rows.credit_price_cents, 1, 100000000, 2900), perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
     welcome: whole(rows.welcome_credits, 0, 1000, 1), packs };
 }
 const creditBalance = async (tx, client_id) => Number((await tx.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
