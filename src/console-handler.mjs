@@ -294,8 +294,10 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
       let flash;
       try {
         if (verb === 'ask') {
-          const result = await ops.askForInfo({ request_id: id, message: String(form.get('reason') ?? '').slice(0, 500) });
+          const result = await ops.askForInfo({ request_id: id, message: String(form.get('message') ?? '').slice(0, 500) }, { now: now() });
           flash = result.outcome === 'blocked' ? { ok: false, text: result.reason } : { ok: true, text: 'Asked the client for more. The tender stays theirs and the credit stays spent until they resubmit or cancel.' };
+        } else if (verb === 'decline' && form.get('confirm') !== 'yes') {
+          flash = { ok: false, text: 'Tick the box to confirm the decline. Nothing was changed.' };
         } else if (verb === 'decline') {
           const result = await ops.declineRequest({ request_id: id, reason: String(form.get('reason') ?? '').slice(0, 500) });
           flash = result.outcome === 'blocked' ? { ok: false, text: result.reason } : { ok: true, text: 'Request declined. The customer can see your reason, and the tender is free again.' };
@@ -321,10 +323,11 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
     if (!match || !actions[actionKey] || !idPattern.test(match[2])) return text(404, 'Not found');
     let flash;
     try {
+      if (actionKey === 'brief/decline' && form.get('confirm') !== 'yes') throw Object.assign(new Error('unconfirmed'), { unconfirmed: true });
       const result = await actions[actionKey](ops, match[2], form);
       flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` } : { ok: true, text: successText[actionKey] };
-    } catch {
-      flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };
+    } catch (error) {
+      flash = { ok: false, text: error?.unconfirmed ? 'Tick the box to confirm the decline. Nothing was changed.' : 'The action could not be completed. Nothing was changed.' };
     }
     const back = String(form.get('back') ?? '');
     const landing = backPattern.test(back) ? back : { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients', credential: '/clients' }[match[1]];

@@ -4,7 +4,7 @@ import { renderBriefHtml } from './brief-render.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { referenceCode, referenceLabel } from './references.mjs';
 import { profileGaps } from './profile-help.mjs';
-import { actionLabels, ago, esc, form, icon, money, notesPanel, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
+import { actionLabels, ago, decisionForms, esc, form, icon, money, notesPanel, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
 
 // Audit rows written by the admin: 'admin' today, an older operator name on rows from before the rename. Agents,
 // customers and rejected callers always carry their own prefix, so anything else is the admin.
@@ -111,11 +111,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
   const actions = decided ? '' : `<div class="decision">
 <div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}"><button class="primary" type="submit">Approve</button></form>
 <span class="muted small">Approval re-checks the advice slot and the citations.</span></div>
-<details class="decline"><summary>Ask for more or decline…</summary><form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
-<label for="decline-reason">Message the client will read</label>
-<textarea id="decline-reason" name="reason" required maxlength="500" rows="2"></textarea>
-<span class="muted small">Ask for more keeps the tender and credit with the client and sets this draft aside; Decline frees the tender and returns the credit.</span>
-<div class="row-actions">${brief.request_id ? `<button type="submit" formaction="/actions/request/${esc(brief.request_id)}/ask">Ask for more</button>` : ''}<button class="outline" type="submit">Decline</button></div></form></details></div>`;
+<div class="decisions">${decisionForms({ csrf, requestId: brief.request_id, declineAction: `/actions/brief/${brief.id}/decline` })}</div></div>`;
   const owner = client(brief.client_id);
   const verifiedCount = state.projects.filter((p) => p.client_id === brief.client_id && p.verified).length;
   const closes = brief.closes_at ? new Date(brief.closes_at) : null;

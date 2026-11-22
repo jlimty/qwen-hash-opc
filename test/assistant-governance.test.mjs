@@ -403,3 +403,36 @@ test('a request that needs info can be cancelled for a refund, or declined by th
   await admin.askForInfo({ request_id: two.request_id, message: 'More please.' });
   assert.equal((await admin.declineRequest({ request_id: two.request_id, reason: 'No reply before the tender closed.' })).outcome, 'declined');
 });
+
+test('asking for more sets a reply deadline; past it the request closes itself, the credit comes back and the tender is freed', async () => {
+  const a = await customer('Silent');
+  const b = await customer('Next');
+  await b.ops.buyCredits({ credits: 5 });
+  const tender_no = await openTender({ closes: '2026-12-20T13:00:00+08:00' });
+  const requested = await ask(a, tender_no);
+  const before = await balance(a.client_id);
+  await admin.askForInfo({ request_id: requested.request_id, message: 'Add your festival work.' }, { now });
+  const due = (await db.query('SELECT info_due_at FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0].info_due_at;
+  assert.equal(new Date(due).toISOString(), new Date(now.getTime() + 5 * 86400000).toISOString(), 'five days, when the tender closes later than that');
+  const later = new Date(now.getTime() + 6 * 86400000);
+  assert.equal((await b.ops.canRequest(tender_no, { now: later })).ok, true, 'the tender is free once the deadline passes');
+  const row = (await db.query('SELECT status,decline_reason FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0];
+  assert.equal(row.status, 'declined');
+  assert.match(row.decline_reason, /did not hear back/);
+  assert.equal(await balance(a.client_id), before + 1);
+});
+
+test('the reply deadline is two days before closing when that comes first, and asking is refused when it is too late', async () => {
+  const a = await customer('Closer');
+  const soon = await openTender({ closes: new Date(now.getTime() + 4 * 86400000).toISOString() });
+  const r1 = await ask(a, soon);
+  await admin.askForInfo({ request_id: r1.request_id, message: 'More please.' }, { now });
+  const due = (await db.query('SELECT info_due_at FROM tender_desk.brief_requests WHERE id=$1', [r1.request_id])).rows[0].info_due_at;
+  assert.equal(new Date(due).toISOString(), new Date(now.getTime() + 2 * 86400000).toISOString());
+  await a.ops.buyCredits({ credits: 5 });
+  const tooSoon = await openTender({ closes: new Date(now.getTime() + 36 * 3600000).toISOString() });
+  const r2 = await ask(a, tooSoon);
+  const refused = await admin.askForInfo({ request_id: r2.request_id, message: 'More please.' }, { now });
+  assert.equal(refused.outcome, 'blocked');
+  assert.match(refused.reason, /closes too soon/);
+});

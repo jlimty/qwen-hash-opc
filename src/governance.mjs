@@ -231,15 +231,29 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
   }
   const adminActor = { name: 'admin' };
   function adminOperation(action, schema, handler) {
-    return (input = {}) => database.transaction(async (tx) => {
+    return (input = {}, options = {}) => database.transaction(async (tx) => {
       const checked = validate(schema, input);
-      const result = checked.denial ?? await handler(tx, checked.input);
+      const result = checked.denial ?? await handler(tx, checked.input, options);
       return record(tx, adminActor, action, result, checked.input);
     });
   }
 
+  // A request the admin asked about closes itself once its reply deadline passes: declined, credit refunded, tender
+  // freed. There is no scheduler, so this runs whenever requests are read or a tender is asked for.
+  async function expireStale(tx, now = new Date()) {
+    const stale = (await tx.query("SELECT * FROM tender_desk.brief_requests WHERE status='needs_info' AND info_due_at <= $1 FOR UPDATE", [now])).rows;
+    for (const request of stale) {
+      const reason = 'We did not hear back before the reply deadline, so we closed this request. Your credit is back in your account.';
+      await tx.query("UPDATE tender_desk.brief_requests SET status='declined', decline_reason=$1, updated_at=now() WHERE id=$2", [reason, request.id]);
+      await releaseHold(tx, request.tender_no, request.client_id);
+      await refundRequest(tx, request);
+      await record(tx, { name: 'system:reply-deadline' }, 'expire_request', { outcome: 'declined', request_id: request.id, client_id: request.client_id,
+        tender_no: request.tender_no, request_reference: referenceCode('REQ', request.reference_number), decline_reason: reason });
+    }
+  }
   // Whether this client may ask for advice on a tender right now. Never reveals who holds it.
   async function requestable(tx, client_id, tender_no, now) {
+    await expireStale(tx, now);
     const active = (await tx.query(`SELECT reference_number FROM tender_desk.brief_requests
       WHERE client_id=$1 AND tender_no=$2 AND status IN ('requested','drafted','needs_info')`, [client_id, tender_no])).rows[0];
     if (active) return { ok: false, reason: 'active', request_reference: referenceCode('REQ', active.reference_number) };
@@ -299,10 +313,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       tender_no: tender.tender_no, reason: `Brief requested; ${perBrief} credit${perBrief === 1 ? '' : 's'} spent.` };
   }
   async function customerContext(tx, client_id) {
+    await expireStale(tx);
     const client = (await tx.query('SELECT id,name,uen,capabilities,categories,team_size,max_contract_cents,reference_number FROM tender_desk.clients WHERE id=$1', [client_id])).rows[0];
     const projects = (await tx.query(`SELECT id,reference_number,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects
       WHERE client_id=$1 ORDER BY reference_number`, [client_id])).rows;
-    const requests = (await tx.query(`SELECT r.id,r.reference_number,r.tender_no,r.source,r.title,r.agency,r.status,r.created_at,r.decline_reason,r.info_request,r.requirements_text,
+    const requests = (await tx.query(`SELECT r.id,r.reference_number,r.tender_no,r.source,r.title,r.agency,r.status,r.created_at,r.decline_reason,r.info_request,r.info_due_at,r.requirements_text,
         b.recommendation,b.content,b.parts,b.decline_reason AS brief_decline_reason, o.closes_at, o.gebiz_url, s.snapshot->'comparables' AS comparables,
         s.snapshot->'price_band' AS price_band, (s.snapshot->>'n')::int AS n, (s.snapshot->>'wide_band')::boolean AS wide_band, s.snapshot->'filters'->>'query' AS query_used
       FROM tender_desk.brief_requests r LEFT JOIN tender_desk.briefs b ON b.id=r.brief_id
@@ -314,7 +329,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       projects: projects.map((p) => ({ ...p, reference: referenceCode('PRJ', p.reference_number), value_cents: p.value_cents === null ? null : Number(p.value_cents) })),
       requests: requests.map((r) => ({ id: r.id, reference: referenceCode('REQ', r.reference_number), tender_no: r.tender_no, source: r.source, title: r.title,
         agency: r.agency, status: r.status, created_at: r.created_at, closes_at: r.closes_at, gebiz_url: r.gebiz_url,
-        ...(r.status === 'needs_info' && { info_request: r.info_request, requirements_text: r.requirements_text }),
+        ...(r.status === 'needs_info' && { info_request: r.info_request, info_due_at: r.info_due_at, requirements_text: r.requirements_text }),
         ...(r.status === 'approved' && { content: r.content, parts: r.parts, comparables: r.comparables ?? [], recommendation: r.recommendation, price_band: r.price_band, n: r.n, wide_band: r.wide_band, query_used: r.query_used }),
         ...(r.status === 'declined' && { decline_reason: r.decline_reason ?? r.brief_decline_reason }) })),
     };
@@ -379,6 +394,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         }),
         // After the admin asked for more: send the request back to the queue, free, optionally with the tender's requirements.
         resubmit: operation('resubmit_request', z.strictObject({ request_id: z.uuid(), requirements: z.string().trim().max(4000).optional() }), async (tx, input) => {
+          await expireStale(tx);
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 AND client_id=$2 FOR UPDATE', [input.request_id, client_id])).rows[0];
           if (!request || request.status !== 'needs_info') return blocked('G5', 'Only a request we asked you about can be resubmitted.');
           await tx.query(`UPDATE tender_desk.brief_requests SET status='requested', resubmitted_at=now(), updated_at=now(),
@@ -518,7 +534,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           return { outcome: 'allowed', scope: 'tender', tender_no: input.tender_no, revealed_count: already.has(input.tender_no) ? 0 : 1,
             reason: 'Revealed one backtest outcome.' };
         }),
-        listBriefRequests: ({ now = new Date() } = {}) => database.transaction(async (tx) => (await tx.query(`SELECT r.*, c.name AS client_name,
+        listBriefRequests: ({ now = new Date() } = {}) => database.transaction(async (tx) => (await expireStale(tx, now), await tx.query(`SELECT r.*, c.name AS client_name,
             c.reference_number AS client_reference_number, p.status AS payment_status, p.amount_cents, o.closes_at,
             (SELECT -COALESCE(sum(l.delta),0) FROM tender_desk.credit_ledger l WHERE l.request_id=r.id AND l.reason='brief')::int AS credits_spent
           FROM tender_desk.brief_requests r JOIN tender_desk.clients c ON c.id=r.client_id
@@ -561,14 +577,18 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             client_id: rows[0].client_id, tender_no: rows[0].tender_no };
         }),
         // Ask the client for what is missing instead of declining. Keeps the hold and the credit; a pending draft is set aside.
-        askForInfo: adminOperation('ask_for_info', z.strictObject({ request_id: z.uuid(), message: z.string().trim().max(500).optional() }), async (tx, input) => {
+        askForInfo: adminOperation('ask_for_info', z.strictObject({ request_id: z.uuid(), message: z.string().trim().max(500).optional() }), async (tx, input, { now = new Date() } = {}) => {
           if (!input.message) return blocked('VALIDATION', 'Say what the client should add.');
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 FOR UPDATE', [input.request_id])).rows[0];
           if (!request || !['requested', 'drafted'].includes(request.status)) return blocked('G5', 'Only a waiting or drafted request can be sent back to the client.');
+          // Reply within five days, and at least two days before the tender closes, so a brief can still be written.
+          const closes = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [request.tender_no])).rows[0]?.closes_at;
+          const due = new Date(Math.min(now.getTime() + 5 * 86400000, closes ? new Date(closes).getTime() - 2 * 86400000 : Infinity));
+          if (due <= now) return blocked('G5', 'The tender closes too soon to ask the client for more. Approve or decline it instead.');
           if (request.brief_id) {
             await tx.query("UPDATE tender_desk.briefs SET status='declined', decline_reason='Set aside: more information was requested from the client.', decided_at=now() WHERE id=$1 AND status='pending_approval'", [request.brief_id]);
           }
-          await tx.query(`UPDATE tender_desk.brief_requests SET status='needs_info', info_request=$1, brief_id=NULL, last_error=NULL, updated_at=now() WHERE id=$2`, [input.message, request.id]);
+          await tx.query(`UPDATE tender_desk.brief_requests SET status='needs_info', info_request=$1, info_due_at=$3, brief_id=NULL, last_error=NULL, updated_at=now() WHERE id=$2`, [input.message, request.id, due]);
           return { outcome: 'allowed', request_id: request.id, request_reference: referenceCode('REQ', request.reference_number), client_id: request.client_id,
             tender_no: request.tender_no, note: input.message };
         }),
@@ -583,6 +603,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             tender_no: request.tender_no, decline_reason: input.reason };
         }),
         readConsole: () => database.transaction(async (tx) => {
+          await expireStale(tx);
           const revealed = await revealedTenders(tx);
           const predictions = [...backtest.predictions.values()];
           return {

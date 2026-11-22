@@ -55,7 +55,8 @@ ALTER TABLE tender_desk.pricing_holds ADD COLUMN expires_at timestamptz;
 ALTER TABLE tender_desk.brief_requests DROP CONSTRAINT brief_requests_status_check,
   ADD CONSTRAINT brief_requests_status_check CHECK (status IN ('requested', 'drafted', 'needs_info', 'approved', 'declined', 'cancelled')),
   ADD COLUMN info_request text CHECK (info_request IS NULL OR length(info_request) <= 500),
-  ADD COLUMN resubmitted_at timestamptz;
+  ADD COLUMN resubmitted_at timestamptz,
+  ADD COLUMN info_due_at timestamptz;
 DROP INDEX tender_desk.brief_requests_one_active;
 CREATE UNIQUE INDEX brief_requests_one_active ON tender_desk.brief_requests (client_id, tender_no) WHERE status IN ('requested', 'drafted', 'needs_info');
 ALTER TABLE tender_desk.brief_requests ADD COLUMN requirements_text text CHECK (requirements_text IS NULL OR length(requirements_text) <= 4000);

@@ -353,14 +353,15 @@ ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recom
 <div class="row-actions">${request.source === 'feed' && request.closes_at && new Date(request.closes_at) > new Date() ? `<a class="btn outline" href="/checkout?tender=${encodeURIComponent(request.tender_no)}">Ask for a brief again</a>` : ''}<a class="btn outline" href="/">Browse open tenders</a></div></div></section>`
       : request.status === 'needs_info' ? `<section class="panel"><header><h2>We need a bit more before we can advise</h2></header><div class="form">
 <p class="banner">${esc(request.info_request ?? '')}</p>
+${request.info_due_at ? `<p><strong>Reply by ${esc(day(request.info_due_at))}.</strong> After that we close the request and return your credit, so the tender is free for others.</p>` : ''}
 <p>Update your <a href="/profile">company profile</a> if that is what's missing, or add the tender's requirements below. Then resubmit: it costs no credit, and the tender stays yours meanwhile.</p>
 <form class="form" method="post" action="/requests/${esc(request.reference)}/resubmit">${hidden('csrf', csrf)}
 <label for="requirements">Key requirements from the tender <span class="hint">(optional, up to 4000 characters)</span></label>
 <textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(request.requirements_text ?? '')}</textarea>
 <div><button class="primary" type="submit">Resubmit</button></div></form>
-<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="link" type="submit">Cancel and get your credit back</button></form></div></section>`
+<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="outline" type="submit">Cancel and get your credit back</button></form></div></section>`
         : `<p class="banner">${esc(statusText[request.status])}. Your brief will appear on this page and on your home page.</p>
-${request.status === 'requested' ? `<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="link" type="submit">Cancel and get your credit back</button></form>` : ''}`;
+${request.status === 'requested' ? `<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="outline" type="submit">Cancel and get your credit back</button></form>` : ''}`;
   // An approved brief is finished: every step is done, none is current. The sample shows no steps at all.
   const stage = request.reference === 'SAMPLE' ? undefined : { requested: 1, drafted: 1, needs_info: 1, approved: 3 }[request.status];
   const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', request.status === 'needs_info' ? 'Needs your reply' : 'In review', 'Brief ready'].map((label, at) =>

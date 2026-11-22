@@ -50,7 +50,7 @@ export const actionLabels = {
   register_customer: 'Signed up', request_brief: 'Asked for a brief', cancel_request: 'Cancelled a request', save_draft: 'Saved an AI draft',
   draft_failed: 'AI draft failed', decline_request: 'Declined a request', buy_credits: 'Bought credits', update_profile: 'Updated the company profile',
   list_queue: 'Listed the queue', get_review_pack: 'Read a review pack', add_review_note: 'Left a review note', propose_revision: 'Proposed a revision',
-  prepare_project_check: 'Checked a project against GeBIZ', ask_for_info: 'Asked the client for more', resubmit_request: 'Resubmitted a request',
+  prepare_project_check: 'Checked a project against GeBIZ', ask_for_info: 'Asked the client for more', resubmit_request: 'Resubmitted a request', expire_request: 'Closed a request: no reply by the deadline',
 };
 const ruleLabels = { ERROR: 'error', VALIDATION: 'invalid input' };
 const outcomeLabel = (row) => {
@@ -118,6 +118,7 @@ export function actorName(row, clientName) {
   const actor = String(row.actor ?? '');
   if (actor === 'unauthenticated') return 'Unknown caller';
   if (actor.startsWith('operator:')) return 'Your QwenWork';
+  if (actor === 'system:reply-deadline') return 'Reply deadline';
   if (actor.startsWith('agent:')) return row.client_id ? `${clientName(row.client_id)} (AI agent)` : 'AI agent';
   if (actor.startsWith('customer:')) return row.client_id ? clientName(row.client_id) : 'New customer';
   return isAdminActor(actor) ? 'You' : esc(actor);
@@ -401,7 +402,24 @@ export function renderRevealConfirm({ state, csrf, flash }) {
 const requestStatus = { requested: ['Waiting for a draft', 'progress'], drafted: ['Draft in review', 'progress'], needs_info: ['Waiting for the client', 'warning'], approved: ['Approved', 'done'],
   declined: ['Declined', 'danger'], cancelled: ['Cancelled', ''] };
 
-// Paid brief requests from customers: draft (or redraft) with AI, or decline with a reason the customer reads.
+// Ask for more and Decline as two separate forms, each needing its own message; Decline also needs a confirmation tick,
+// because it frees the tender and returns the credit. Shared by the requests queue and the brief page.
+export function decisionForms({ csrf, requestId, declineAction, canAsk = true, declineLabel = 'Decline…' }) {
+  const hiddenCsrf = `<input type="hidden" name="csrf" value="${esc(csrf)}">`;
+  const ask = canAsk && requestId ? `<details class="decide ask"><summary>Ask the client for more…</summary><form class="decline" method="post" action="/actions/request/${esc(requestId)}/ask">${hiddenCsrf}
+<label for="ask-${esc(requestId)}">What should the client add? They keep the tender and resubmit for free.</label>
+<textarea id="ask-${esc(requestId)}" name="message" required maxlength="500" rows="2"></textarea>
+<div><button type="submit">Send to the client</button></div></form></details>` : '';
+  const id = `decline-${esc(requestId ?? 'brief')}`;
+  return `${ask}<details class="decline"><summary>${esc(declineLabel)}</summary><form class="decline" method="post" action="${esc(declineAction)}">${hiddenCsrf}
+<label for="${id}">Reason the client will read</label>
+<textarea id="${id}" name="reason" required maxlength="500" rows="2"></textarea>
+<label class="tick"><input type="checkbox" name="confirm" value="yes" required> Decline: this frees the tender and returns the client's credit</label>
+<div><button class="danger" type="submit">Decline</button></div></form></details>`;
+}
+
+// Paid brief requests from customers: draft (or redraft) with AI, ask the client for more, or decline with a reason.
+const dayText = (value) => (value ? new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' }) : '');
 export function renderRequests({ state, csrf, flash, rows, aiReady }) {
   const briefs = new Map(state.briefs.map((b) => [b.id, b]));
   const items = rows.map((r) => {
@@ -411,11 +429,10 @@ export function renderRequests({ state, csrf, flash, rows, aiReady }) {
     const draftAction = !waiting ? '' : aiReady
       ? form(csrf, `/actions/request/${r.id}/draft`, r.last_error ? 'Redraft' : 'Draft', 'primary', '/requests')
       : '<span class="muted small">AI drafting is not configured (TD_OPENROUTER_KEY).</span>';
-    // One message box, two outcomes: ask for more (keeps the tender and credit) or decline (frees the tender, returns the credit).
-    const decline = waiting || r.status === 'needs_info' ? `<form class="decline" method="post" action="/actions/request/${esc(r.id)}/decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
-<label for="reason-${esc(r.id)}">Message the customer will read</label><textarea id="reason-${esc(r.id)}" name="reason" rows="2" maxlength="500"></textarea>
-<div class="row-actions">${waiting ? `<button type="submit" formaction="/actions/request/${esc(r.id)}/ask">Ask for more</button>` : ''}<button type="submit" class="outline">Decline</button></div></form>` : '';
-    const asked = r.status === 'needs_info' ? `<span class="muted">Asked the client for more ${esc(ago(r.updated_at))}: “${esc(r.info_request ?? '')}”</span>` : '';
+    const decline = waiting || r.status === 'needs_info' ? `<div class="decisions">${decisionForms({ csrf, requestId: r.id, declineAction: `/actions/request/${r.id}/decline`, canAsk: waiting,
+      declineLabel: r.status === 'needs_info' ? 'Decline (no reply)…' : 'Decline…' })}</div>` : '';
+    const asked = r.status === 'needs_info' ? `<span class="muted">Asked the client for more ${esc(ago(r.updated_at))}: “${esc(r.info_request ?? '')}”</span>
+<span class="muted">Reply due ${esc(dayText(r.info_due_at))}; after that the request closes itself and the credit is returned.</span>` : '';
     const resubmitted = r.resubmitted_at && waiting ? '<span class="chip warning">Resubmitted</span>' : '';
     return `<li><div><span class="num">${esc(r.reference)}</span><br>${r.closed ? '<span class="chip danger">Closed</span>' : ''}</div>
 <div><strong>${esc(r.title)}</strong><span class="muted">${esc(r.client_name)} · ${esc(r.agency ?? '')} · <span class="num">${esc(r.tender_no)}</span></span>
@@ -424,7 +441,9 @@ ${r.last_error ? `<span class="muted">Last draft failed: ${esc(r.last_error)}</s
 ${asked}${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
 <div class="row-actions">${resubmitted}<span class="chip ${chip}">${esc(label)}</span>${draftAction}</div></li>`;
   });
-  const body = `<section class="panel"><header><h2>Requests</h2><span class="muted small">${plural(rows.filter((r) => r.status === 'requested').length, 'waiting request')}</span></header>
+  const onYou = rows.filter((r) => ['requested', 'drafted'].includes(r.status)).length;
+  const onClients = rows.filter((r) => r.status === 'needs_info').length;
+  const body = `<section class="panel"><header><h2>Requests</h2><span class="muted small">${onYou} waiting on you · ${onClients} waiting for clients</span></header>
 ${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty"><strong>No brief requests yet.</strong>Paid requests from customers appear here.</p>'}</section>`;
   return renderShell({ state, csrf, active: 'requests', title: 'Brief requests', flash,
     sub: 'Customers spent a credit on a reviewed brief. Draft it with AI, edit or approve it, ask the client for more (they keep the tender and resubmit for free), or decline it: a decline frees the tender and returns the credit.', body });

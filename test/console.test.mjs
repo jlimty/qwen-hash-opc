@@ -176,11 +176,14 @@ test('the admin can approve and decline briefs, with a visible result and an aud
   assert.match(after.text, /Brief approved\./);
   assert.match(after.text, /role="status"/);
   assert.match(after.text, /This brief was approved/);
-  const refused = await act(session, `/actions/brief/${two.brief.brief_id}/decline`);
+  const unticked = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.' });
+  assert.equal(await status(two.brief.brief_id), 'pending_approval');
+  assert.match((await follow(session, unticked)).text, /Tick the box to confirm the decline/);
+  const refused = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { confirm: 'yes' });
   assert.equal(await status(two.brief.brief_id), 'pending_approval');
   assert.match((await follow(session, refused)).text, /A decline needs a reason/);
   assert.match((await open(session, `/briefs/${two.brief.brief_id}`)).text, /<textarea[^>]*name="reason"[^>]*required/);
-  const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.' });
+  const declined = await act(session, `/actions/brief/${two.brief.brief_id}/decline`, { reason: 'Scope too large.', confirm: 'yes' });
   assert.equal(declined.status, 303);
   assert.equal(await status(two.brief.brief_id), 'declined');
   const audit = (await admin.readConsole()).audit.filter((row) => row.actor === 'admin' && row.action === 'review_brief');

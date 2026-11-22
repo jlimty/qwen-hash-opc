@@ -612,6 +612,8 @@ test('when the admin asks for more, the customer sees what to add, resubmits for
   assert.match(page.text, /We need a bit more before we can advise/);
   assert.match(page.text, /aria-current="step">Needs your reply/);
   assert.match(page.text, /Add your council audit work with its GeBIZ number\./);
+  assert.match(page.text, /Reply by \d{1,2} [A-Z][a-z]{2} 2026/);
+  assert.match(page.text, /<button class="outline" type="submit">Cancel and get your credit back/);
   assert.match(page.text, /href="[^"]*\/profile"/);
   assert.match(page.text, /action="[^"]*\/requests\/REQ\d+\/resubmit"/);
   assert.match(page.text, /Cancel and get your credit back/);

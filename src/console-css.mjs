@@ -116,8 +116,14 @@ td .sub-line,.checks .sub-line,dd .sub-line{display:block;font-size:.8125rem;col
 .checks .ok{color:var(--ok)}.checks .warn{color:var(--warn)}.checks .bad{color:var(--bad)}
 .checks .t{font-weight:600}
 .decision{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;padding:.5rem 1rem;border:1px solid var(--line);border-radius:10px;background:#fff;margin-top:1.25rem;box-shadow:0 -2px 8px rgba(15,26,43,.06)}
-.decision details.decline summary{cursor:pointer;font-weight:550;font-size:.875rem;color:var(--muted)}
-.decision details.decline[open]{flex-basis:100%}
+.decisions{display:flex;flex-wrap:wrap;gap:.4rem 1rem;align-items:flex-start}
+.decisions details summary{cursor:pointer;font-weight:550;font-size:.875rem;color:var(--muted)}
+.decisions details.ask summary{color:var(--accent-dark)}
+.decisions details[open]{flex-basis:100%}
+.decision .decisions{flex:1;justify-content:flex-end}
+.decision:has(details[open]){max-height:60vh;overflow:auto}
+button.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+button.danger:hover{filter:brightness(.92)}
 
 .rates{display:grid;grid-template-columns:1fr 1fr}
 .rate{padding:1rem 1.25rem;display:grid;gap:.15rem;align-content:start}

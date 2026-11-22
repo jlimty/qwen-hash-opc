@@ -97,9 +97,9 @@ test('decline needs a reason and frees the tender', async () => {
   const request = await paidRequest();
   const c = consoleWith({ llm, models: { draft: 'd' } });
   await c.login();
-  await c.post(`/actions/request/${request.request_id}/decline`, { reason: '' });
+  await c.post(`/actions/request/${request.request_id}/decline`, { reason: '', confirm: 'yes' });
   assert.match((await c.get('/requests')).text, /A decline needs a reason/);
-  await c.post(`/actions/request/${request.request_id}/decline`, { reason: 'Outside what we can advise on.' });
+  await c.post(`/actions/request/${request.request_id}/decline`, { reason: 'Outside what we can advise on.', confirm: 'yes' });
   assert.match((await c.get('/requests')).text, /Request declined/);
   assert.equal((await db.query('SELECT count(*)::int AS n FROM tender_desk.pricing_holds WHERE tender_no=$1', [request.tender_no])).rows[0].n, 0);
 });
@@ -282,8 +282,8 @@ test('the admin can ask the client for more from the queue or the brief page; th
   const request = await paidRequest();
   const c = consoleWith({ llm, models: { draft: 'd' } });
   const queue = await c.login();
-  assert.match(queue.text, new RegExp(`formaction="/actions/request/${request.request_id}/ask"[^>]*>Ask for more`));
-  const asked = await c.post(`/actions/request/${request.request_id}/ask`, { reason: 'Add your festival work with GeBIZ numbers.' });
+  assert.match(queue.text, new RegExp(`action="/actions/request/${request.request_id}/ask"`));
+  const asked = await c.post(`/actions/request/${request.request_id}/ask`, { message: 'Add your festival work with GeBIZ numbers.' });
   assert.equal(asked.status, 303);
   const after = await c.get('/requests');
   assert.match(after.text, /Asked the client for more/);
@@ -296,5 +296,20 @@ test('the admin can ask the client for more from the queue or the brief page; th
   await c.post(`/actions/request/${request.request_id}/draft`, {});
   const briefRef = (await db.query('SELECT b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0].reference_number;
   const page = await c.get(`/briefs/BRF${String(briefRef).padStart(5, '0')}`);
-  assert.match(page.text, new RegExp(`formaction="/actions/request/${request.request_id}/ask"`));
+  assert.match(page.text, new RegExp(`action="/actions/request/${request.request_id}/ask"`));
+});
+
+test('ask for more and decline are separate forms; a decline needs its confirmation tick, and the queue shows the reply deadline', async () => {
+  const request = await paidRequest({ closes: '2026-12-20T13:00:00+08:00' });
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  const queue = await c.login();
+  assert.match(queue.text, new RegExp(`action="/actions/request/${request.request_id}/ask"[\\s\\S]*?name="message"[^>]*required`));
+  assert.match(queue.text, new RegExp(`action="/actions/request/${request.request_id}/decline"[\\s\\S]*?name="confirm"[^>]*required`));
+  const unconfirmed = await c.post(`/actions/request/${request.request_id}/decline`, { reason: 'Not our trade.' });
+  assert.equal(unconfirmed.status, 303);
+  assert.equal((await db.query('SELECT status FROM tender_desk.brief_requests WHERE id=$1', [request.request_id])).rows[0].status, 'requested', 'no tick, no decline');
+  await c.post(`/actions/request/${request.request_id}/ask`, { message: 'Add your festival work.' });
+  const after = await c.get('/requests');
+  assert.match(after.text, /Reply due 27 Nov 2026/);
+  assert.match(after.text, /1 waiting on you · 1 waiting for clients|waiting for clients/);
 });
