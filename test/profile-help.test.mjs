@@ -44,15 +44,18 @@ test('prefillValues puts GeBIZ awards first (they can be checked), then the text
   assert.equal(values.capabilities, reading.capabilities);
   assert.deepEqual(values.categories, ['events-community']);
   assert.equal(values.team_size, '8');
-  assert.equal(values.max_contract, '300000');
+  assert.equal(values.max_contract, undefined, 'a past contract is not what they could take on: the customer sets this');
+  assert.equal(values.largest_mentioned, '300,000');
   assert.equal(values.project_title_0, 'School carnival');
   assert.equal(values.project_gebiz_0, 'A2');
-  assert.equal(values.project_value_0, '42000.50');
+  assert.equal(values.project_value_0, '42,000.50');
   assert.equal(values.project_title_1, 'Community festival for a town council');
   assert.equal(values.project_gebiz_1, 'A1');
   assert.equal(values.project_title_2, 'Annual dinner for a bank', 'the text\'s festival repeats a GeBIZ award, so it is skipped');
-  assert.equal(values.project_value_2, '60000');
+  assert.equal(values.project_value_2, '60,000');
   assert.equal(values.project_title_3, undefined);
+  // Categories from the GeBIZ awards found are added to the text's (event awards here).
+  assert.deepEqual(prefillValues({ awards: [{ title: 'Community festival for a town council', agency: 'A', value_cents: 100, gebiz_tender_no: 'X' }] }).categories, ['events-community']);
   // Awards already on the profile are not suggested again.
   assert.equal(prefillValues({ awards, slots: 3, listed: ['A2'] }).project_gebiz_0, 'A1');
 });

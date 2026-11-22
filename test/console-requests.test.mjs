@@ -313,3 +313,12 @@ test('ask for more and decline are separate forms; a decline needs its confirmat
   assert.match(after.text, /Reply due 27 Nov 2026/);
   assert.match(after.text, /1 waiting on you · 1 waiting for clients|waiting for clients/);
 });
+
+test('the project check reminds the admin that a GeBIZ name match proves the award, not that the client is that company', async () => {
+  const request = await paidRequest();
+  const project = (await db.query('SELECT reference_number FROM tender_desk.projects WHERE id=$1', [request.project_id])).rows[0];
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  const page = await c.get(`/projects/PRJ${String(project.reference_number).padStart(5, '0')}`);
+  assert.match(page.text, /Confirm on bizfile that .+ has UEN [0-9A-Z]{9,10}/);
+});

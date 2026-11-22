@@ -3,7 +3,7 @@
 // it only fills the profile form, which the customer checks, edits and saves themselves.
 import { z } from 'zod';
 import { normaliseCompany } from './gebiz-check.mjs';
-import { tenderCategories } from './tender-data.mjs';
+import { categorize, tenderCategories } from './tender-data.mjs';
 
 export const maxProfileText = 6000;
 
@@ -34,6 +34,7 @@ const readingJsonSchema = (() => { const { $schema, ...schema } = z.toJSONSchema
 const system = `You help a Singapore SME fill in its Tender Desk company profile from text it pasted (a capability statement,
 company profile or website "About" page). Use only what the text says: never guess a team size, a contract value or a project.
 Leave a field null or a list empty when the text does not say. Write capabilities in plain English, two or three sentences.
+Pick a category only when the text names that line of work as one of the company's main services, not a side job (minor repairs are not construction).
 Each past project is one thing delivered for one client: a short title naming the work and, if given, the client or agency.`;
 
 export async function readProfile({ name, text } = {}, { llm, model } = {}) {
@@ -49,7 +50,8 @@ export async function readProfile({ name, text } = {}, { llm, model } = {}) {
   }
 }
 
-const dollars = (cents) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
+// Money in the form is written with thousands separators; the form parser accepts them.
+const dollars = (cents) => (cents / 100).toLocaleString('en-SG', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
 const sameTitle = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
 // Form values for the profile page. GeBIZ awards come first because they can be checked and cited; projects from the
@@ -58,15 +60,17 @@ export function prefillValues({ reading, awards = [], slots = 6, listed = [] }) 
   const values = {};
   if (reading) {
     values.capabilities = reading.capabilities;
-    if (reading.categories.length) values.categories = reading.categories;
     if (reading.team_size) values.team_size = String(reading.team_size);
-    if (reading.max_contract_sgd) values.max_contract = String(Math.round(reading.max_contract_sgd));
+    // The text gives past contract sizes, not what the company could take on, so it is shown as a hint, never filled in.
+    if (reading.max_contract_sgd) values.largest_mentioned = Math.round(reading.max_contract_sgd).toLocaleString('en-SG');
   }
+  const categories = [...new Set([...(reading?.categories ?? []), ...awards.map((a) => categorize(a.title)).filter((c) => c !== 'other')])];
+  if (categories.length) values.categories = categories;
   const fresh = awards.filter((award) => !listed.includes(award.gebiz_tender_no));
   const projects = [
     ...fresh.map((a) => ({ title: a.title, agency: a.agency, value: dollars(a.value_cents), gebiz: a.gebiz_tender_no })),
     ...(reading?.past_projects ?? []).filter((p) => !fresh.some((a) => sameTitle(a.title, p.title)))
-      .map((p) => ({ title: p.title, agency: p.agency ?? '', value: p.value_sgd ? String(Math.round(p.value_sgd)) : '', gebiz: '' })),
+      .map((p) => ({ title: p.title, agency: p.agency ?? '', value: p.value_sgd ? Math.round(p.value_sgd).toLocaleString('en-SG') : '', gebiz: '' })),
   ].slice(0, slots);
   projects.forEach((p, i) => Object.assign(values, { [`project_title_${i}`]: p.title, [`project_agency_${i}`]: p.agency, [`project_value_${i}`]: p.value, [`project_gebiz_${i}`]: p.gebiz }));
   return values;

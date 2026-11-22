@@ -567,6 +567,10 @@ test('a new customer can paste their company text: the profile form comes back f
   const filled = await b.post('/profile/assist', { name: 'Auditor 3 Pte Ltd', text: 'We audit public bodies and schools. Team of twelve accountants.' });
   assert.equal(filled.status, 200);
   assert.match(filled.text, /Check everything, then save/);
+  assert.doesNotMatch(filled.text, /Fill this in for me/, 'the assistant folds away once it has filled the form');
+  assert.match(filled.text, /Fill the form again from text/);
+  const none = await b.post('/profile/assist', { name: 'Nobody Known Pte Ltd' });
+  assert.match(none.text, /<p class="banner note" role="status">No GeBIZ awards found/);
   assert.match(filled.text, /value="Auditor 3 Pte Ltd"/);
   assert.match(filled.text, />Audits for public bodies and schools, run by chartered accountants\.</);
   assert.match(filled.text, /name="project_gebiz_0"[^>]*value="AUD-3"/);

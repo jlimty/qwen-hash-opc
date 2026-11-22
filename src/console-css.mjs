@@ -41,6 +41,7 @@ h1{font-size:1.5rem;line-height:1.25;font-weight:650;letter-spacing:-.015em}
 .banner{display:flex;gap:.6rem;align-items:flex-start;border:1px solid var(--line-strong);border-radius:8px;padding:.65rem .9rem;margin-bottom:1.25rem;background:var(--hover)}
 .banner.bad{border-color:#E7A9A3;background:var(--bad-bg);color:var(--bad)}
 .banner.ok{border-color:#A9D3BA;background:var(--ok-bg);color:var(--ok)}
+.banner.note{border-color:var(--line-strong);background:var(--hover);color:var(--ink)}
 
 .grid{display:grid;grid-template-columns:minmax(0,1fr) 22rem;gap:1.25rem;align-items:start}
 .panel{border:1px solid var(--line);border-radius:10px;background:#fff;min-width:0}

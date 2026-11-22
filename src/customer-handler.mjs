@@ -211,7 +211,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         read && !read.ok ? read.reason : '', 'Check everything, then save.'].filter(Boolean).join(' ');
       const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
         team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : { name, uen: String(form.get('uen') ?? '').trim() };
-      return html(200, renderProfile({ csrf, notice: notes, values: { ...current, ...filled }, existing: context?.projects, company, pasted: text }));
+      return html(200, renderProfile({ csrf, notice: notes, noticeKind: found || read?.ok ? 'ok' : 'note', values: { ...current, ...filled }, existing: context?.projects, company, pasted: text }));
     }
     if (path === '/profile') {
       const context = customer ? await customer.context() : undefined;

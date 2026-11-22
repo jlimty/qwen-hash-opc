@@ -178,7 +178,8 @@ export function renderProjectDetail({ state, dataset, csrf, flash, project }) {
     actions: `${verifiedChip(project)} ${resultChip}`,
     body: `<div class="detail"><div class="stack-gap">
 ${panel('GeBIZ cross-check', `<ul class="feed">${check.lines.map((line) => `<li>${esc(line)}</li>`).join('')}</ul>
-<p class="note">Facts from the public GeBIZ awards. Exact name comparison only; you decide.</p>`)}
+<p class="note">Facts from the public GeBIZ awards. Exact name comparison only; you decide.</p>
+<p class="note"><strong>Confirm on bizfile that ${esc(owner?.name ?? 'this client')} has UEN ${esc(owner?.uen ?? '(none given)')}</strong> before verifying. The client types its own company name, so a GeBIZ name match proves the award exists, not that this client is that company.</p>`)}
 ${panel(project.verified ? 'Verified' : 'Verify this project', project.verified
     ? `<p>${project.verified_at ? `Verified ${stamp(project.verified_at)}.` : 'Verified.'}</p>${form(csrf, `/actions/project/${project.id}/unverify`, 'Revoke verification', 'outline', back)}`
     : verifyForm)}

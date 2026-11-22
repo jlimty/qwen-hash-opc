@@ -25,7 +25,8 @@ export const assistantCss = chartCss + `
 .form legend{font-weight:600;font-size:.875rem;padding:0 .25rem}
 .cats{display:flex;flex-wrap:wrap;gap:.5rem 1rem}
 .cats label{font-weight:400;display:flex;gap:.35rem;align-items:center}
-.proj{display:grid;grid-template-columns:2fr 1.5fr 1fr 1.2fr;gap:.5rem}
+.proj{display:grid;grid-template-columns:2fr 1fr 1.2fr;gap:.5rem;padding:.5rem 0;border-bottom:1px solid var(--line)}
+.proj input:first-child{grid-column:1/-1}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line)}
 .stat.wide{grid-column:1/-1}
 .stat{padding:.9rem 1rem;display:grid;gap:.1rem}
@@ -80,7 +81,7 @@ const when = (value) => (value ? `${dateTime.format(new Date(value))} SGT` : 'no
 const categoryNames = { 'cleaning-facilities': 'Cleaning and facilities', security: 'Security', 'ict-services': 'IT services', 'construction-renovation': 'Construction and renovation',
   'events-community': 'Events and community', 'training-consultancy': 'Training and consultancy', catering: 'Catering', other: 'Other professional services' };
 const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>';
-const banner = (message, kind = 'bad') => (message ? `<p class="banner ${kind}" role="${kind === 'ok' ? 'status' : 'alert'}">${esc(message)}</p>` : '');
+const banner = (message, kind = 'bad') => (message ? `<p class="banner ${kind}" role="${kind === 'bad' ? 'alert' : 'status'}">${esc(message)}</p>` : '');
 const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value="${esc(value ?? '')}">`;
 
 export function layout({ title, csrf, company, body, signedIn }) {
@@ -201,7 +202,7 @@ export function renderSignin({ csrf, message }) {
 <p class="small">New here? <a href="/signup">Create an account</a></p></form></section>` });
 }
 
-export function renderProfile({ csrf, message, notice, values = {}, existing, company, pasted = '' }) {
+export function renderProfile({ csrf, message, notice, noticeKind = 'ok', values = {}, existing, company, pasted = '' }) {
   const v = (name) => esc(values[name] ?? '');
   const chosen = new Set(values.categories ?? []);
   const rows = existing ? 3 : 6;
@@ -210,25 +211,30 @@ export function renderProfile({ csrf, message, notice, values = {}, existing, co
 <input aria-label="Project ${i + 1} agency" name="project_agency_${i}" placeholder="Agency or client" maxlength="250" value="${v(`project_agency_${i}`)}">
 <input aria-label="Project ${i + 1} value in S$" name="project_value_${i}" placeholder="Value S$" inputmode="decimal" value="${v(`project_value_${i}`)}">
 <input aria-label="Project ${i + 1} GeBIZ tender number" name="project_gebiz_${i}" placeholder="GeBIZ tender no." maxlength="100" value="${v(`project_gebiz_${i}`)}"></div>`).join('');
-  const listed = existing?.length ? `<ul class="feed">${existing.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>${p.verified ? '<span class="chip done">Checked</span>' : '<span class="chip warning">Unverified</span>'}</div></li>`).join('')}</ul>` : '';
+  const listed = existing?.length ? `<ul class="feed">${existing.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>${p.verified ? '<span class="chip done">✓ Checked</span>' : '<span class="chip warning">Not checked yet</span>'}</div></li>`).join('')}</ul>` : '';
   return layout({ title: 'Company profile', csrf, company, signedIn: true, body: `<div><h1>${existing ? 'Your company profile' : 'Tell us about your company'}</h1><p class="sub">${existing ? 'Changes apply to your next matches and briefs.' : 'You do this once. We use it to match tenders and to write your briefs.'}</p></div>
 ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
 <p>We look up government contracts awarded to <strong>${esc(values.name ?? '')}</strong> and add them below for you to check. Projects with a GeBIZ tender number are checked fastest, and only checked projects can be cited in a brief.</p>
 <div><button type="submit">Find my GeBIZ awards</button></div></form></section>`
+    : notice ? `<section class="panel"><details class="form"><summary>Fill the form again from text</summary><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
+<label for="aname">Company name, as registered</label><input id="aname" name="name" maxlength="150" required value="${v('name')}">
+<label for="atext">Paste your capability statement, company profile or website "About" page <span class="hint">(optional)</span></label>
+<textarea id="atext" name="text" rows="5" maxlength="6000">${esc(pasted)}</textarea>
+<div><button type="submit">Fill in the form again</button></div></form></details></section>`
     : `<section class="panel"><header><h2>Fill this in for me</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
 <label for="aname">Company name, as registered</label><input id="aname" name="name" maxlength="150" required value="${v('name')}">
 <label for="atext">Paste your capability statement, company profile or website "About" page <span class="hint">(optional)</span></label>
 <textarea id="atext" name="text" rows="5" maxlength="6000">${esc(pasted)}</textarea>
 <span class="hint">Our AI reads it into the form below, and we look up GeBIZ awards under your company name. Nothing is saved until you check it and press Save.</span>
 <div><button type="submit">Fill in the form</button></div></form></section>`}
-<section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}${notice ? banner(notice, 'ok') : ''}
+<section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}${notice ? banner(notice, noticeKind) : ''}
 <label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}>
 <label for="uen">UEN</label><input id="uen" name="uen" maxlength="10" autocapitalize="characters" ${existing ? 'readonly' : 'required'} value="${v('uen')}"><span class="hint">${existing ? 'To correct your UEN, contact Tender Desk.' : 'Your company\'s Unique Entity Number, as registered with ACRA. One account per company.'}</span>
 <label for="capabilities">What your company does</label><textarea id="capabilities" name="capabilities" rows="3" maxlength="4000" required>${v('capabilities')}</textarea>
 <fieldset><legend>Categories you bid in</legend><div class="cats">${tenderCategories.map((c) => `<label><input type="checkbox" name="categories" value="${c}"${chosen.has(c) ? ' checked' : ''}>${esc(categoryNames[c])}</label>`).join('')}</div></fieldset>
 <label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}"><span class="hint">People who would work on a contract, including subcontractors you use regularly.</span>
-<label for="max">Largest contract you could deliver (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">We compare this with past award sizes to flag tenders that may be too big.</span>
-<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count. For government work, add the GeBIZ tender number so we can check it against public award records; for private work we may ask for proof. Only checked projects can be cited in a brief.</span>${listed}${projects}</fieldset>
+<label for="max">Largest single contract you could take on (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">${values.largest_mentioned ? `Your text mentions a contract of S$${esc(values.largest_mentioned)}. ` : ''}We compare this with past award sizes to flag tenders that may be too big.</span>
+<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count. For government work, add the GeBIZ tender number so we can check it against public award records; for private work we may ask for proof. Only checked projects can be cited in a brief.</span><span class="hint">After you save, we check each project against GeBIZ award records (a tender number makes this fastest) and mark it ✓ Checked here.</span>${listed}${projects}</fieldset>
 <div><button class="primary" type="submit">Save profile</button></div></form></section>` });
 }
 
