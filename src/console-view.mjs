@@ -29,6 +29,7 @@ const icons = {
   briefs: '<path d="M14.5 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7.5z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 16.5h6"/>',
   conflicts: '<path d="M10.3 4.5 2 19a1.8 1.8 0 0 0 1.6 2.7h16.8A1.8 1.8 0 0 0 22 19L13.7 4.5a2 2 0 0 0-3.4 0z"/><path d="M12 10v4.5"/><path d="M12 17.8h.01"/>',
   clients: '<circle cx="9" cy="8" r="3.5"/><path d="M2.7 20a6.3 6.3 0 0 1 12.6 0"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M17.8 14.6a6.3 6.3 0 0 1 3.5 5.4"/>',
+  projects: '<path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/><path d="m9 13.2 2 2 4-4"/>',
   backtest: '<path d="M3.5 21h17"/><path d="M7.5 17v-4"/><path d="M12 17V9"/><path d="M16.5 17V5"/>',
   operator: '<path d="M4 5h16v10H4z"/><path d="M9 19h6"/><path d="M12 15v4"/><path d="m8 9 2 2-2 2"/><path d="M12 13h4"/>',
   audit: '<path d="M8.5 6h12"/><path d="M8.5 12h12"/><path d="M8.5 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>',
@@ -47,7 +48,9 @@ export const actionLabels = {
   get_incoming_tenders: 'Listed incoming tenders', search_tenders: 'Searched past awards', save_shortlist: 'Saved a shortlist',
   request_pricing: 'Requested pricing', submit_brief: 'Submitted a brief', unknown_tool: 'Called an unavailable tool',
   register_customer: 'Signed up', request_brief: 'Asked for a brief', cancel_request: 'Cancelled a request', save_draft: 'Saved an AI draft',
-  draft_failed: 'AI draft failed', decline_request: 'Declined a request',
+  draft_failed: 'AI draft failed', decline_request: 'Declined a request', buy_credits: 'Bought credits', update_profile: 'Updated the company profile',
+  list_queue: 'Listed the queue', get_review_pack: 'Read a review pack', add_review_note: 'Left a review note', propose_revision: 'Proposed a revision',
+  prepare_project_check: 'Checked a project against GeBIZ',
 };
 const ruleLabels = { ERROR: 'error', VALIDATION: 'invalid input' };
 const outcomeLabel = (row) => {
@@ -110,10 +113,11 @@ ${banner(message)}
 
 const groupOf = { operator: 'Records', requests: 'Decisions', briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
 
-// Who acted, from the stored actor: the admin, a customer, a customer's AI agent, or a rejected caller.
-function actorName(row, clientName) {
+// Who acted, from the stored actor: the admin, the admin's QwenWork, a customer, a customer's AI agent, or a rejected caller.
+export function actorName(row, clientName) {
   const actor = String(row.actor ?? '');
   if (actor === 'unauthenticated') return 'Unknown caller';
+  if (actor.startsWith('operator:')) return 'Your QwenWork';
   if (actor.startsWith('agent:')) return row.client_id ? `${clientName(row.client_id)} (AI agent)` : 'AI agent';
   if (actor.startsWith('customer:')) return row.client_id ? clientName(row.client_id) : 'New customer';
   return isAdminActor(actor) ? 'You' : esc(actor);
@@ -169,7 +173,7 @@ export function renderOverview({ state, dataset, csrf, flash }) {
       action: '<a class="btn primary" href="/requests">Draft</a>' })),
     ...pendingBriefs.map((b) => ({ pill: '<span class="pill info">Brief</span>',
       title: `${recordCode('brief', b)} · ${b.recommendation === 'bid' ? 'Bid' : 'No-bid'} recommendation for <span class="num">${esc(b.tender_no)}</span> ${riskChip(b.risk_level)}`,
-      sub: `${name(b.client_id)} · ${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')} · submitted ${ago(b.created_at)}`,
+      sub: `${name(b.client_id)} · ${esc(b.tender_agency ?? contracts.get(b.tender_no)?.agency ?? 'Agency not given')} · submitted ${ago(b.created_at)}`,
       action: `<a class="btn primary" href="${recordHref('brief', b)}">Review</a>` })),
     ...openConflicts.map((c) => ({ pill: '<span class="pill warn">Conflict</span>',
       title: `${recordCode('conflict', c)} · ${name(c.client_id)} submitted a brief on <span class="num">${esc(c.tender_no)}</span>`,
@@ -233,7 +237,7 @@ export function renderBriefs({ state, dataset, csrf, flash, query = briefQuery(n
   const latestNote = (b) => (state.notes ?? []).find((n) => n.subject === 'brief' && n.subject_id === b.id);
   const eligible = (b) => b.status === 'pending_approval' && ['low', 'medium'].includes(b.risk_level) && latestNote(b)?.suggested_action === 'approve';
   const row = (b) => `<tr>
-<td>${eligible(b) ? `<input type="checkbox" name="brief_ids" value="${esc(b.id)}:${esc(b.revision ?? 1)}" aria-label="Select ${esc(recordCode('brief', b))} for batch approval"> ` : ''}<a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
+<td>${eligible(b) ? `<input type="checkbox" name="brief_ids" value="${esc(b.id)}:${esc(b.revision ?? 1)}" aria-label="Select ${esc(recordCode('brief', b))} for batch approval"> ` : ''}<a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_title ?? b.tender_no)}</a><span class="sub-line">${esc(b.tender_agency ?? contracts.get(b.tender_no)?.agency ?? 'Agency not given')} · <span class="num">${esc(b.tender_no)}</span></span></td>
 <td>${esc(clients.get(b.client_id) ?? 'Unknown client')}</td>
 <td>${statusChip(b)} ${riskChip(b.risk_level)}</td>
 <td class="r num nowrap">${money(b.price_band.low_cents)} – ${money(b.price_band.high_cents)}</td>

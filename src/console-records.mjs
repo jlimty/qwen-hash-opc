@@ -106,16 +106,33 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
 <form method="post" action="/actions/brief/${brief.id}/redraft" class="form-grid"><input type="hidden" name="csrf" value="${esc(csrf)}">
 <label>Or redraft with a note for the AI <textarea name="note" rows="2" maxlength="1000" placeholder="Mention their school programmes; the scope is not small."></textarea></label>
 <div><button type="submit">Redraft</button></div></form></section>`;
+  // A slim bar: Approve, and Decline tucked behind a disclosure so the reason box only takes space when needed.
   const actions = decided ? '' : `<div class="decision">
-<p class="muted small">Approval re-checks the advice slot and the citations.</p>
-<div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}"><button class="primary" type="submit">Approve</button></form></div>
-<form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}"><button class="primary" type="submit">Approve</button></form>
+<span class="muted small">Approval re-checks the advice slot and the citations.</span></div>
+<details class="decline"><summary>Decline…</summary><form method="post" action="/actions/brief/${brief.id}/decline" class="decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
 <label for="decline-reason">Reason for declining (sent to the client)</label>
-<textarea id="decline-reason" name="reason" required maxlength="500" rows="3"></textarea>
-<button class="outline" type="submit">Decline</button></form></div>`;
+<textarea id="decline-reason" name="reason" required maxlength="500" rows="2"></textarea>
+<button class="outline" type="submit">Decline</button></form></details></div>`;
+  const owner = client(brief.client_id);
+  const verifiedCount = state.projects.filter((p) => p.client_id === brief.client_id && p.verified).length;
+  const closes = brief.closes_at ? new Date(brief.closes_at) : null;
+  const daysLeft = closes ? Math.ceil((closes.getTime() - Date.now()) / 86400000) : null;
+  const dayText = (date) => date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' });
+  const sub = [esc(brief.tender_agency ?? tender?.agency ?? 'Agency not given'), `<span class="num">${esc(brief.tender_no)}</span>`,
+    closes ? `Closes ${dayText(closes)}${daysLeft !== null && daysLeft >= 0 ? ` (${daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`})` : ' (closed)'}` : 'No closing date'].join(' · ');
+  const clientPanel = owner ? panel('Client', props([
+    ['Company', clientLink(brief.client_id)],
+    ['UEN', owner.uen ? `<span class="num">${esc(owner.uen)}</span>` : '<span class="muted">Not given</span>'],
+    ['Categories', esc((owner.categories ?? []).join(', '))],
+    ['Team size', esc(owner.team_size)],
+    ['Largest contract', money(owner.max_contract_cents)],
+    ['Verified projects', esc(verifiedCount)],
+  ])) : '';
+  const requirementsPanel = brief.requirements_text ? panel('Requirements the client pasted', `<div class="prose"><p>${esc(brief.requirements_text).replace(/\n/g, '<br>')}</p></div>`) : '';
 
   const backLink = back ? `<p class="small"><a href="${esc(back)}">Back to Briefs</a></p>` : '';
-  return renderShell({ state, csrf, active: 'briefs', title: `${code} - ${brief.tender_no}`, flash, crumbs: crumbs('brief', code) + backLink,
+  return renderShell({ state, csrf, active: 'briefs', title: `${code} - ${brief.tender_title ?? tender?.description ?? brief.tender_no}`, sub, flash, crumbs: crumbs('brief', code) + backLink,
     actions: `${riskChip(brief.risk_level)} ${briefChip(brief.status)}`,
     body: `${banner}<div class="detail"><div class="stack-gap">
 ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => check('warn', 'alert', esc(f.message), '')).join('')}</ul>` : '<div class="empty">No risk facts fired.</div>',
@@ -123,14 +140,16 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
 <section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${clientLink(brief.client_id)}</span></header>
 <div class="prose brief-prose">${renderBriefHtml(brief.content)}</div>
 <p class="note">Prose is not semantically checked; you are the check.</p></section>
+${requirementsPanel}
 ${notesPanel((state.notes ?? []).filter((n) => n.subject_id === brief.id || n.subject_id === state.requests?.find((r) => r.brief_id === brief.id)?.id))}
 ${editor}
 ${comparablesPanel(snapshot, dataset, brief.price_band)}</div>
 <aside class="stack-gap">
+${clientPanel}
 ${panel('Details', props([
     ['Client', clientLink(brief.client_id)],
     ['Tender', tenderLink(brief.tender_no)],
-    ['Agency', esc(tender?.agency ?? 'Unknown')],
+    ['Agency', esc(brief.tender_agency ?? tender?.agency ?? 'Not given')],
     ['Recommendation', brief.recommendation === 'bid' ? chip('Bid', 'progress') : chip('No-bid')],
     ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>`],
     ['Conflicts', conflicts.length ? conflicts.map((c) => recordLink('conflict', c, c.tender_no)).join('<br>') : '<span class="muted">None</span>'],

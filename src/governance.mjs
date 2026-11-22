@@ -404,7 +404,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             result = await database.transaction(async (tx) => {
               const current = await credential(tx, tokenHash);
               if (!current || !agentRoles.includes(current.role)) return unauthorized(tx, action);
-              const identity = { name: `agent:${current.id}`, client_id: current.client_id };
+              // The admin's QwenWork acts for the admin, not for the customer whose brief it touches.
+              const identity = { name: `${current.role === 'operator' ? 'operator' : 'agent'}:${current.id}`, client_id: current.client_id };
               if (!known || !workflows[name].roles.includes(current.role)) {
                 return record(tx, identity, action, blocked('G5', 'This action is not available to this agent.'));
               }
@@ -413,7 +414,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
               return record(tx, identity, action, output, checked.input);
             });
           } catch (error) {
-            const identity = { name: `agent:${actor.id}`, client_id: actor.client_id };
+            const identity = { name: `${actor.role === 'operator' ? 'operator' : 'agent'}:${actor.id}`, client_id: actor.client_id };
             await database.transaction((tx) => record(tx, identity, action, { ...blocked('ERROR', 'The tool call failed before completing.') })).catch(() => {});
             throw error;
           }
@@ -566,7 +567,10 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             clients: (await tx.query('SELECT * FROM tender_desk.clients ORDER BY created_at,id')).rows,
             projects: (await tx.query('SELECT * FROM tender_desk.projects ORDER BY client_id,id')).rows,
             holds: (await tx.query('SELECT * FROM tender_desk.pricing_holds ORDER BY tender_no')).rows,
-            briefs: (await tx.query('SELECT * FROM tender_desk.briefs ORDER BY created_at,id')).rows,
+            // Live tenders are not in the award dataset: the title, agency and closing date come from the request and the feed.
+            briefs: (await tx.query(`SELECT b.*, r.id AS request_id, r.title AS tender_title, r.agency AS tender_agency, r.requirements_text, o.closes_at
+              FROM tender_desk.briefs b LEFT JOIN tender_desk.brief_requests r ON r.brief_id=b.id LEFT JOIN tender_desk.open_tenders o ON o.tender_no=b.tender_no
+              ORDER BY b.created_at,b.id`)).rows,
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
             requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no,title,agency,created_at,brief_id FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
             notes: (await tx.query('SELECT * FROM tender_desk.review_notes ORDER BY created_at DESC LIMIT 500')).rows,

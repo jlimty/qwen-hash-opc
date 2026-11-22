@@ -280,7 +280,8 @@ test('brief detail by reference shows the risk facts before the draft', async ()
   const brf = code('BRF', await ref('briefs', one.brief.brief_id));
   const page = await get(session, `/briefs/${brf}`);
   assert.equal(page.status, 200);
-  assert.match(page.text, new RegExp(`${brf} - ${one.tender_no}`));
+  assert.match(page.text, new RegExp(`${brf} - `));
+  assert.match(page.text, new RegExp(`<span class="num">${one.tender_no}</span>`));
   const facts = page.text.indexOf('Risk facts');
   assert.ok(facts > 0 && facts < page.text.indexOf("Agent's draft"));
   assert.match(page.text, /figure in the text is not a band figure: 12\./);
@@ -443,3 +444,10 @@ test('logging out ends the session, and repeated wrong secrets are throttled', a
   assert.equal((await http({ method: 'POST', path: '/login', headers: sameOrigin(), form: { token: adminToken } })).status, 429);
 });
 
+
+test('every sidebar item has an icon', async () => {
+  const { icon } = await import('../src/console-view.mjs');
+  for (const key of ['overview', 'requests', 'briefs', 'conflicts', 'clients', 'projects', 'backtest', 'operator', 'audit']) {
+    assert.match(icon(key), /<path /, `${key} has no icon`);
+  }
+});

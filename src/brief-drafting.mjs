@@ -129,6 +129,10 @@ export function checkDraft(raw, facts) {
   if (spelled.length) return { ok: false, reason: `Draft stated quantities in words: ${spelled.slice(0, 5).join(', ')}. Try Redraft.` };
   const everything = [prose, ...draft.questions, ...draft.risks, ...draft.requirements.flatMap((r) => [r.requirement, r.evidence])].join('\n');
   if (internalId.test(everything)) return { ok: false, reason: 'Draft wrote an internal ID. Name projects by their title. Try Redraft.' };
+  // A verified project named in the brief's own words is cited by code, so "projects cited" never contradicts the text.
+  const said = everything.toLowerCase();
+  const named = facts.verifiedProjects.filter((project) => String(project.title ?? '').length >= 8 && said.includes(String(project.title).toLowerCase())).map((project) => project.id);
+  draft.credentials_cited = [...new Set([...draft.credentials_cited, ...named])].slice(0, 10);
   const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
   if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
   // Questions, risks and the requirements check may quote numbers only from the tender or the pasted requirements

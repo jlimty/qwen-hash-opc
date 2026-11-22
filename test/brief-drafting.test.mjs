@@ -292,3 +292,11 @@ test('ranges and quartiles in the brief are whole dollars', () => {
   assert.equal(parts.suggested_range.text, 'S$12,346 to S$23,457');
   assert.match(content, /lower quartile S\$12,346, median S\$23,457, upper quartile S\$34,568/);
 });
+
+test('a verified project named in the text is cited by code, so the brief never contradicts itself', async () => {
+  const draft = { ...clean, reasons: ['Your Annual ministry event shows you can run this kind of work.', 'The agency buys this often.'], credentials_cited: [] };
+  const result = await draftBrief(facts, { llm: llmReturning(draft), model: 'm' });
+  assert.equal(result.ok, true, result.reason);
+  assert.deepEqual(result.draft.credentials_cited, [verified]);
+  assert.deepEqual(result.draft.parts.cited.map((p) => p.title), ['Annual ministry event']);
+});

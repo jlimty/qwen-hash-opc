@@ -255,3 +255,23 @@ test('the QwenWork page opens QwenWork in a new tab (it cannot be embedded)', as
   const page = await c.get('/operator');
   assert.match(page.text, /<a class="btn primary" href="https:\/\/qwenwork\.ai\/app\/" target="_blank" rel="noopener noreferrer">Open QwenWork ↗<\/a>/);
 });
+
+test('the briefs list and review page show the tender title, agency, closing date, the client and their pasted requirements', async () => {
+  const request = await paidRequest();
+  await db.query("UPDATE tender_desk.brief_requests SET requirements_text='Must hold a crowd-control licence.' WHERE id=$1", [request.request_id]);
+  modelReply = clean(request.project_id);
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const list = await c.get('/briefs');
+  assert.doesNotMatch(list.text, /Agency unknown/);
+  assert.match(list.text, /Event management for a festival/);
+  const briefRef = (await db.query('SELECT b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0].reference_number;
+  const page = await c.get(`/briefs/BRF${String(briefRef).padStart(5, '0')}`);
+  assert.match(page.text, /<h1[^>]*>[^<]*Event management for a festival/);
+  assert.match(page.text, /Closes 4 Dec 2026/);
+  assert.match(page.text, /UEN/);
+  assert.match(page.text, /Largest contract/);
+  assert.match(page.text, /Must hold a crowd-control licence\./);
+  assert.match(page.text, /<details class="decline"/);
+});

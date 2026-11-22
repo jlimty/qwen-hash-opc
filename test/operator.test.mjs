@@ -126,3 +126,16 @@ test('an approval names the revision the admin saw; a brief revised since then i
   const fresh = (await db.query('SELECT revision FROM tender_desk.briefs WHERE id=$1', [brief.brief_id])).rows[0].revision;
   assert.equal((await admin.reviewBrief({ brief_id: brief.brief_id, decision: 'approved', revision: fresh })).outcome, 'approved');
 });
+
+test('operator calls are recorded as the admin\'s QwenWork, never as the customer\'s agent, and every recorded action has a readable label', async () => {
+  const brief = await pendingBrief();
+  await operator.invoke('add_review_note', { subject: 'brief', id: brief.brief_id, note: 'Reads well.', suggested_action: 'approve' });
+  const customer = (await db.query("SELECT user_id FROM tender_desk.customers WHERE client_id=$1", [brief.client_id])).rows[0];
+  await (await desk.customer(customer.user_id)).buyCredits({ credits: 5 });
+  const row = (await db.query("SELECT actor FROM tender_desk.audit_log WHERE action='add_review_note' ORDER BY ts DESC LIMIT 1")).rows[0];
+  assert.match(row.actor, /^operator:/);
+  const { actionLabels, actorName } = await import('../src/console-view.mjs');
+  assert.equal(actorName({ actor: row.actor, client_id: brief.client_id }, () => 'Wren Events'), 'Your QwenWork');
+  const actions = (await db.query('SELECT DISTINCT action FROM tender_desk.audit_log')).rows.map((r) => r.action);
+  assert.deepEqual(actions.filter((action) => !actionLabels[action]), []);
+});

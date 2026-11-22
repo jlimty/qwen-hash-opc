@@ -115,7 +115,9 @@ td .sub-line,.checks .sub-line,dd .sub-line{display:block;font-size:.8125rem;col
 .checks svg{width:1.1rem;height:1.1rem;margin-top:.1rem}
 .checks .ok{color:var(--ok)}.checks .warn{color:var(--warn)}.checks .bad{color:var(--bad)}
 .checks .t{font-weight:600}
-.decision{position:sticky;bottom:0;display:flex;gap:.6rem;align-items:center;justify-content:space-between;padding:.8rem 1rem;border:1px solid var(--line);border-radius:10px;background:#fff;margin-top:1.25rem}
+.decision{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;justify-content:space-between;padding:.5rem 1rem;border:1px solid var(--line);border-radius:10px;background:#fff;margin-top:1.25rem;box-shadow:0 -2px 8px rgba(15,26,43,.06)}
+.decision details.decline summary{cursor:pointer;font-weight:550;font-size:.875rem;color:var(--muted)}
+.decision details.decline[open]{flex-basis:100%}
 
 .rates{display:grid;grid-template-columns:1fr 1fr}
 .rate{padding:1rem 1.25rem;display:grid;gap:.15rem;align-content:start}
