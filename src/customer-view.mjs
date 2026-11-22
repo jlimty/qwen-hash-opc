@@ -328,6 +328,8 @@ function renderReport(request, awards) {
   const span = years.length ? (years[0] === years.at(-1) ? `Awarded in ${years[0]}.` : `Awarded between ${years[0]} and ${years.at(-1)}.`) : '';
   const panels = Number(parts.excluded_panels ?? 0);
   const panelNote = panels ? ` ${plural(panels, 'panel award')} (one award shared by several firms) ${panels === 1 ? 'was' : 'were'} left out: their totals are not the price of one contract.` : '';
+  const trips = Number(parts.excluded_trips ?? 0);
+  const tripNote = trips ? ` ${plural(trips, 'study trip')} that only name this kind of work in their title ${trips === 1 ? 'was' : 'were'} left out: they are travel packages, not this work.` : '';
   const awardRows = awards.map((a) => `<tr><td data-label="Tender" class="num nowrap">${esc(a.tender_no)}</td><td data-label="Description">${esc(a.description)}<span class="sub-line">${esc(a.agency)}</span></td>
 <td data-label="Winner">${esc(a.winner)}</td><td data-label="Awarded" class="r num nowrap">${wholeSgd(a.cents)}</td><td data-label="Date" class="num nowrap">${esc(day(a.date))}</td></tr>`).join('');
   return `<div class="report">
@@ -346,7 +348,7 @@ ${requirements}
 <section class="panel"><header><h2>Your verified projects cited</h2></header>${list((parts.cited ?? []).map((p) => `${p.title}${p.agency ? ` (${p.agency})` : ''}`))}</section>
 ${awards.length ? `<section class="panel"><details class="awards"><summary>Show the ${awards.length} comparable awards</summary>
 <div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${awardRows}</tbody></table></div></details>
-<p class="limits">${esc(span)}${esc(panelNote)} ${esc(priceLimits)} Contract scope and length differ between awards.</p></section>` : ''}
+<p class="limits">${esc(span)}${esc(panelNote)}${esc(tripNote)} ${esc(priceLimits)} Contract scope and length differ between awards.</p></section>` : ''}
 </div>`;
 }
 

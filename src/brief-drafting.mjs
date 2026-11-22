@@ -90,7 +90,8 @@ export function composeBrief(draft, facts) {
   const requirements = facts.requirements_text ? draft.requirements : [];
   const parts = { recommendation: draft.recommendation, reasons: draft.reasons, price_position: bid ? draft.price_position : null, suggested_range: range,
     winners, n: facts.snapshot.n, query_used: facts.query_used ?? null, requirements, questions: draft.questions, risks: draft.risks, cited,
-    thin, position_text: position, excluded_panels: Number(facts.snapshot.excluded_panels ?? 0) };
+    thin, position_text: position, excluded_panels: Number(facts.snapshot.excluded_panels ?? 0),
+    excluded_trips: Number(facts.snapshot.excluded_trips ?? 0) };
   const list = (items) => (items.length ? items.map((item) => `- ${item}`) : ['None.']);
   const content = [
     '## Recommendation', '', draft.recommendation === 'bid' ? 'Bid' : 'Do not bid', '',

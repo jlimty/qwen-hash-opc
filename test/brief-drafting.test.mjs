@@ -273,13 +273,14 @@ test('a no-bid brief carries no price advice: no suggested range and no price re
 });
 
 test('thin evidence means no dollar range: the brief says why and keeps only a rough position', async () => {
-  const thin = { ...facts, snapshot: { ...facts.snapshot, n: 7, thin: true, excluded_panels: 2 } };
+  const thin = { ...facts, snapshot: { ...facts.snapshot, n: 7, thin: true, excluded_panels: 2, excluded_trips: 4 } };
   const result = await draftBrief(thin, { llm: llmReturning(clean), model: 'm' });
   assert.equal(result.ok, true);
   const { parts, content } = result.draft;
   assert.equal(parts.suggested_range, null);
   assert.equal(parts.thin, true);
   assert.equal(parts.excluded_panels, 2);
+  assert.equal(parts.excluded_trips, 4);
   assert.equal(parts.position_text, 'Between the lower quartile and the median');
   assert.match(content, /## Where to price/);
   assert.match(content, /No dollar range: too few comparable awards, or awards too varied/);

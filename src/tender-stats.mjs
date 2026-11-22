@@ -27,13 +27,22 @@ export function isPanelAward(contract) {
   return paid.length >= 3 || (paid.length >= 2 && new Set(paid.map((supplier) => supplier.awarded_cents)).size === 1);
 }
 
+// A student or staff trip often names the course it is for ("Overseas Immersion Program ... Aircraft Maintenance"), so a
+// word search for that work finds travel packages. Live checks leave trips out unless the tender is itself a trip.
+const tripPattern = /\b(overseas (programmes?|programs?|immersion|study|internships?|learning|experiential|trips?|travel|training)|immersion (programmes?|programs?|trips?)|learning journeys?|study (trips?|tours?)|field trips?|educational (trips?|tours?))\b/i;
+export function isTripAward(description) {
+  return tripPattern.test(String(description ?? ''));
+}
+
 export function buildStatsSnapshot(dataset, options, { includeHoldout = false } = {}) {
   const filters = Object.freeze(statsFilterSchema.parse(options));
   // Live checks drop nominal awards (panel and schedule-of-rates contracts record values like S$5): they are not prices.
   const floor = includeHoldout ? minimumLiveAwardCents : 1;
   const matched = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents >= floor);
   // Live checks also leave out panel awards; backtest snapshots keep every award so their figures never move.
-  const contracts = matched.filter((contract) => !includeHoldout || !isPanelAward(contract)).sort((a, b) => compareName(a.tender_no, b.tender_no));
+  const dropTrips = includeHoldout && !isTripAward(filters.query);
+  const withoutTrips = matched.filter((contract) => !dropTrips || !isTripAward(contract.description));
+  const contracts = withoutTrips.filter((contract) => !includeHoldout || !isPanelAward(contract)).sort((a, b) => compareName(a.tender_no, b.tender_no));
   const n = contracts.length;
   const snapshot = {
     dataset_id: dataset.dataset_id,
@@ -41,7 +50,7 @@ export function buildStatsSnapshot(dataset, options, { includeHoldout = false } 
     taxonomy_version: dataset.taxonomy_version,
     holdout_from: dataset.holdout_from,
     algorithm_version: 'contract-percentiles-v1',
-    ...(includeHoldout && { scope: 'all-awards', minimum_award_cents: minimumLiveAwardCents, excluded_panels: matched.length - contracts.length, wide_band: false, thin: true }),
+    ...(includeHoldout && { scope: 'all-awards', minimum_award_cents: minimumLiveAwardCents, excluded_panels: withoutTrips.length - contracts.length, excluded_trips: matched.length - withoutTrips.length, wide_band: false, thin: true }),
     method: 'All query token prefixes and exact category/agency filters; contract totals; linear quartiles rounded half-up to cents.',
     limitations: 'Historical award totals are not a bid recommendation; contract scope and duration may differ.',
     filters,

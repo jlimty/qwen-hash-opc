@@ -550,6 +550,11 @@ test('the report uses whole dollars, says when the awards date from, and how man
   assert.match(html, /3 panel awards \(one award shared by several firms\) were left out/);
 });
 
+test('the report says how many study trips that only named this kind of work were left out', async () => {
+  assert.match(await reportFor({ recommendation: 'no-bid', excluded_trips: 2 }), /2 study trips that only name this kind of work in their title were left out/);
+  assert.doesNotMatch(await reportFor({ recommendation: 'no-bid' }), /study trip/);
+});
+
 test('an approved brief shows every step done, and the sample shows no payment steps', async () => {
   const html = await reportFor({ recommendation: 'no-bid' });
   assert.doesNotMatch(html, /class="current"/);

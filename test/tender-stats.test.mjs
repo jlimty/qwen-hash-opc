@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { parseTenderCsv } from '../src/tender-data.mjs';
-import { buildStatsSnapshot } from '../src/tender-stats.mjs';
+import { buildStatsSnapshot, isTripAward } from '../src/tender-stats.mjs';
 
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = (extra = []) => parseTenderCsv(header + [
@@ -165,4 +165,24 @@ test('live snapshots are thin under ten awards or when the band is wide', () => 
   assert.equal(buildStatsSnapshot(awards(12, 1.01), { query: 'event' }, { includeHoldout: true }).thin, false);
   assert.equal(buildStatsSnapshot(awards(12, 1.6), { query: 'event' }, { includeHoldout: true }).wide_band, true);
   assert.equal(buildStatsSnapshot(awards(12, 1.6), { query: 'event' }, { includeHoldout: true }).thin, true);
+});
+
+test('live checks leave out student trips that only name a course, unless the tender is itself a trip', () => {
+  const csv = parseTenderCsv(header + [
+    ...['A1', 'A2', 'A3', 'A4', 'A5'].map((no, i) => `${no},Aircraft maintenance and repair services,Agency A,1/${i + 1}/2025,Awarded to Suppliers,Hangar ${i},${(i + 2) * 10000}`),
+    'TRIP1,"Overseas Immersion Program (OIP) to China or Taiwan, Aircraft Maintenance from 03 March 2024",Poly,1/3/2025,Awarded to Suppliers,Holidays Co,76330',
+    'TRIP2,"Learning Journey for Aircraft Maintenance students",Poly,1/4/2025,Awarded to Suppliers,Tours Co,20000',
+  ].join('\n'));
+  const live = buildStatsSnapshot(csv, { query: 'aircraft maintenance' }, { includeHoldout: true });
+  assert.deepEqual(live.comparables.map((c) => c.tender_no).sort(), ['A1', 'A2', 'A3', 'A4', 'A5']);
+  assert.equal(live.excluded_trips, 2);
+  // A tender for a study trip still compares with other trips.
+  const trips = buildStatsSnapshot(csv, { query: 'overseas immersion' }, { includeHoldout: true });
+  assert.deepEqual(trips.comparables.map((c) => c.tender_no), ['TRIP1']);
+  assert.equal(trips.excluded_trips, 0);
+  // Backtest snapshots keep every award.
+  assert.equal(buildStatsSnapshot(csv, { query: 'aircraft maintenance' }).n, 7);
+  assert.equal(isTripAward('Overseas study trip to Japan'), true);
+  assert.equal(isTripAward('Supply of an immersion probe'), false);
+  assert.equal(isTripAward('Overseas courier services'), false);
 });
