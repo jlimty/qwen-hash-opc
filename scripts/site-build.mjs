@@ -55,7 +55,8 @@ function openDatabase(connectionString) {
   return createPoolDatabase(pool);
 }
 
-Deno.serve(createSiteApp({ openDatabase, env: (name) => Deno.env.get(name), csv, backtestJson, origin: ${JSON.stringify(origin)} }));
+Deno.serve(createSiteApp({ openDatabase, env: (name) => Deno.env.get(name), csv, backtestJson, origin: ${JSON.stringify(origin)},
+  waitUntil: globalThis.EdgeRuntime?.waitUntil?.bind(globalThis.EdgeRuntime) }));
 `);
 await copyFile(join(root, 'scripts', 'site-assets', 'index.html'), join(out, 'dist', 'index.html'));
 console.log(`Built ${out} (dataset ${dataset.dataset_sha256.slice(0, 12)}…, ${dataset.contracts.length} contracts)`);

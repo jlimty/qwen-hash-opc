@@ -1,6 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { backtestFromJson } from './backtest.mjs';
 import { createConsoleHandler } from './console-handler.mjs';
+import { createCustomerAuth } from './customer-auth.mjs';
+import { createCustomerHandler } from './customer-handler.mjs';
+import { refreshOpenTenders } from './gebiz-feed.mjs';
+import { createOpenRouterLlm } from './openrouter.mjs';
 import { createTenderDesk } from './governance.mjs';
 import { createMcpWebHandler } from './mcp-web.mjs';
 import { createNeonAuth } from './neon-auth.mjs';
@@ -14,7 +18,7 @@ const safeMessage = (error) => `${error?.name ?? 'Error'}: ${String(error?.messa
 const clean = (value) => String(value ?? '').trim().replace(/^(["'])([\s\S]*)\1$/, '$2').trim() || undefined;
 const shape = (value) => `scheme ${/^([a-z][a-z0-9+.-]*):/i.exec(value)?.[1] ?? 'none'}, ${value.length} characters`;
 
-export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fetchImpl }) {
+export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fetchImpl, feedFetch = fetch, waitUntil }) {
   let runtime;
   let stage = 'start';
   function boot() {
@@ -36,8 +40,15 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'desk';
     const desk = createTenderDesk({ database, dataset, adminToken, backtest: backtestFromJson(backtestJson, dataset),
       connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } });
+    stage = 'ai';
+    const openRouterKey = clean(env('TD_OPENROUTER_KEY'));
+    const llm = openRouterKey ? createOpenRouterLlm({ apiKey: openRouterKey, referer: origin }) : undefined;
+    const models = { read: clean(env('TD_MODEL_READ')) ?? 'qwen/qwen3.7-flash', draft: clean(env('TD_MODEL_DRAFT')) ?? 'qwen/qwen3.7-plus' };
     return {
-      console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true }),
+      console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true, llm, models }),
+      assistant: createCustomerHandler({ desk, dataset, llm, models, database, basePath: `${publicBase}/assistant`, secureCookies: true, waitUntil,
+        auth: createCustomerAuth({ baseUrl: authUrl, origin, adminUserId, fetchImpl }),
+        refresh: () => refreshOpenTenders(database, { fetchImpl: feedFetch }) }),
       mcp: createMcpWebHandler({ authenticate: (token) => desk.agent(token) }),
     };
   }
@@ -46,12 +57,15 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     const url = new URL(request.url);
     const segments = url.pathname.split('/').filter(Boolean);
     const route = `/${segments.slice(1).join('/')}`;
-    if (request.method === 'GET' && route === '/health') return json({ ok: true, configured: Boolean(clean(env('TD_DB_URL')) && clean(env('TD_AUTH_URL')) && clean(env('TD_ADMIN_USER_ID'))) });
+    if (request.method === 'GET' && route === '/health') {
+      return json({ ok: true, configured: Boolean(clean(env('TD_DB_URL')) && clean(env('TD_AUTH_URL')) && clean(env('TD_ADMIN_USER_ID'))), ai: Boolean(clean(env('TD_OPENROUTER_KEY'))) });
+    }
     try {
       runtime ??= boot();
       if (runtime) stage = 'serving';
       if (!runtime) return json({ error: 'service_not_configured' }, 503);
       if (route === '/mcp') return await runtime.mcp(request);
+      if (route === '/assistant' || route.startsWith('/assistant/')) return await runtime.assistant(request, route.slice('/assistant'.length) || '/');
       return await runtime.console(request, route);
     } catch (error) {
       console.error(`request failed at ${stage}: ${safeMessage(error)}`);

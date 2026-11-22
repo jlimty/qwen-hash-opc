@@ -19,7 +19,9 @@
     "site:admin-password": "node scripts/site-admin-password.mjs",
     "site:rehearse": "node scripts/site-rehearse.mjs",
     "site:reseed": "node scripts/site-reseed.mjs",
-    "starter-pack": "node scripts/starter-pack.mjs"
+    "starter-pack": "node scripts/starter-pack.mjs",
+    "site:migrate": "node scripts/site-migrate.mjs",
+    "site:test-customers": "node scripts/site-test-customers.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

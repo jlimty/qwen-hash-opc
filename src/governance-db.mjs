@@ -21,6 +21,12 @@ export async function rebuildTenderDesk(database) {
   });
 }
 
+export async function pendingMigrations(database) {
+  const pending = [];
+  for (const { file, present } of migrations) if (!(await database.query(present)).rows[0].present) pending.push(file);
+  return pending;
+}
+
 export async function initializeGovernance(database) {
   for (const { file, present } of migrations) {
     const { rows } = await database.query(present);

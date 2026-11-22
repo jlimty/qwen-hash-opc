@@ -70,7 +70,7 @@ before(async () => {
   await seedSql.close();
   backtestJson = backtestToJson(buildBacktest(dataset), dataset);
   const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id };
-  app = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
+  app = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin, feedFetch: async () => { throw new Error('offline'); } });
 });
 after(async () => {
   authServer?.closeAllConnections();
@@ -86,9 +86,9 @@ const cookieOf = (response, name) => response.headers.getSetCookie().map((c) => 
 const signIn = () => form('/login', { email: admin.email, password: admin.password });
 
 test('health works without touching the database and reports configuration', async () => {
-  assert.deepEqual(await (await call('/health')).json(), { ok: true, configured: true });
+  assert.deepEqual(await (await call('/health')).json(), { ok: true, configured: true, ai: false });
   const bare = createSiteApp({ openDatabase, env: () => undefined, csv, backtestJson: {}, origin });
-  assert.deepEqual(await (await bare(new Request(`https://x${physical}/health`))).json(), { ok: true, configured: false });
+  assert.deepEqual(await (await bare(new Request(`https://x${physical}/health`))).json(), { ok: true, configured: false, ai: false });
   assert.equal((await bare(new Request(`https://x${physical}/login`))).status, 503);
 });
 
@@ -288,4 +288,28 @@ test('forgot and reset requests are throttled, and a Neon outage is reported pla
   const text = await outage.text();
   assert.match(text, /temporarily unavailable/);
   assert.doesNotMatch(text, /on its way|127\.0\.0\.1/);
+});
+
+test('the assistant is served under /assistant with rewritten links, and health reports AI when a key is set', async () => {
+  const landing = await call('/assistant');
+  assert.equal(landing.status, 200);
+  const html = await landing.text();
+  assert.match(html, /Open GeBIZ tenders/);
+  assert.match(html, new RegExp(`href="${publicBase}/assistant/signup"`));
+  assert.match(html, new RegExp(`action="${publicBase}/assistant/check"`));
+  assert.equal((await call('/assistant/app.css')).status, 200);
+  const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl, TD_ADMIN_USER_ID: admin.id, TD_OPENROUTER_KEY: 'sk-or-test' };
+  const withKey = createSiteApp({ openDatabase, env: (name) => config[name], csv, backtestJson, origin });
+  assert.deepEqual(await (await withKey(new Request(`https://x${physical}/health`))).json(), { ok: true, configured: true, ai: true });
+});
+
+test('a customer cookie does not open the console, and the admin session does not open the assistant', async () => {
+  const console = await call('/', { headers: { Cookie: 'td_customer=user-session~value' } });
+  assert.equal(console.status, 303);
+  assert.equal(console.headers.get('location'), `${publicBase}/login`);
+  const signedIn = await signIn();
+  const adminSession = cookieOf(signedIn, 'td_session').split('=').slice(1).join('=');
+  const home = await call('/assistant/home', { headers: { Cookie: `td_customer=${adminSession}` } });
+  assert.equal(home.status, 303);
+  assert.equal(home.headers.get('location'), `${publicBase}/assistant/signin`);
 });

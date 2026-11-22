@@ -18,7 +18,10 @@ test('the site build ships every module the function imports', async () => {
     assert.doesNotMatch(source, /from '(zod|csv-parse\/sync|postgres)'/, `${file} has an unpinned bare import`);
   }
   assert.deepEqual(missing, []);
-  for (const required of ['references.mjs', 'connector-config.mjs', 'brief-risk.mjs', 'gebiz-check.mjs', 'console-records.mjs']) {
+  for (const required of ['references.mjs', 'connector-config.mjs', 'brief-risk.mjs', 'gebiz-check.mjs', 'console-records.mjs',
+    'customer-handler.mjs', 'customer-view.mjs', 'customer-auth.mjs', 'neon-session.mjs', 'gebiz-feed.mjs', 'openrouter.mjs', 'brief-drafting.mjs', 'price-check.mjs', 'tender-reading.mjs']) {
     assert.ok(shipped.has(required), required);
   }
+  const entry = await readFile(new URL('index.ts', functions), 'utf8');
+  assert.match(entry, /waitUntil: globalThis\.EdgeRuntime\?\.waitUntil\?\.bind\(globalThis\.EdgeRuntime\)/);
 });
