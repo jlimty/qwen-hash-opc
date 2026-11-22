@@ -3,13 +3,14 @@
 // page's CSRF token, matched against a cookie scoped to this app.
 import { randomBytes } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { assistantCss, creditWord, layout, renderCheck, renderCheckEmail, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
+import { assistantCss, creditWord, landingProof, layout, renderCheck, renderCheckEmail, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
 import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mjs';
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { uenPattern } from './governance-agent.mjs';
-import { tooClose } from './governance.mjs';
+import { creditSettings, tooClose } from './governance.mjs';
+import { buildBacktest } from './backtest.mjs';
 import { esc, plural } from './console-view.mjs';
 import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile, formDollars } from './profile-help.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
@@ -93,6 +94,26 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
   }
   const homeReadBudgetMs = 6000;
 
+  // Landing facts that never change while the dataset is loaded: one real example check and the proof figures.
+  let landingFacts;
+  const facts = () => (landingFacts ??= {
+    example: { label: 'Office cleaning', check: priceCheck(dataset, { terms: ['office cleaning'], category: 'cleaning-facilities' }) },
+    proof: landingProof(dataset, buildBacktest(dataset)),
+  });
+  async function landingPage(html, csrf, { status = 200, notice } = {}) {
+    await freshen();
+    const rows = (await listOpenTenders(database, { now: now() }))
+      .sort((a, b) => (a.closes_at ? new Date(a.closes_at).getTime() : Infinity) - (b.closes_at ? new Date(b.closes_at).getTime() : Infinity));
+    // A median only where the free check would show the same one: the stored reading, full quartiles.
+    const tenders = rows.map((row, i) => {
+      if (i >= 6 || !row.terms?.length) return row;
+      const check = priceCheck(dataset, { terms: row.terms, category: row.category });
+      return check.status === 'ready' && !check.snapshot.thin ? { ...row, median_cents: check.snapshot.price_band.median_cents } : row;
+    });
+    const prices = await creditSettings(database).catch(() => undefined);
+    return html(status, renderLanding({ tenders, refreshedAt: await feedRefreshedAt(database), csrf, notice, prices, ...facts() }));
+  }
+
   async function readFeedTender(row) {
     if (row.terms?.length) return { terms: row.terms, category: row.category };
     const reading = await readTender({ title: row.title, agency: row.agency }, { llm, model: models.read });
@@ -135,8 +156,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
 
     if (path === '/' && !post) {
       if (customer) return redirect('/home');
-      await freshen();
-      return html(200, renderLanding({ tenders: await listOpenTenders(database, { now: now() }), refreshedAt: await feedRefreshedAt(database), csrf }));
+      return landingPage(html, csrf);
     }
 
     if (path === '/check' && post) {
@@ -144,7 +164,15 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const ip = (request.headers.get('x-forwarded-for') ?? '').split(',').map((part) => part.trim()).filter(Boolean).pop() || 'local';
       if (!(customer ? allowCheck(`customer:${userId}`, customerChecksPerHour) : allowCheck(`ip:${ip}`, checksPerHour))) return html(429, layout({ title: 'Slow down', csrf, body: '<p class="banner bad" role="alert">You have run a lot of checks this hour. Create a free account, or try again later.</p>' }));
       const typedTerms = cleanTerms(String(form.get('terms') ?? ''));
-      const tenderNo = String(form.get('tender_no') ?? '').trim();
+      // The landing page's single box takes a GeBIZ tender number or a title.
+      const query = String(form.get('query') ?? '').replace(/\s+/g, ' ').trim();
+      const looksLikeNumber = /^[A-Za-z0-9]{10,24}$/.test(query) && /\d/.test(query);
+      if (looksLikeNumber && !(await getOpenTender(database, query.toUpperCase()))) {
+        if (customer) return redirect('/home');
+        return landingPage(html, csrf, { status: 404, notice: `${query.toUpperCase()} is not among the open GeBIZ tenders we list. Type its title instead, or paste the full tender text.` });
+      }
+      if (query && !looksLikeNumber) form.set('title', query.slice(0, 300));
+      const tenderNo = looksLikeNumber ? query.toUpperCase() : String(form.get('tender_no') ?? '').trim();
       let tender; let reading; let notice;
       if (tenderNo) {
         const row = await getOpenTender(database, tenderNo);

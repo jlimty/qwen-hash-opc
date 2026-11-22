@@ -724,3 +724,27 @@ test('a declined request does not invite asking again for the same tender', asyn
   assert.doesNotMatch(page.text, /Ask for a brief again/);
   assert.equal((page.text.match(/credit has been returned|credit is back/g) ?? []).length, 1);
 });
+
+test('the landing box takes a tender number or a title, and names an unknown number', async () => {
+  const b = browser('10.0.3.3');
+  const landing = await b.get('/');
+  assert.match(landing.text, /Closing soon/);
+  assert.match(landing.text, /Know the prices before you bid/);
+  assert.match(landing.text, /Your first reviewed brief is free/);
+  assert.match(landing.text, /Built on [\d,]+ GeBIZ awards/);
+  const byNumber = await b.post('/check', { query: 'rpo000etq26000129' });
+  assert.equal(byNumber.status, 200);
+  assert.match(byNumber.text, /RPO000ETQ26000129/);
+  const byTitle = await b.post('/check', { query: 'Audit services for a statutory board' });
+  assert.equal(byTitle.status, 200);
+  assert.match(byTitle.text, /Free price check/);
+  const unknown = await b.post('/check', { query: 'ZZZ000ETQ26999999' });
+  assert.equal(unknown.status, 404);
+  assert.match(unknown.text, /ZZZ000ETQ26999999 is not among the open GeBIZ tenders/);
+});
+
+test('display titles drop GeBIZ boilerplate and capitals but keep acronyms and places', async () => {
+  const { displayTitle } = await import('../src/customer-view.mjs');
+  assert.equal(displayTitle('INVITATION TO QUOTE FOR THE PROVISION OF CLEANING SERVICES AT TAMAN JURONG FOR MOH'), 'Cleaning services at Taman Jurong for MOH');
+  assert.equal(displayTitle('Audit services for a council'), 'Audit services for a council');
+});

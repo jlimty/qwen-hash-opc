@@ -72,6 +72,99 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .verdict strong{font-size:1.5rem;font-weight:650}
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
+.wrap.wide{max-width:74rem;gap:2.75rem}
+.ck-head{display:grid;gap:.35rem;max-width:62rem}.ck-head h1{font-size:1.75rem;line-height:1.2;letter-spacing:-.02em;text-wrap:balance}
+.ck-grid{display:grid;grid-template-columns:minmax(0,1fr) 20rem;gap:1.5rem;align-items:start}
+.ck-main{display:grid;gap:1.25rem;min-width:0}
+.ck-answer{padding:1.5rem 1.5rem 1rem}
+.ck-lead{color:var(--muted);font-size:.9375rem}
+.ck-range{font-size:2.25rem;line-height:1.2;font-weight:650;letter-spacing:-.025em;margin-top:.15rem}
+.ck-range.ck-thin{font-size:1.5rem}
+.ck-sub{margin-top:.5rem;color:var(--muted);max-width:60ch}.ck-sub strong{color:var(--ink);font-weight:650}
+.ck-answer .banner{margin:.85rem 0 0}
+.ck-chart{margin-top:1rem}
+.ck-who{margin-top:.75rem;font-size:.8125rem;color:var(--muted);max-width:70ch}
+.ck-refine{border-top:1px solid var(--line)}
+.ck-refine summary,.ck-awards summary{cursor:pointer;padding:.85rem 1.5rem;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
+.ck-refine .form{padding:0 1.5rem 1.25rem}
+.ck-awards .table-wrap{border-top:1px solid var(--line)}
+.ck-limits{font-size:.75rem;color:var(--muted)}
+.ck-offer{padding:1.25rem;display:grid;gap:.75rem;position:sticky;top:1rem}
+.ck-offer h2{font-size:1.0625rem}
+.ck-offer>p{font-size:.875rem;color:var(--muted);line-height:1.6}
+.ck-next{display:grid;gap:.4rem}.ck-next .btn,.ck-next button{width:100%;justify-content:center;min-height:2.75rem;font-size:.9375rem}
+@media (max-width:900px){.ck-grid{grid-template-columns:1fr}.ck-offer{position:static}}
+@media (max-width:760px){.ck-range{font-size:1.75rem}.ck-answer{padding:1.25rem 1rem .75rem}.ck-refine summary,.ck-awards summary{padding:.85rem 1rem}.ck-refine .form{padding:0 1rem 1rem}}
+.lp-hero{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:3.5rem;align-items:center;padding-top:1.5rem}
+.lp-h1{font-size:2.5rem;line-height:1.12;letter-spacing:-.03em;max-width:16ch;text-wrap:balance}
+.lp-intro{margin-top:1rem;color:var(--muted);font-size:1.0625rem;line-height:1.6;max-width:52ch}
+.lp-hero .banner{margin:1.25rem 0 0}
+.lp-check{margin-top:1.5rem}
+.lp-check label{display:block;font-weight:600;font-size:.875rem;margin-bottom:.5rem}
+.lp-input-row{display:flex;gap:.5rem}
+.lp-input-row input{flex:1;min-width:0;font:inherit;height:3rem;padding:0 .8rem;border:1px solid var(--muted);border-radius:6px;color:var(--ink);background:#fff}
+.lp-input-row input::placeholder{color:var(--muted);opacity:1}
+.lp-input-row input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.lp-input-row button{min-height:3rem;padding:0 1.25rem;font-size:.9375rem}
+.lp-note{margin-top:.6rem;font-size:.8125rem;color:var(--ok);font-weight:500}
+.lp-paste{margin-top:1rem}
+.lp-paste summary{cursor:pointer;font-size:.875rem;font-weight:500;color:var(--accent-dark)}
+.lp-paste-form{padding:.75rem 0 0}
+.lp-example{overflow:hidden}
+.lp-tag{background:var(--tint);color:var(--accent-dark);font-size:.75rem;font-weight:650;padding:.15rem .5rem;border-radius:4px}
+.lp-example-body{padding:1.25rem}
+.lp-example-title{font-weight:600}
+.lp-caption{margin-top:1.1rem;color:var(--muted);font-size:.8125rem}
+.lp-range{font-size:1.75rem;font-weight:650;letter-spacing:-.02em;line-height:1.3}
+.lp-band{display:block;width:100%;height:auto;margin:1rem 0 .25rem}
+.lp-band .track{fill:var(--hover)}.lp-band .mid{fill:var(--tint);stroke:var(--accent)}
+.lp-band circle{fill:#fff;stroke:var(--ink);stroke-width:1.25}.lp-band .med{stroke:var(--accent-dark);stroke-width:3}
+.lp-facts{display:flex;justify-content:space-between;gap:1rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line)}
+.lp-facts dt{font-size:.75rem;color:var(--muted)}.lp-facts dd{font-size:1.0625rem;font-weight:650}
+.lp-example-foot{background:var(--side);border-top:1px solid var(--line);padding:.75rem 1.25rem;font-size:.75rem;color:var(--muted)}
+.lp-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.85rem}
+.lp-section-head h2,.lp-how h2{font-size:1.375rem;letter-spacing:-.02em}
+.lp-section-head p{font-size:.8125rem;color:var(--muted)}
+.lp-list li+li{border-top:1px solid var(--line)}
+.lp-list form{margin:0}
+.lp-row{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:5rem minmax(0,1fr) 9rem 1.125rem;gap:1.25rem;align-items:center;padding:1rem 1.25rem}
+.lp-row:hover{background:var(--side)}
+.lp-row:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:8px}
+.lp-close{display:grid;align-self:start}.lp-close strong{font-size:1rem;font-weight:650}.lp-close span{font-size:.75rem;color:var(--muted)}
+.lp-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;line-height:1.4}
+.lp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;margin-top:.35rem;font-size:.75rem;color:var(--muted)}
+.lp-kind{background:var(--hover);border-radius:4px;padding:.1rem .45rem;font-weight:650}
+.lp-ref{font-size:.75rem}
+.lp-median{text-align:right}.lp-median strong{display:block;font-weight:650}.lp-median span{font-size:.75rem;color:var(--muted)}
+
+.lp-cta{color:var(--accent-dark);font-size:.8125rem;font-weight:550;text-align:right}
+.lp-arrow{width:1.125rem;height:1.125rem;color:var(--accent)}
+.lp-more{border-top:1px solid var(--line)}
+.lp-more summary{cursor:pointer;padding:.85rem 1.25rem;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
+.lp-more .lp-list{border-top:1px solid var(--line)}
+.lp-foot{padding:.75rem 1.25rem;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+.lp-steps{list-style:none;padding:0;margin-top:1.25rem;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2rem;counter-reset:step}
+.lp-steps li{position:relative;padding-left:2.25rem;counter-increment:step}
+.lp-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:1.5rem;height:1.5rem;display:grid;place-items:center;background:var(--tint);color:var(--accent-dark);border-radius:6px;font-size:.75rem;font-weight:650}
+.lp-steps h3{font-size:1rem;font-weight:650}
+.lp-steps p{margin-top:.35rem;font-size:.875rem;color:var(--muted);line-height:1.6;max-width:36ch}
+.lp-sample{margin-top:1.5rem;font-weight:600}
+.lp-pricing{display:grid;grid-template-columns:1.2fr 2fr;gap:2rem;align-items:center;background:var(--side);border:1px solid var(--line);border-radius:10px;padding:1.5rem}
+.lp-pricing h2{font-size:1.25rem;letter-spacing:-.015em}
+.lp-pricing p{font-size:.8125rem;color:var(--muted);margin-top:.35rem}
+.lp-pricing p .btn{margin-top:.6rem}
+.lp-prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(7rem,1fr));gap:1.25rem}
+.lp-prices>div{border-left:1px solid var(--line-strong);padding-left:1.25rem}
+.lp-prices dt{font-size:.8125rem;color:var(--muted)}.lp-prices dd{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
+.lp-prices small{font-size:.75rem;color:var(--muted)}
+.lp-proof{display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding-bottom:1rem}
+.lp-proof h2{font-size:.9375rem}
+.lp-proof p{margin-top:.35rem;font-size:.8125rem;line-height:1.65;color:var(--muted);max-width:62ch}
+@media (max-width:900px){.lp-hero{grid-template-columns:1fr;gap:2rem}.lp-pricing{grid-template-columns:1fr}}
+@media (max-width:760px){.lp-h1{font-size:2rem}.lp-input-row{flex-direction:column}.lp-input-row input{flex:none}.lp-row{grid-template-columns:3.75rem minmax(0,1fr) 1rem;gap:.75rem;padding:.9rem 1rem}
+.lp-ref{display:none}.lp-median,.lp-cta{grid-column:2;text-align:left}.lp-median strong,.lp-median span{display:inline;margin-right:.35rem}.lp-arrow{grid-column:3;grid-row:1/span 2}
+.lp-section-head{display:block}.lp-steps,.lp-proof{grid-template-columns:1fr;gap:1.25rem}.lp-prices>div{padding-left:.75rem}
+.top{flex-wrap:wrap}.top nav{gap:.25rem 1rem}}
 @media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0}.proj{grid-template-columns:1fr}.tenders li{grid-template-columns:1fr}.wrap{padding:1rem 1rem 3rem}.top{padding:.6rem 1rem}}
 `;
 
@@ -85,17 +178,17 @@ const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 2
 const banner = (message, kind = 'bad') => (message ? `<p class="banner ${kind}" role="${kind === 'bad' ? 'alert' : 'status'}">${esc(message)}</p>` : '');
 const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value="${esc(value ?? '')}">`;
 
-export function layout({ title, csrf, company, body, signedIn }) {
+export function layout({ title, csrf, company, body, signedIn, wide = false }) {
   const nav = signedIn && !company
     ? `<form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
     : company
     ? `<a href="/home">Home</a><a href="/">Open tenders</a><!--credits--><form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
-    : '<a href="/">Open tenders</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
+    : '<a href="/sample">Sample brief</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} · Tender Desk</title><link rel="stylesheet" href="/app.css"></head><body>
 <header class="top"><a class="brand" href="/">${mark}<span>Tender Desk</span></a><nav aria-label="Main">${company ? `<span class="muted small">${esc(company)}</span>` : ''}${nav}</nav></header>
-<main class="wrap">${body}</main></body></html>`;
+<main class="wrap${wide ? ' wide' : ''}">${body}</main></body></html>`;
 }
 
 // Thin evidence (under ten awards, or a band wider than five times): the count and a rounded span, never quartiles.
@@ -113,7 +206,7 @@ function tenderList(tenders, csrf, { matches } = {}) {
     const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
-    return `<li><div><strong>${esc(tender.title)}</strong>
+    return `<li><div><strong>${esc(displayTitle(tender.title))}</strong>
 <span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}${item.closesInDays !== undefined && item.closesInDays <= 3 ? ` <span class="chip warning">Closes in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}</span>` : ''}</span>
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
@@ -122,20 +215,105 @@ ${!matches ? '' : item.taken ? '<span class="muted small">Not available for a re
   }).join('')}</ul>`;
 }
 
-const pasteForm = (csrf) => `<section class="panel"><header><h2>Paste a tender</h2></header>
-<form class="form" method="post" action="/check">${hidden('csrf', csrf)}
+// GeBIZ titles arrive in capitals and wrapped in procurement boilerplate. For display only: the tender number and the
+// full title stay unchanged everywhere they are stored or matched.
+const keepUpper = new Set(['IT', 'ICT', 'AV', 'AI', 'IOT', 'CCTV', 'ACMV', 'M&E', 'MOH', 'MOE', 'MOM', 'MSF', 'MND', 'HDB', 'NEA', 'LTA', 'SAF', 'PUB',
+  'URA', 'JTC', 'HPB', 'PA', 'NLB', 'NUS', 'NTU', 'SMU', 'SUTD', 'SIT', 'SUSS', 'ITE', 'CPF', 'IRAS', 'ICA', 'SPF', 'SCDF', 'MINDEF', 'GOVTECH', 'UAT', 'SLA', 'SIA']);
+const keepProper = new Map(['singapore', 'jurong', 'taman', 'tampines', 'woodlands', 'changi', 'sentosa', 'punggol', 'sengkang', 'bedok', 'yishun', 'toa', 'payoh',
+  'ang', 'mo', 'kio', 'bukit', 'timah', 'batok', 'panjang', 'merah', 'clementi', 'queenstown', 'pasir', 'ris', 'serangoon', 'hougang', 'geylang', 'kallang', 'marina',
+  'tuas', 'seletar', 'novena', 'orchard', 'bishan', 'choa', 'chu', 'kang', 'lim', 'chu'].map((w) => [w, w[0].toUpperCase() + w.slice(1)]));
+export function displayTitle(raw) {
+  const original = String(raw ?? '').replace(/\s+/g, ' ').trim();
+  let title = original.replace(/^[A-Z]{2,}[0-9/]*\s*[-–:]\s*/, '')
+    .replace(/^(invitation to (quote|tender)|itq|itt|quotation|tender)\b\s*(for\s+)?(the\s+)?(provision\s+of\s+)?/i, '')
+    .replace(/^(for\s+)?(the\s+)?provision\s+of\s+/i, '').replace(/^for\s+the\s+/i, '');
+  if (title.length < 8) title = original;
+  if (!/[a-z]/.test(title)) {
+    title = title.toLowerCase().replace(/[a-z0-9&]+/g, (word) => (keepUpper.has(word.toUpperCase()) ? word.toUpperCase() : keepProper.get(word) ?? word));
+  }
+  return title.charAt(0).toUpperCase() + title.slice(1);
+}
+const tenderKind = (tenderNo) => (/ETQ/.test(tenderNo ?? '') ? 'ITQ' : /ETT/.test(tenderNo ?? '') ? 'ITT' : '');
+const shortDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short' });
+const yearOf = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', year: 'numeric' });
+const monthYear = (iso) => new Intl.DateTimeFormat('en-GB', { month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+const arrow = '<svg class="lp-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>';
+
+function closingRow(row, csrf) {
+  const closes = row.closes_at ? new Date(row.closes_at) : undefined;
+  const kind = tenderKind(row.tender_no);
+  const right = row.median_cents ? `<span class="lp-median num"><strong>${wholeSgd(row.median_cents)}</strong><span>median award</span></span>` : '<span class="lp-cta">Check price</span>';
+  return `<li><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', row.tender_no)}<button class="lp-row" type="submit">
+<span class="lp-close num">${closes ? `<strong>${esc(shortDay.format(closes))}</strong><span>${esc(yearOf.format(closes))} · closes</span>` : '<strong>Open</strong><span>no closing date</span>'}</span>
+<span class="lp-body"><span class="lp-title">${esc(displayTitle(row.title))}</span><span class="lp-meta"><span>${esc(row.agency)}</span>${kind ? `<span class="lp-kind">${kind}</span>` : ''}<span class="lp-ref num">${esc(row.tender_no)}</span></span></span>
+${right}${arrow}</button></form></li>`;
+}
+
+function exampleCard(example) {
+  const snap = example?.check?.status === 'ready' && !example.check.snapshot.thin ? example.check.snapshot : undefined;
+  if (!snap) return '';
+  const band = snap.price_band;
+  const values = (snap.comparables ?? []).map((c) => c.total_awarded_cents).filter((v) => v > 0);
+  const lo = Math.log10(Math.min(...values, band.low_cents) * 0.85); const hi = Math.log10(Math.max(...values, band.high_cents) * 1.15);
+  const x = (cents) => (8 + ((Math.log10(cents) - lo) / (hi - lo)) * 384).toFixed(1);
+  const dots = values.map((v) => `<circle cx="${x(v)}" cy="7" r="3.5"/>`).join('');
+  return `<section class="panel lp-example" aria-labelledby="example-heading"><header><h2 id="example-heading">What a free check shows</h2><span class="lp-tag">Example</span></header>
+<div class="lp-example-body"><p class="lp-example-title">${esc(example.label)}</p>
+<p class="lp-caption">Middle half of comparable awards</p><p class="lp-range num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</p>
+<svg class="lp-band" viewBox="0 0 400 36" role="img" aria-label="Each dot is one past award; the shaded band is the middle half, the line is the median.">
+<rect class="track" x="0" y="20" width="400" height="12" rx="4"/><rect class="mid" x="${x(band.low_cents)}" y="20" width="${(x(band.high_cents) - x(band.low_cents)).toFixed(1)}" height="12" rx="3"/>${dots}
+<line class="med" x1="${x(band.median_cents)}" x2="${x(band.median_cents)}" y1="16" y2="36"/></svg>
+<dl class="lp-facts num"><div><dt>Median award</dt><dd>${wholeSgd(band.median_cents)}</dd></div><div><dt>Comparable awards</dt><dd>${esc(plural(snap.n, 'award'))}</dd></div></dl></div>
+<p class="lp-example-foot">Real GeBIZ awards matched on “${esc(example.check.query_used)}”. Your check runs on the tender you pick.</p></section>`;
+}
+
+const pasteFields = (csrf) => `<form class="form lp-paste-form" method="post" action="/check">${hidden('csrf', csrf)}
 <label for="title">Tender title</label><input id="title" name="title" required maxlength="300">
 <label for="agency">Agency <span class="hint">(optional)</span></label><input id="agency" name="agency" maxlength="250">
 <label for="text">Description <span class="hint">(optional; the first 4000 characters are read)</span></label><textarea id="text" name="text" rows="4"></textarea>
-<div><button class="primary" type="submit">Check prices</button></div></form></section>`;
+<div><button class="primary" type="submit">Check prices</button></div></form>`;
 
-export function renderLanding({ tenders, refreshedAt, csrf }) {
-  return layout({ title: 'Open tenders', csrf, body: `<section class="hero"><h1>Is this tender worth bidding on, and at what price?</h1>
-<p>Pick an open GeBIZ tender, or paste one, and see what comparable government contracts were actually awarded for. Free, no account needed.</p>
-<p class="small"><a href="/sample">See a sample reviewed brief</a> · An ITQ is an invitation to quote (smaller, quicker buys); an ITT is an invitation to tender (larger, formal ones).</p></section>
-<div class="grid"><section class="panel"><header><h2>Open GeBIZ tenders</h2><span class="muted small">Tenders last updated ${esc(when(refreshedAt))}</span></header>
-${tenderList(tenders, csrf)}</section>${pasteForm(csrf)}</div>` });
+const pasteForm = (csrf) => `<section class="panel"><header><h2>Paste a tender</h2></header>${pasteFields(csrf)}</section>`;
+
+export function renderLanding({ tenders, refreshedAt, csrf, example, proof, prices, notice }) {
+  const shown = tenders.slice(0, 6);
+  const rest = tenders.slice(6);
+  const list = !tenders.length
+    ? '<p class="empty"><strong>No open tenders right now.</strong>GeBIZ lists new tenders each working day. Paste one above to check it.</p>'
+    : `<ul class="lp-list">${shown.map((row) => closingRow(row, csrf)).join('')}</ul>
+${rest.length ? `<details class="lp-more"><summary>Show ${plural(rest.length, 'more open tender')}</summary><ul class="lp-list">${rest.map((row) => closingRow(row, csrf)).join('')}</ul></details>` : ''}
+<p class="lp-foot">ITQ is an invitation to quote (smaller, quicker buys); ITT is an invitation to tender (larger, formal ones).</p>`;
+  const free = prices && prices.welcome >= prices.perBrief;
+  const packs = (prices?.packs ?? []).map((pack) => `<div><dt>${esc(plural(pack.credits, 'brief'))}</dt><dd>${esc(wholeSgd(pack.cents))}</dd>${pack.credits > 1 ? `<small>${esc(wholeSgd(Math.round(pack.cents / pack.credits)))} a brief</small>` : '<small>one credit</small>'}</div>`).join('');
+  return layout({ title: 'Know the prices before you bid', csrf, wide: true, body: `<section class="lp-hero">
+<div><h1 class="lp-h1">Know the prices before you bid.</h1>
+<p class="lp-intro">Is this GeBIZ tender worth your time? See what similar government contracts were actually awarded for.</p>
+${banner(notice, 'bad')}
+<form class="lp-check" method="post" action="/check">${hidden('csrf', csrf)}<label for="query">GeBIZ tender number or title</label>
+<div class="lp-input-row"><input id="query" name="query" required maxlength="300" placeholder="e.g. HPB000ETT26000018, or office cleaning for a polyclinic"><button class="primary" type="submit">Check price</button></div>
+<p class="lp-note">Free price check. No account needed.</p></form>
+<details class="lp-paste"><summary>Paste the full tender text instead</summary>${pasteFields(csrf)}</details></div>
+${exampleCard(example)}</section>
+<section aria-labelledby="closing-heading"><div class="lp-section-head"><h2 id="closing-heading">Closing soon</h2><p>Tenders last updated ${esc(when(refreshedAt))}. Pick one for a free price check.</p></div>
+<div class="panel">${list}</div></section>
+<section class="lp-how" aria-labelledby="how-heading"><h2 id="how-heading">From a price check to a bid decision</h2>
+<ol class="lp-steps"><li><h3>Check past award prices</h3><p>Pick a tender or paste its title. See what comparable contracts were awarded for, free.</p></li>
+<li><h3>Get a reviewed brief</h3><p>Our AI drafts it and a person approves it, citing only your checked projects. Usually within one business day.</p></li>
+<li><h3>Decide whether to bid</h3><p>A bid or no-bid recommendation and where to price, against the awards you saw.</p></li></ol>
+<p class="lp-sample"><a href="/sample">Read a sample reviewed brief</a></p></section>
+${packs ? `<section class="lp-pricing" aria-labelledby="pricing-heading"><div><h2 id="pricing-heading">${free ? 'Your first reviewed brief is free.' : 'Reviewed briefs'}</h2><p>${free ? 'One per company (UEN). After that, one brief costs one credit.' : 'One brief costs one credit.'}</p>
+<p><a class="btn primary" href="/signup">Create an account</a></p></div><dl class="lp-prices num">${packs}</dl></section>` : ''}
+${proof ? `<section class="lp-proof" aria-label="Data and backtest"><div><h2>Built on ${esc(proof.awards.toLocaleString('en-SG'))} GeBIZ awards</h2><p>Public award records from ${esc(proof.from)} to ${esc(proof.to)}, used to find comparable contracts. Not a quote: GeBIZ publishes winning amounts only.</p></div>
+${proof.backtest ? `<div><h2>A tested middle-half range</h2><p>On ${esc(proof.backtest.n.toLocaleString('en-SG'))} contracts awarded in 2026 and held back from the data, ${proof.backtest.pct}% of actual awards fell inside the predicted middle half. A well-calibrated middle-half range should catch about 50%.</p></div>` : ''}</section>` : ''}` });
 }
+
+export const landingProof = (dataset, backtest) => {
+  const dates = dataset.contracts.map((c) => c.last_award_date).filter(Boolean).sort();
+  const scored = backtest ? [...backtest.predictions.values()] : [];
+  const inBand = scored.filter((p) => p.actual_cents >= p.band.low_cents && p.actual_cents <= p.band.high_cents).length;
+  return { awards: dataset.contracts.length, from: monthYear(dates[0]), to: monthYear(dates.at(-1)),
+    backtest: scored.length >= 50 ? { n: scored.length, pct: Math.round((inBand / scored.length) * 100) } : undefined };
+};
 
 // Lower quartile, median, upper quartile: left to right, the same order as the chart.
 const quartileTiles = (band, n, countLabel) => `<div class="stats"><div class="stat"><span class="big">${wholeSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
@@ -144,36 +322,51 @@ const quartileTiles = (band, n, countLabel) => `<div class="stats"><div class="s
 <div class="stat"><span class="big">${n}</span><span class="label">${countLabel}</span></div></div>`;
 
 export function renderCheck({ tender, reading, check, csrf, company, notice, refusal }) {
-  const band = check.status === 'ready' ? check.snapshot.price_band : undefined;
-  const stats = band ? `${check.snapshot.thin ? thinTile(check.snapshot.n, (check.snapshot.comparables ?? []).map((c) => c.total_awarded_cents)) : quartileTiles(band, check.snapshot.n, 'Comparable awards: past contracts for similar work')}
-${check.snapshot.thin ? `<p class="banner inset-banner">A rough guide only: ${check.snapshot.wide_band ? 'past awards for this kind of work vary a lot' : `only ${plural(check.snapshot.n, 'comparable award')}`}. A reviewed brief would advise on bidding and where to aim, but give no dollar range.</p>` : ''}`
-    : `<p class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms.</p>`;
-  const agencies = band && check.snapshot.top_agencies?.length ? `<p class="muted small inset">Buyers of this work: ${esc(check.snapshot.top_agencies.slice(0, 4).map((a) => a.name).join(', '))}.
-${check.snapshot.top_suppliers?.length ? ` The most frequent winner took ${esc(plural(check.snapshot.top_suppliers[0].wins, 'award'))} of ${check.snapshot.n}.` : ''}</p>` : '';
-  const rows = check.comparables.map((c) => `<tr><td data-label="Tender" class="num nowrap">${esc(c.tender_no)}</td><td data-label="Description">${esc(c.description)}<span class="sub-line">${esc(c.agency)}</span></td>
-<td data-label="Winner">${esc(c.suppliers.join(', '))}</td><td data-label="Awarded" class="r num nowrap">${wholeSgd(c.awarded_cents)}</td><td data-label="Date" class="num nowrap">${esc(day(c.award_date))}</td></tr>`).join('');
+  const ready = check.status === 'ready';
+  const snap = check.snapshot;
+  const band = ready ? snap.price_band : undefined;
+  const thin = Boolean(band && snap.thin);
+  const allCents = (snap.comparables ?? []).map((c) => c.total_awarded_cents).filter((v) => v > 0);
+  // The answer first: one sentence and the range, then the chart. Thin evidence gets the count and a rounded spread.
+  const answer = !band
+    ? `<div class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms below.</div>`
+    : `<div class="ck-answer"><p class="ck-lead">Similar government contracts went for</p>
+${thin ? `<p class="ck-range ck-thin num">${esc(thinLine(snap.n, allCents))}</p>
+<p class="banner">A rough guide only: ${snap.wide_band ? 'past awards for this kind of work vary a lot' : `only ${plural(snap.n, 'comparable award')}`}. A reviewed brief would advise on bidding and where to aim, but give no dollar range.</p>`
+    : `<p class="ck-range num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</p>
+<p class="ck-sub">The middle half of ${esc(plural(snap.n, 'comparable award'))}. Median award <strong class="num">${wholeSgd(band.median_cents)}</strong>: half were above, half below.</p>`}
+${allCents.length ? `<div class="ck-chart">${priceChart({ awards: allCents.map((cents) => ({ cents })), band, thin })}</div>` : ''}
+${snap.top_agencies?.length ? `<p class="ck-who">Bought by ${esc(snap.top_agencies.slice(0, 3).map((a) => a.name).join(', '))}${snap.top_agencies.length > 3 ? ' and others' : ''}.${snap.top_suppliers?.length ? ` The most frequent winner took ${esc(plural(snap.top_suppliers[0].wins, 'award'))} of ${snap.n}.` : ''}</p>` : ''}</div>`;
   const keep = tender.tender_no && !tender.pasted ? hidden('tender_no', tender.tender_no)
     : `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}`;
   const termsValue = (reading.terms ?? []).join(', ');
-  const category = check.snapshot.filters?.category ?? reading.category ?? '';
+  const category = snap.filters?.category ?? reading.category ?? '';
+  const matched = check.query_used && ready ? `Matched on "${esc(check.query_used)}", the most specific of these terms with at least five past awards${snap.filters?.category ? ` (in ${esc(categoryNames[snap.filters.category] ?? snap.filters.category)})` : ''}. Awards under S$1,000 are left out: they are panel or nominal values, not prices.` : '';
+  const refine = `<details class="ck-refine"${ready ? '' : ' open'}><summary>${ready && check.query_used ? `Compared with past awards for “${esc(check.query_used)}” · change the search terms` : 'Change the search terms'}</summary>
+<form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
+<label for="terms">Search terms</label><input id="terms" name="terms" value="${esc(termsValue)}" maxlength="120">
+<span class="hint">Separate terms with commas. ${ready ? '' : 'No search terms found five past awards. Try broader or different terms. '}${matched}</span>
+<div><button type="submit">Check again</button></div></form></details>`;
+  const rows = check.comparables.map((c) => `<tr><td data-label="Tender" class="num nowrap">${esc(c.tender_no)}</td><td data-label="Description">${esc(c.description)}<span class="sub-line">${esc(c.agency)}</span></td>
+<td data-label="Winner">${esc(c.suppliers.join(', '))}</td><td data-label="Awarded" class="r num nowrap">${wholeSgd(c.awarded_cents)}</td><td data-label="Date" class="num nowrap">${esc(day(c.award_date))}</td></tr>`).join('');
+  const awards = rows ? `<details class="panel ck-awards"><summary>See the comparable awards${snap.n > check.comparables.length ? ` (latest ${check.comparables.length} of ${snap.n})` : ` (${check.comparables.length})`}</summary>
+<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></details>` : '';
   const checkoutQuery = new URLSearchParams({ tender: tender.tender_no ?? '', terms: termsValue, category }).toString();
   const next = refusal ? banner(refusal, 'bad') : !band
-    ? '<p>A reviewed brief needs at least five comparable awards. Try other search terms above first.</p>'
+    ? '<p class="small">A reviewed brief needs at least five comparable awards. Try other search terms first.</p>'
     : company
       ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?${esc(checkoutQuery)}">Ask for a reviewed brief · 1 credit</a>`
         : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · 1 credit</button></form>`)
-      : '<a class="btn primary" href="/signup">Create an account: your first reviewed brief is free</a>';
-  return layout({ title: 'Price check', csrf, company, body: `<div><p class="eyebrow">Free price check</p><h1>${esc(tender.title)}</h1>
-<p class="sub">${esc(tender.agency ?? '')}${tender.tender_no && !tender.pasted ? ` · <span class="num">${esc(tender.tender_no)}</span>` : ''}${tender.closes_at ? ` · <span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''}</p></div>
+      : '<a class="btn primary" href="/signup">Get your first brief free</a><p class="small muted">Create an account with your work email and company UEN.</p>';
+  const meta = [tender.agency ? esc(tender.agency) : '', tender.tender_no && !tender.pasted ? `<span class="num">${esc(tender.tender_no)}</span>` : '',
+    tender.closes_at ? `<span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''].filter(Boolean).join(' · ');
+  return layout({ title: 'Price check', csrf, company, wide: true, body: `<div class="ck-head"><h1>${esc(displayTitle(tender.title))}</h1>${meta ? `<p class="sub">${meta}</p>` : ''}</div>
 ${banner(notice, 'ok')}
-<section class="panel"><header><h2>What comparable contracts were awarded for</h2></header>${stats}${agencies}
-<form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
-<label for="terms">Search terms</label><input id="terms" name="terms" value="${esc(termsValue)}" maxlength="120">
-<span class="hint">Separate terms with commas. ${check.status !== 'ready' ? 'No search terms found five past awards. Try broader or different terms. ' : ''}${check.query_used && check.status === 'ready' ? `Matched on "${esc(check.query_used)}", the most specific of these terms with at least five past awards${check.snapshot.filters?.category ? ` (in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)})` : ''}. Awards under S$1,000 are left out: they are panel or nominal values, not prices.` : ''}</span>
-<div><button type="submit">Check again</button></div></form>
-${rows ? `<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
-<p class="limits">${esc(priceLimits)}</p></section>
-<section class="panel"><header><h2>Want advice on this tender?</h2></header><div class="form"><p>A reviewed brief tells you whether to bid and where to price against these awards, citing only your checked projects. Our AI drafts it and a person approves it, usually within one business day.</p><div>${next}</div></div></section>` });
+<div class="ck-grid"><div class="ck-main"><section class="panel ck-result" aria-label="Free price check">${answer}${refine}</section>${awards}
+<p class="ck-limits">${esc(priceLimits)}</p></div>
+<aside class="panel ck-offer" aria-labelledby="offer-heading"><h2 id="offer-heading">Should you bid, and at what price?</h2>
+<p>A reviewed brief compares this tender with your checked projects and these awards, then says bid or no-bid and where to price. Our AI drafts it and a person approves it, usually within one business day.</p>
+<div class="ck-next">${next}</div><p class="small"><a href="/sample">See a sample brief</a></p></aside></div>` });
 }
 
 export function renderSignup({ csrf, message }) {

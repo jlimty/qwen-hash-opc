@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en-SG">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Check what comparable government contracts were awarded for, then decide whether to bid with a reviewed Tender Desk brief.">
+  <title>Tender Desk · Know the prices before you bid</title>
+  <style>
+    :root{--bg:#fff;--side:#F6F8FA;--line:#E3E8EE;--line-strong:#C9D1DB;--ink:#0F1A2B;--muted:#58647A;--accent:#2457D6;--accent-dark:#1B45B0;--tint:#EAF0FD;--hover:#F1F4F8;--bad:#B42318;--bad-bg:#FDECEA;--warn:#8A4B00;--warn-bg:#FEF3E0;--ok:#1A6B3F;--ok-bg:#E6F4EC;color-scheme:light}
+    *{box-sizing:border-box}
+    html{-webkit-text-size-adjust:100%;scroll-padding-top:24px}
+    body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;caret-color:var(--accent)}
+    ::selection{background:#CFDCF8;color:var(--ink)}
+    h1,h2,h3,p,ul,ol,dl,dd{margin:0}
+    a{color:var(--accent);text-decoration:none;text-underline-offset:3px}
+    a:hover{text-decoration:underline}
+    button,input{font:inherit}
+    a,button,input,summary{touch-action:manipulation}
+    :focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:4px}
+    .skip{position:absolute;left:16px;top:-100px;z-index:2;background:#fff;padding:12px;border:1px solid var(--accent);border-radius:6px}
+    .skip:focus{top:12px}
+    .muted{color:var(--muted)}
+    .small{font-size:13px}
+    .num{font-variant-numeric:tabular-nums}
+    .top{border-bottom:1px solid var(--line);background:var(--side)}
+    .top-inner{max-width:1200px;margin:auto;padding:14px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .brand{display:inline-flex;align-items:center;gap:10px;white-space:nowrap;color:var(--ink);font-size:17px;font-weight:650;letter-spacing:-.01em}
+    .brand:hover{text-decoration:none}
+    .brand-mark{width:24px;height:24px;border-radius:6px;background:var(--accent);color:#fff;display:grid;place-items:center;flex:none}
+    .brand-mark svg{width:16px;height:16px}
+    nav{display:flex;align-items:center;gap:24px}
+    nav>a{color:var(--ink);font-size:14px;font-weight:500}
+    .btn{display:inline-flex;justify-content:center;align-items:center;min-height:44px;padding:0 16px;border:1px solid var(--line-strong);border-radius:6px;background:#fff;color:var(--ink);font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+    .btn:hover{background:var(--hover);text-decoration:none}
+    .primary{background:var(--accent);border-color:var(--accent);color:#fff}
+    .primary:hover{background:var(--accent-dark);border-color:var(--accent-dark)}
+    .wrap{max-width:1164px;padding:0 32px;margin:auto}
+    .hero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);align-items:center;gap:56px;padding:54px 0 42px}
+    h1{max-width:16ch;font-size:40px;line-height:1.15;font-weight:650;letter-spacing:-.03em;text-wrap:balance}
+    .intro{max-width:54ch;margin-top:18px;color:var(--muted);font-size:17px;line-height:1.6}
+    .check-form{margin-top:25px}
+    .check-form label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}
+    .input-row{display:flex;gap:8px}
+    .input-row input{min-width:0;width:100%;height:48px;border:1px solid var(--muted);border-radius:6px;padding:0 12px;color:var(--ink);background:#fff}
+    input::placeholder{color:var(--muted);opacity:1}
+    .input-row .btn{flex:none}
+    .form-note{display:flex;align-items:center;gap:7px;margin-top:10px;font-size:13px;color:var(--ok)}
+    .form-note svg{width:15px;height:15px;flex:none}
+    .panel{border:1px solid var(--line);border-radius:10px;background:#fff;min-width:0;overflow:hidden}
+    .panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line)}
+    .panel-head h2{font-size:15px;font-weight:650}
+    .chip{display:inline-flex;align-items:center;justify-content:center;padding:2px 7px;border-radius:4px;background:var(--hover);color:var(--muted);font-size:11px;line-height:1.5;font-weight:650;white-space:nowrap}
+    .chip.example{background:var(--tint);color:var(--accent-dark)}
+    .example-body{padding:20px}
+    .example-title{font-weight:600;font-size:15px;max-width:32ch}
+    .range-caption{margin-top:20px;color:var(--muted);font-size:13px}
+    .range{font-size:29px;font-weight:650;letter-spacing:-.025em;line-height:1.3;margin-top:2px}
+    .band{position:relative;height:12px;background:var(--hover);border-radius:4px;margin:25px 0 10px}
+    .band:before{content:"";position:absolute;left:16%;right:16%;height:100%;border:1px solid var(--accent);background:var(--tint);border-radius:3px}
+    .band:after{content:"";position:absolute;left:49%;height:24px;top:-6px;width:3px;background:var(--accent);border-radius:2px}
+    .band-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+    .band-labels span:nth-child(2){color:var(--accent-dark);font-weight:600}
+    .result-facts{display:flex;justify-content:space-between;gap:14px;margin-top:20px;padding-top:15px;border-top:1px solid var(--line)}
+    .result-facts dt{font-size:12px;color:var(--muted)}
+    .result-facts dd{font-size:17px;font-weight:650;margin-top:2px}
+    .example-foot{background:var(--side);padding:12px 20px;font-size:12px;color:var(--muted);border-top:1px solid var(--line)}
+    .section-head{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:14px}
+    h2{font-size:22px;line-height:1.3;font-weight:650;letter-spacing:-.02em}
+    .section-head p{font-size:13px;color:var(--muted)}
+    .listing-note{padding:10px 20px;border-bottom:1px solid var(--line);background:var(--side);color:var(--muted);font-size:12px}
+    .tenders{list-style:none;padding:0}
+    .tenders li+li{border-top:1px solid var(--line)}
+    .tender-row{display:grid;grid-template-columns:76px minmax(0,1fr) 132px 18px;align-items:center;gap:20px;padding:17px 20px;color:var(--ink)}
+    .tender-row:hover{background:var(--side);text-decoration:none}
+    .tender-row:focus-visible{outline-offset:-4px}
+    .closing{display:grid;gap:1px;align-self:start;padding-top:2px}
+    .closing strong{font-size:16px;font-weight:650;line-height:1.3}
+    .closing span{font-size:12px;color:var(--muted)}
+    .tender-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-size:15px;line-height:1.4;font-weight:600}
+    .tender-meta{display:flex;align-items:center;flex-wrap:wrap;gap:5px 8px;margin-top:6px;font-size:12px;color:var(--muted)}
+    .ref{font-size:11px;overflow-wrap:anywhere}
+    .cached{text-align:right}
+    .cached strong{display:block;font-size:16px;font-weight:650}
+    .cached span{font-size:12px;color:var(--muted)}
+    .uncached{font-size:13px;color:var(--accent-dark);font-weight:500;text-align:right}
+    .arrow{width:18px;height:18px;color:var(--accent)}
+    .list-foot{padding:12px 20px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+    .how{padding:42px 0 30px}
+    .steps{list-style:none;padding:0;margin-top:22px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:32px;counter-reset:step}
+    .steps li{position:relative;padding-left:35px;counter-increment:step}
+    .steps li:before{content:counter(step);position:absolute;left:0;top:0;display:grid;place-items:center;width:23px;height:23px;background:var(--tint);border-radius:6px;color:var(--accent-dark);font-size:12px;font-weight:650}
+    .steps h3{font-size:16px;font-weight:650}
+    .steps p{font-size:14px;color:var(--muted);margin-top:6px;max-width:35ch;line-height:1.6}
+    .sample{margin-top:24px;padding:14px 18px;background:var(--side);border:1px solid var(--line);border-radius:8px;scroll-margin-top:24px}
+    summary{cursor:pointer;font-size:14px;font-weight:600;color:var(--accent-dark)}
+    .sample-content{max-width:76ch;padding:16px 0 4px}
+    .sample-content h3{font-size:16px;margin:12px 0 4px}
+    .sample-content p{font-size:14px;color:var(--muted);margin-top:6px}
+    .sample-content .no-bid{display:inline-block;color:var(--warn);background:var(--warn-bg);padding:3px 8px;border-radius:4px;font-size:13px;font-weight:600}
+    .pricing{display:grid;grid-template-columns:1.25fr 2fr;gap:30px;align-items:center;background:var(--side);border:1px solid var(--line);border-radius:10px;padding:24px}
+    .pricing h2{font-size:20px}
+    .pricing p{font-size:13px;color:var(--muted);margin-top:5px}
+    .price-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}
+    .price-options>div{border-left:1px solid var(--line-strong);padding-left:20px}
+    .price-options dt{font-size:13px;color:var(--muted)}
+    .price-options dd{font-size:23px;line-height:1.35;font-weight:650;letter-spacing:-.02em;margin-top:3px}
+    .price-options small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+    .proof{display:grid;grid-template-columns:1fr 1fr;gap:50px;padding:32px 0}
+    .proof h2{font-size:15px;letter-spacing:0}
+    .proof p{font-size:13px;line-height:1.65;color:var(--muted);max-width:62ch;margin-top:6px}
+    footer{border-top:1px solid var(--line);padding:18px 0 28px;font-size:12px;color:var(--muted)}
+    .footer-inner{display:flex;justify-content:space-between;align-items:center;gap:16px}
+    .footer-inner a{font-weight:600}
+    @media(min-width:761px){nav>a:not(.btn){display:inline-flex;align-items:center;min-height:44px}}
+    @media(max-width:900px){.hero{gap:28px}h1{font-size:35px}.range{font-size:25px}.tender-row{gap:14px;grid-template-columns:70px minmax(0,1fr) 115px 18px}.pricing{grid-template-columns:1fr}.price-options>div:first-child{border-left:0;padding-left:0}}
+    @media(max-width:760px){
+      .top-inner{padding:14px 16px;display:grid;gap:12px}.brand{font-size:17px}nav{gap:0;justify-content:space-between;flex-wrap:wrap}nav>a{min-height:44px;display:inline-flex;align-items:center;font-size:13px}nav .btn{padding:0 12px}
+      .wrap{padding:0 20px}.hero{grid-template-columns:1fr;gap:28px;padding:32px 0}h1{font-size:34px;max-width:18ch}.intro{font-size:16px;margin-top:14px}.check-form{margin-top:22px}.input-row{flex-direction:column}.input-row .btn{min-height:46px}.example-body{padding:18px}.panel-head{padding:12px 18px}.range{font-size:28px}.range-caption{margin-top:16px}.example-foot{padding:12px 18px}
+      .section-head{display:block;margin-bottom:12px}.section-head p{margin-top:5px}.tender-row{grid-template-columns:55px minmax(0,1fr) 16px;gap:12px;padding:16px 14px}.closing strong{font-size:14px}.closing span{font-size:11px}.tender-title{font-size:14px}.tender-meta{gap:5px 7px}.ref{display:none}.cached,.uncached{grid-column:2;text-align:left;margin-top:-4px}.cached strong,.cached span{display:inline;font-size:12px}.cached span{margin-left:5px}.uncached{font-size:12px}.arrow{grid-column:3;grid-row:1 / span 2;align-self:center;width:16px}.listing-note,.list-foot{padding:10px 14px}
+      h2{font-size:21px}.how{padding:32px 0 26px}.steps{grid-template-columns:1fr;gap:22px;margin-top:20px}.steps p{max-width:none}.pricing{padding:20px;gap:20px}.price-options{gap:12px}.price-options>div{padding-left:12px}.price-options dd{font-size:20px}.price-options dt,.price-options small{font-size:12px}.proof{grid-template-columns:1fr;gap:20px;padding:28px 0}.footer-inner{display:block}.footer-inner a{display:inline-block;margin-top:12px;min-height:32px}
+    }
+    @media(prefers-reduced-motion:no-preference){.btn,.tender-row{transition:background-color .15s ease-out}}
+    @media print{nav,.check-form,.skip{display:none}.hero{padding-top:24px}.panel,.pricing{break-inside:avoid}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="top">
+    <div class="top-inner">
+      <a class="brand" href="#main"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg></span>Tender Desk</a>
+      <nav aria-label="Main navigation"><a href="#sample-brief">Sample brief</a><a href="/functions/v1/app/assistant/signin">Sign in</a><a class="btn primary" href="/functions/v1/app/assistant/signup">Create an account</a></nav>
+    </div>
+  </header>
+  <main id="main" class="wrap">
+    <section class="hero" aria-labelledby="headline">
+      <div>
+        <h1 id="headline">Know the prices before you bid.</h1>
+        <p class="intro">Is this GeBIZ tender worth your time? See what similar government contracts were actually awarded for.</p>
+        <!-- Static concept: submission displays the labelled example; it does not run a lookup. -->
+        <form class="check-form" action="#price-example" method="get">
+          <label for="tender">GeBIZ tender number or title</label>
+          <div class="input-row"><input id="tender" name="tender" type="text" placeholder="e.g. cleaning services for an office" required maxlength="300" aria-describedby="check-note"><button class="btn primary" type="submit">Check price</button></div>
+          <p class="form-note" id="check-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>Free price check. No account needed.</p>
+        </form>
+      </div>
+      <section class="panel" id="price-example" aria-labelledby="example-heading" tabindex="-1">
+        <header class="panel-head"><h2 id="example-heading">Your price check</h2><span class="chip example">Example result</span></header>
+        <div class="example-body">
+          <p class="example-title">Cleaning services for an office, 12 months</p>
+          <p class="range-caption">Middle half of comparable awards</p>
+          <p class="range num">S$48,000–S$86,000</p>
+          <div role="img" aria-label="Illustrative band: lower quartile S$48,000, median S$64,000, upper quartile S$86,000."><div class="band"></div><div class="band-labels"><span>Lower quartile</span><span>Median</span><span>Upper quartile</span></div></div>
+          <dl class="result-facts num"><div><dt>Median award</dt><dd>S$64,000</dd></div><div><dt>Comparable awards</dt><dd>28 awards</dd></div></dl>
+        </div>
+        <p class="example-foot">Illustrative figures. A check shows the range, median and number of comparable past awards.</p>
+      </section>
+    </section>
+
+    <section aria-labelledby="closing-heading">
+      <div class="section-head"><h2 id="closing-heading">Closing soon</h2><p>Pick a tender for a free price check</p></div>
+      <div class="panel">
+        <p class="listing-note">Illustrative open tenders and cached medians · ordered by closing date</p>
+        <ul class="tenders">
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2026-11-26"><strong>26 Nov</strong><span>2026 · closes</span></time>
+            <div><span class="tender-title">Cleaning services for community club offices (12 months)</span><span class="tender-meta"><span>People’s Association</span><span class="chip">ITT</span><span class="ref">PAS000ETT26000142</span></span></div>
+            <span class="cached num"><strong>S$64,000</strong><span>Cached median</span></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2026-11-30"><strong>30 Nov</strong><span>2026 · closes</span></time>
+            <div><span class="tender-title">Website maintenance and support services (12 months)</span><span class="tender-meta"><span>National Library Board</span><span class="chip">ITQ</span><span class="ref">NLB000ETQ26000081</span></span></div>
+            <span class="cached num"><strong>S$36,000</strong><span>Cached median</span></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2026-12-02"><strong>2 Dec</strong><span>2026 · closes</span></time>
+            <div><span class="tender-title">Event management for a community sports festival</span><span class="tender-meta"><span>Sport Singapore</span><span class="chip">ITQ</span><span class="ref">SPC000ETQ26000063</span></span></div>
+            <span class="uncached">Check price</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2026-12-04"><strong>4 Dec</strong><span>2026 · closes</span></time>
+            <div><span class="tender-title">Registered inspector (architectural) for a 4-storey polyclinic and kidney dialysis centre, Taman Jurong</span><span class="tender-meta"><span>Ministry of Health</span><span class="chip">ITQ</span><span class="ref">HLTHQ0ETQ26000024</span></span></div>
+            <span class="uncached">Check price</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2026-12-08"><strong>8 Dec</strong><span>2026 · closes</span></time>
+            <div><span class="tender-title">Security services for an administrative building (2 years)</span><span class="tender-meta"><span>JTC Corporation</span><span class="chip">ITT</span><span class="ref">JTC000ETT26000109</span></span></div>
+            <span class="cached num"><strong>S$428,000</strong><span>Cached median</span></span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+          <li><a class="tender-row" href="#price-example">
+            <time class="closing num" datetime="2027-01-08"><strong>8 Jan</strong><span>2027 · closes</span></time>
+            <div><span class="tender-title">Project management for workplace health outreach (2 years + 1 optional)</span><span class="tender-meta"><span>Health Promotion Board</span><span class="chip">ITT</span><span class="ref">HPB000ETT26000018</span></span></div>
+            <span class="uncached">Check price</span><svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5"/></svg>
+          </a></li>
+        </ul>
+        <p class="list-foot">ITQ: invitation to quote · ITT: invitation to tender</p>
+      </div>
+    </section>
+
+    <section class="how" aria-labelledby="how-heading">
+      <h2 id="how-heading">From a price check to a bid decision</h2>
+      <ol class="steps">
+        <li><h3>Check past award prices</h3><p>Pick a tender or paste its title. Get comparable award amounts, free.</p></li>
+        <li><h3>Get a reviewed brief</h3><p>AI drafts it; a person approves it, citing only your checked projects. Usually within one business day.</p></li>
+        <li><h3>Decide whether to bid</h3><p>Use a bid or no-bid recommendation and pricing advice to make your call.</p></li>
+      </ol>
+      <details class="sample" id="sample-brief">
+        <summary>Read a sample reviewed brief</summary>
+        <div class="sample-content">
+          <p class="small">Illustrative excerpt · fictional company and tender assessment</p>
+          <h3>Office cleaning services, 12 months</h3>
+          <span class="no-bid">Recommendation: no-bid</span>
+          <p>The tender requires related contract experience. Your company has no checked projects that demonstrate this requirement. Do not commit bid preparation time until you can evidence eligibility.</p>
+          <h3>Where to price</h3>
+          <p>Comparable awards have a median of S$64,000 and a middle-half range of S$48,000–S$86,000 across 28 awards. Resolve eligibility and check your delivery costs before choosing a bid price.</p>
+          <h3>Project evidence</h3>
+          <p>No related checked projects available; none cited.</p>
+        </div>
+      </details>
+    </section>
+
+    <section class="pricing" aria-labelledby="pricing-heading">
+      <div><h2 id="pricing-heading">Your first reviewed brief is free.</h2><p>One per company / UEN. Then one brief = one credit.</p></div>
+      <dl class="price-options num"><div><dt>1 credit</dt><dd>S$29</dd><small>1 brief</small></div><div><dt>5 credits</dt><dd>S$119</dd><small>5 briefs</small></div><div><dt>20 credits</dt><dd>S$399</dd><small>20 briefs</small></div></dl>
+    </section>
+
+    <section class="proof" aria-label="Data and historical backtest">
+      <div><h2>Built on 12,052 GeBIZ awards</h2><p>Public procurement records, used to find comparable contracts.<br>Not a quote: winning amounts only, Apr 2021 to Mar 2026.</p></div>
+      <div><h2>A measured middle-half range</h2><p>In a backtest on 512 hold-out contracts awarded in 2026, 47% of actual awards fell inside the predicted middle-half range. A calibrated range should catch about 50%.</p></div>
+    </section>
+  </main>
+  <footer><div class="wrap footer-inner"><p>Static landing concept · tender listings and example prices are illustrative.</p><a href="#tender">Run a free price check</a></div></footer>
+</body>
+</html>

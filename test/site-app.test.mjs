@@ -308,7 +308,7 @@ test('the assistant is served under /assistant with rewritten links, and health 
   const landing = await call('/assistant');
   assert.equal(landing.status, 200);
   const html = await landing.text();
-  assert.match(html, /Open GeBIZ tenders/);
+  assert.match(html, /Closing soon/);
   assert.match(html, new RegExp(`href="${publicBase}/assistant/signup"`));
   assert.match(html, new RegExp(`action="${publicBase}/assistant/check"`));
   assert.equal((await call('/assistant/app.css')).status, 200);
