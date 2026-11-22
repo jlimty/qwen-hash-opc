@@ -3,7 +3,7 @@
 Copy for the Hashmeta AI Website Builder. Paste each section into its own block.
 
 - Every number in section 1 comes from `npm run data:report -- --category events-community`, run on 21 Nov 2026 (dataset `d_acde1106003906a75c3fa052592f2fcb`, award dates 2021-04-01 to 2026-03-31). Section 4 reuses only those numbers.
-- Placeholders in `{{double braces}}` are download links the admin fills in. No real key appears anywhere in this file. Never paste one into the site.
+- The app lives at https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant. Every call to action links there.
 
 ---
 
@@ -36,7 +36,7 @@ If you run events, exhibitions or community programmes, government work is not o
 
 #### Get matched
 
-Tender Desk reads the same public data to show you which public-sector events tenders fit your track record, and what comparable contracts were awarded for. Every brief is checked by a person before you see it. We do not promise wins. We help you decide where your effort is worth it. [Get matched →](#get-started)
+Tender Desk reads the same public data. Paste any open tender and see, for free, what comparable contracts were awarded for. Every brief is checked by a person before you see it. We do not promise wins. We help you decide where your effort is worth it. [Try a free price check →](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant)
 
 *Source: Government Procurement via GeBIZ, Ministry of Finance, Singapore, published on data.gov.sg under the Singapore Open Data Licence. Award dates 2021-04-01 to 2026-03-31. Figures computed by Tender Desk from 12,052 contracts; events and community category: 204 contracts, 195 with a positive award amount.*
 
@@ -46,49 +46,40 @@ Tender Desk reads the same public data to show you which public-sector events te
 
 ## 2. Product
 
-### Tender Desk: tender advice for Singapore SMEs, with a person in charge
+### Tender Desk: your AI tender assistant, with a person in charge
 
-Tender Desk is a one-person tender advisory for small and medium businesses in Singapore. You work with Tender Desk's agents in QwenWork chat. They find government tenders that fit your track record, look up what similar contracts were awarded for, and draft a brief on whether to bid. The admin, the one person who runs Tender Desk, decides what reaches you. Agents prepare. The admin decides.
+Tender Desk helps small and medium businesses in Singapore decide which government tenders are worth bidding on, and what price to put in.
 
-All of this runs on public Singapore government award data (GeBIZ, via data.gov.sg).
+**Free price check, no account needed.** Pick an open GeBIZ tender, or paste one. In seconds you see what comparable government contracts were awarded for: the median, the middle half, and the actual past awards behind those numbers, with the agencies that buy this kind of work and how spread out the winners are.
 
-### The rules, and the code that enforces them
+**Reviewed brief, S$99.** Tell us about your company and past projects once. Ask for a brief on any open tender, and you get a bid or no-bid recommendation with a suggested price position against the comparable awards, citing only projects we have checked against public GeBIZ records. Our AI drafts it. A person reads it and approves it before you see it, usually within one business day.
 
-Each rule below is enforced by the server and the database, not by asking the AI nicely. An agent that ignores its instructions still cannot break them.
+All of this runs on public Singapore government data: open tenders from GeBIZ, and five years of contract awards from data.gov.sg.
 
-| Rule | In plain words | What enforces it |
-|---|---|---|
-| **Client walls** | Agents can't see other clients. | Each company gets its own connector key, and the server ties that key to one company. Every request is answered for that company only. A brief that names another client is refused. |
-| **Exclusive advice** | Tender Desk advises only one client per tender. | When a brief is submitted, the database records which client Tender Desk is advising on that tender. A second client is stopped and sent to the admin. They are told only that Tender Desk already advises someone, never who. |
-| **Verified projects only** | Only verified projects can be cited, checked against GeBIZ. | A brief can cite only that client's own projects that the admin has verified. Before verifying, the admin sees the project's GeBIZ tender number checked against the public award record: agency, supplier and amount. |
-| **Grounded prices** | Price bands come from saved statistics. | The price band in a brief must match, figure for figure, a statistics snapshot the server computed and saved for that client and tender. Snapshots cannot be edited afterwards. |
-| **Human approval** | Every brief is approved by a human. | Agents can only submit a brief as pending. Only the admin's signed-in console can approve or decline it, and a decline must give a reason the client can read. |
-| **Audit trail** | Every step is audit-logged. | Every agent call and admin decision is written to an audit log in the same database transaction. A database trigger rejects any edit or deletion of the log. Connector keys are never written to it. |
-| **Honest backtest** | The backtest is scored honestly. | The 536 most recent awards (from 1 January 2026) are held out. Price bands for them come only from older contracts, are fixed in advance, and are hidden from agents. The admin reveals the real outcomes only after that, and hits and misses are both counted. |
+### The rules, and how they are kept
 
-**About the backtest:** the tenders Tender Desk's agents show today are past awards from that held-out period, used to test the method. They are labelled as backtest, not live opportunities.
+Each rule is enforced by the system itself, not by asking the AI nicely.
+
+| Rule | What it means for you |
+|---|---|
+| **Your data stays yours** | Your profile, projects and briefs are visible only to you and the one person who runs Tender Desk. Never to another customer. |
+| **One client per tender** | We advise only one company on any tender. If someone already has our advice on a tender, we tell you before you pay, and we never say who. |
+| **Checked track record** | A brief cites only past projects we have checked against public GeBIZ award records. |
+| **Numbers you can trace** | Every price figure comes from saved statistics over real past awards, and you can see the awards behind it. The AI cannot invent a number. |
+| **A person approves every brief** | AI drafts. A person approves or declines, and a decline always comes with a reason. |
+| **Everything is logged** | Every step is written to a log that cannot be edited or deleted. |
+
+**What we never claim:** past awards are not a quote, and not a winning price. GeBIZ publishes winning amounts only, not the bids that lost. We do not promise wins. We help you decide where your effort is worth it.
 
 ---
 
 ## 3. Get started {#get-started}
 
-Three steps, all inside QwenWork.
+1. **[Try a free price check](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant).** No account needed.
+2. **[Create an account](https://tender-desk-bz2oc52nag4.qoder.website/functions/v1/app/assistant/signup)** and add your past projects. For government work, include the GeBIZ tender number so we can check it.
+3. **Ask for a reviewed brief** on any open tender.
 
-**Step 1: Install the four Tender Desk skills.**
-Download each skill. Each is a .zip containing one `SKILL.md`. In QwenWork, open **Install Skill** and add them one at a time.
-
-- [tender-desk-intake.zip]({{INTAKE_SKILL_ZIP_URL}}): registers your company.
-- [tender-desk-scout.zip]({{SCOUT_SKILL_ZIP_URL}}): finds tenders that fit you.
-- [tender-desk-analyst.zip]({{ANALYST_SKILL_ZIP_URL}}): prices a tender and drafts your brief.
-- [tender-desk-proposal.zip]({{PROPOSAL_SKILL_ZIP_URL}}): turns an approved brief into a proposal outline.
-
-**Step 2: Add the intake connector.**
-Download [tender-desk-intake.json]({{INTAKE_CONNECTOR_JSON_URL}}), copy its contents, and paste them into **QwenWork → Connectors**. The intake connector can do only one thing: register a new company.
-
-**Step 3: Start a chat with "Register my company".**
-Intake asks for your company details and past projects. If a project was a government contract, give its GeBIZ tender number so the admin can check it. At the end, intake shows your **personal connector**. Paste it into QwenWork → Connectors the same way as step 2. It is shown only once, so paste it straight away. If you lose it, contact Tender Desk.
-
-Your personal connector works for your company only. The admin verifies your projects before they can be cited in a brief.
+Payments are in test mode while we launch: no card is charged.
 
 ---
 
@@ -98,9 +89,9 @@ Your personal connector works for your company only. The admin verifies your pro
 |---|---|---|
 | 0:00–0:06 | Between April 2021 and March 2026, Singapore's government awarded 195 events and community contracts with a published amount. | **195 events and community awards** · GeBIZ, Apr 2021 to Mar 2026 |
 | 0:06–0:14 | The median award was three hundred and eighty-six thousand five hundred dollars. And no supplier took more than about seven percent. | **Median S$386,500** · Top supplier: 14 of 195 |
-| 0:14–0:22 | Tender Desk is a one-person tender advisory for Singapore SMEs. You work with its agents in QwenWork chat. The admin decides. | **Agents prepare. The admin decides.** |
-| 0:22–0:38 | The rules are enforced in code, not prompts. Agents can't see other clients. Tender Desk advises only one client per tender. Only verified projects can be cited, checked against GeBIZ. Price bands come from saved statistics. | Client walls · Exclusive advice · Verified projects · Saved statistics |
-| 0:38–0:46 | Every brief is approved by a human. Every step is audit-logged. And the backtest is scored honestly. | Human approval · Append-only audit log · Honest backtest |
-| 0:46–0:55 | Install four skills, paste the intake connector, and say "Register my company". Get matched. | **Get matched** · Install skills → Add connector → "Register my company" |
+| 0:14–0:22 | Tender Desk is an AI tender assistant for Singapore SMEs. It tells you which tenders are worth your time, and what similar contracts were awarded for. | **Worth bidding? At what price?** |
+| 0:22–0:38 | The rules are kept by the system, not by the AI. Your data stays yours. One client per tender. Only checked projects are cited. Every number traces back to real awards. | Your data · One client per tender · Checked projects · Traceable numbers |
+| 0:38–0:46 | A person approves every brief. Every step is logged. | **AI drafts. A person approves.** |
+| 0:46–0:55 | Paste any tender, see what similar contracts were awarded for. Free. | **Try a free price check** |
 
 *Footer card (final frame): Data: Government Procurement via GeBIZ, Ministry of Finance, data.gov.sg, Singapore Open Data Licence. Past awards, not a quote or a promise of winning.*
