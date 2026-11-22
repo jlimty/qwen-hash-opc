@@ -37,7 +37,27 @@ test('initializer does not execute DDL when every migration is already applied',
     async query() { queries++; return { rows: [{ present: true }] }; },
     async exec() { assert.fail('Existing databases must not rerun a migration'); },
   });
-  assert.equal(queries, 4);
+  assert.equal(queries, 5);
+});
+
+test('005 adds credits, the operator role, review notes and brief parts', async () => {
+  const database = new PGlite();
+  try {
+    await initializeGovernance(database);
+    const tables = (await database.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='tender_desk'
+      AND table_name = ANY($1::text[]) ORDER BY table_name`, [['credit_ledger', 'credit_purchases', 'review_notes']])).rows.map((r) => r.table_name);
+    assert.deepEqual(tables, ['credit_ledger', 'credit_purchases', 'review_notes']);
+    const settings = Object.fromEntries((await database.query('SELECT key,value FROM tender_desk.settings')).rows.map((r) => [r.key, r.value]));
+    assert.equal(settings.credit_price_cents, '990');
+    assert.equal(settings.credits_per_brief, '1');
+    assert.equal(settings.welcome_credits, '1');
+    assert.equal(settings.credit_packs, '5:4950,20:17900,50:39900');
+    await database.query("INSERT INTO tender_desk.agent_credentials (token_hash,role) VALUES ($1,'operator')", ['a'.repeat(64)]);
+    await assert.rejects(database.query("INSERT INTO tender_desk.agent_credentials (token_hash,role) VALUES ($1,'admin')", ['b'.repeat(64)]));
+    const columns = (await database.query(`SELECT table_name,column_name FROM information_schema.columns WHERE table_schema='tender_desk'
+      AND ((table_name='briefs' AND column_name='parts') OR (table_name='brief_requests' AND column_name='requirements_text'))`)).rows;
+    assert.equal(columns.length, 2);
+  } finally { await database.close(); }
 });
 
 test('003 adds the assistant tables and keeps 001-002 data', async () => {
@@ -89,7 +109,7 @@ describe('PostgreSQL governance schema', () => {
   });
 
   test('initializes twice without rerunning DDL or losing data', async () => {
-    assert.equal(migrationExecutions, 4);
+    assert.equal(migrationExecutions, 5);
     await initializeGovernance({
       query: (...args) => database.query(...args),
       exec: () => assert.fail('Second initialization must not execute DDL'),
@@ -110,13 +130,16 @@ describe('PostgreSQL governance schema', () => {
       pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz',
       stats_snapshots: 'client_id:uuid tender_no:text stat_id:text snapshot:jsonb',
       shortlists: 'client_id:uuid tender_no:text fit_score:int4 reasons:_text',
-      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text',
+      briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text parts:jsonb',
       conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz reference_number:int8',
       audit_log: 'id:int8 ts:timestamptz actor:text action:text client_id:uuid tender_no:text outcome:text rule_id:text reason:text summary:jsonb',
       open_tenders: 'tender_no:text title:text agency:text published_on:date closes_at:timestamptz gebiz_url:text source_feed:text category:text terms:_text first_seen:timestamptz last_seen:timestamptz',
       feed_state: 'id:int4 refreshed_at:timestamptz succeeded_at:timestamptz',
       customers: 'user_id:text client_id:uuid created_at:timestamptz',
-      brief_requests: 'id:uuid reference_number:int8 client_id:uuid tender_no:text source:text title:text agency:text pasted_text:text terms:_text stat_id:text status:text brief_id:uuid last_error:text decline_reason:text created_at:timestamptz updated_at:timestamptz',
+      brief_requests: 'id:uuid reference_number:int8 client_id:uuid tender_no:text source:text title:text agency:text pasted_text:text terms:_text stat_id:text status:text brief_id:uuid last_error:text decline_reason:text created_at:timestamptz updated_at:timestamptz requirements_text:text',
+      credit_ledger: 'id:int8 client_id:uuid delta:int4 reason:text request_id:uuid purchase_id:uuid created_at:timestamptz',
+      credit_purchases: 'id:uuid client_id:uuid credits:int4 amount_cents:int8 currency:text status:text created_at:timestamptz',
+      review_notes: 'id:uuid subject:text subject_id:uuid author:text note:text suggested_action:text redraft_note:text created_at:timestamptz',
       payments: 'id:uuid request_id:uuid amount_cents:int8 currency:text status:text created_at:timestamptz',
     };
     const { rows } = await database.query(`
@@ -147,7 +170,7 @@ describe('PostgreSQL governance schema', () => {
       clients: 'id', projects: 'id', settings: 'key', agent_credentials: 'id', pricing_holds: 'tender_no',
       stats_snapshots: 'client_id,tender_no,stat_id', shortlists: 'client_id,tender_no',
       briefs: 'id', conflicts: 'id', audit_log: 'id',
-      open_tenders: 'tender_no', feed_state: 'id', customers: 'user_id', brief_requests: 'id', payments: 'id',
+      open_tenders: 'tender_no', feed_state: 'id', credit_ledger: 'id', credit_purchases: 'id', review_notes: 'id', customers: 'user_id', brief_requests: 'id', payments: 'id',
     });
   });
 

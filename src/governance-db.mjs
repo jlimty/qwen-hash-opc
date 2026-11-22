@@ -7,6 +7,7 @@ const migrations = [
     WHERE table_schema='tender_desk' AND table_name='clients' AND column_name='reference_number') AS present` },
   { file: '003-assistant.sql', present: "SELECT to_regclass('tender_desk.brief_requests') IS NOT NULL AS present" },
   { file: '004-settings.sql', present: "SELECT to_regclass('tender_desk.settings') IS NOT NULL AS present" },
+  { file: '005-credits-operator.sql', present: "SELECT to_regclass('tender_desk.credit_ledger') IS NOT NULL AS present" },
 ];
 
 const body = async (file) => (await readFile(new URL(`../db/${file}`, import.meta.url), 'utf8'))
