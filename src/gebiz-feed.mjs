@@ -13,6 +13,15 @@ export const feeds = Object.freeze([
   feed('Courses', 'Courses', 'training-consultancy'),
   feed('General Building & Minor Construction Works', 'General_Building_%26_Minor_Construction_Works', 'construction-renovation'),
   feed('Professional Services', 'Professional_Services', 'other'),
+  feed('Laundry Services', 'Laundry_Services', 'cleaning-facilities'),
+  feed('Servers', 'Servers', 'ict-services'),
+  feed('Softwares & Licences', 'Softwares_%26_Licences', 'ict-services'),
+  feed('Other IT & Telecommunication', 'OthersIT%26Telecommunication', 'ict-services'),
+  feed('Advertising Services', 'Advertising_Services', 'other'),
+  feed('Public Relations & Counselling', 'Public_Relations_%26_Counselling', 'other'),
+  feed('Printing Services', 'Printing_Services', 'other'),
+  feed('Survey Services', 'Survey_Services', 'other'),
+  feed('Others (Miscellaneous)', 'OthersMiscellaneous', 'other'),
 ]);
 
 const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };

@@ -218,6 +218,15 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         context: () => database.transaction((tx) => customerContext(tx, client_id)),
         canRequest: (tender_no, { now = new Date() } = {}) => database.transaction((tx) => requestable(tx, client_id, String(tender_no ?? ''), now)),
         requestBrief: operation('request_brief', requestSchema, (tx, input, now) => requestBrief(tx, client_id, input, now)),
+        updateProfile: operation('update_profile', clientProfileSchema.omit({ name: true }), async (tx, input) => {
+          await tx.query('UPDATE tender_desk.clients SET capabilities=$1, categories=$2, team_size=$3, max_contract_cents=$4 WHERE id=$5',
+            [input.capabilities, input.categories, input.team_size, input.max_contract_cents, client_id]);
+          for (const item of input.past_projects) {
+            await tx.query(`INSERT INTO tender_desk.projects (client_id,title,agency,value_cents,verified,gebiz_tender_no) VALUES ($1,$2,$3,$4,false,$5)`,
+              [client_id, item.title, item.agency ?? null, item.value_cents ?? null, item.gebiz_tender_no ?? null]);
+          }
+          return { outcome: 'allowed', client_id, reason: `Profile updated${input.past_projects.length ? `; ${input.past_projects.length} project(s) added, unverified` : ''}.` };
+        }),
         credits: () => database.transaction(async (tx) => {
           const settings = await creditSettings(tx);
           const history = (await tx.query(`SELECT l.delta,l.reason,l.created_at,r.reference_number,r.title FROM tender_desk.credit_ledger l

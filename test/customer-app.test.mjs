@@ -431,3 +431,58 @@ test('an approved brief with parts reads as a visual report: range callout, char
   assert.match(page, /<details[\s\S]*Show the \d+ comparable awards/);
   assert.doesNotMatch(page, /##/);
 });
+
+test('right after sign-up the header shows a signed-in state, not Sign in', async () => {
+  const b = browser('10.0.2.1');
+  await b.get('/signup');
+  await b.post('/signup', { email: `fresh-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
+  const profile = await b.get('/profile');
+  assert.doesNotMatch(profile.text, />Sign in</);
+  assert.match(profile.text, />Sign out</);
+});
+
+test('a customer can edit their profile and add projects; new projects start unverified', async () => {
+  const b = await signedUpCustomer('Rue');
+  const form = await b.get('/profile');
+  assert.match(form.text, /name="capabilities"[^>]*>[\s\S]*Audit and certification work/);
+  assert.match(form.text, /Private-sector projects count/);
+  const saved = await b.post('/profile', { name: (/name="name"[^>]*value="([^"]+)"/.exec(form.text) ?? [])[1], capabilities: 'Audit, certification and training.',
+    categories: 'other', team_size: '9', max_contract: '800000', project_title_0: 'Training for a hospital board', project_agency_0: 'Private hospital' });
+  assert.equal(saved.status, 303);
+  const home = await b.get('/home');
+  assert.match(home.text, /Profile saved/);
+  assert.match(home.text, /Training for a hospital board/);
+  const after = await b.get('/profile');
+  assert.match(after.text, /value="9"/);
+});
+
+test('a sample brief is public, labelled fictional, and linked from the landing page and checkout', async () => {
+  const b = browser('10.0.2.2');
+  const landing = await b.get('/');
+  assert.match(landing.text, /href="[^"]*\/sample"/);
+  assert.match(landing.text, /ITQ is an invitation to quote/);
+  const sample = await b.get('/sample');
+  assert.equal(sample.status, 200);
+  assert.match(sample.text, /Sample brief: a fictional example/);
+  assert.match(sample.text, /<svg class="chart"/);
+  assert.match(sample.text, /Suggested price range/);
+});
+
+test('home sorts tenders by closing date and flags those closing within three days', async () => {
+  const b = await signedUpCustomer('Sorrel');
+  const home = await b.get('/home');
+  const closing = [...home.text.matchAll(/closes (\d+ \w+ \d{4})/g)].map((m) => new Date(m[1]).getTime());
+  assert.ok(closing.length > 1);
+  assert.deepEqual(closing, [...closing].sort((x, y) => x - y), 'soonest closing first');
+  const { renderHome } = await import('../src/customer-view.mjs');
+  const html = renderHome({ csrf: 'c', refreshedAt: null, context: { client: { name: 'C' }, projects: [], requests: [] },
+    matches: [{ tender: { tender_no: 'T1', title: 'T', agency: 'A', closes_at: '2026-11-24T05:00:00Z' }, closesInDays: 2, check: { status: 'insufficient_comparables', snapshot: {} } }] });
+  assert.match(html, /class="chip warning">Closes in 2 days/);
+});
+
+test('price checks explain median and quartile in plain words', async () => {
+  const b = browser('10.0.2.3');
+  await b.get('/');
+  const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
+  assert.match(check.text, /half were above, half below/);
+});

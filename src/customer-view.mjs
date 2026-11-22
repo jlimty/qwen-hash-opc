@@ -81,8 +81,10 @@ const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 2
 const banner = (message, kind = 'bad') => (message ? `<p class="banner ${kind}" role="${kind === 'ok' ? 'status' : 'alert'}">${esc(message)}</p>` : '');
 const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value="${esc(value ?? '')}">`;
 
-export function layout({ title, csrf, company, body }) {
-  const nav = company
+export function layout({ title, csrf, company, body, signedIn }) {
+  const nav = signedIn && !company
+    ? `<form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
+    : company
     ? `<a href="/home">Home</a><a href="/">Open tenders</a><!--credits--><form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
     : '<a href="/">Open tenders</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
   return `<!doctype html>
@@ -103,7 +105,7 @@ function tenderList(tenders, csrf, { matches } = {}) {
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
     return `<li><div><strong>${esc(tender.title)}</strong>
-<span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}</span>
+<span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}${item.closesInDays !== undefined && item.closesInDays <= 3 ? ` <span class="chip warning">Closes in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}</span>` : ''}</span>
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
 ${!matches ? '' : item.taken ? '<span class="muted small">Not available for a reviewed brief right now.</span>' : item.ownRequest ? `<a class="btn outline" href="/requests/${esc(item.ownRequest)}">View your brief</a>`
@@ -120,17 +122,18 @@ const pasteForm = (csrf) => `<section class="panel"><header><h2>Paste a tender</
 
 export function renderLanding({ tenders, refreshedAt, csrf }) {
   return layout({ title: 'Open tenders', csrf, body: `<section class="hero"><h1>Is this tender worth bidding on, and at what price?</h1>
-<p>Pick an open GeBIZ tender, or paste one, and see what comparable government contracts were actually awarded for. Free, no account needed.</p></section>
+<p>Pick an open GeBIZ tender, or paste one, and see what comparable government contracts were actually awarded for. Free, no account needed.</p>
+<p class="small"><a href="/sample">See a sample reviewed brief</a> · An ITQ is an invitation to quote (smaller, quicker buys); an ITT is an invitation to tender (larger, formal ones).</p></section>
 <div class="grid"><section class="panel"><header><h2>Open GeBIZ tenders</h2><span class="muted small">Tenders last updated ${esc(when(refreshedAt))}</span></header>
 ${tenderList(tenders, csrf)}</section>${pasteForm(csrf)}</div>` });
 }
 
 export function renderCheck({ tender, reading, check, csrf, company, notice, refusal }) {
   const band = check.status === 'ready' ? check.snapshot.price_band : undefined;
-  const stats = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award</span></div>
-<div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
-<div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile</span></div>
-<div class="stat"><span class="big">${check.snapshot.n}</span><span class="label">Comparable awards</span></div></div>
+  const stats = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
+<div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
+<div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>
+<div class="stat"><span class="big">${check.snapshot.n}</span><span class="label">Comparable awards: past contracts for similar work</span></div></div>
 ${check.snapshot.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}`
     : `<p class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms.</p>`;
   const agencies = band && check.snapshot.top_agencies?.length ? `<p class="muted small inset">Buyers of this work: ${esc(check.snapshot.top_agencies.slice(0, 4).map((a) => a.name).join(', '))}.
@@ -181,22 +184,24 @@ export function renderSignin({ csrf, message }) {
 <p class="small">New here? <a href="/signup">Create an account</a></p></form></section>` });
 }
 
-export function renderProfile({ csrf, message, values = {} }) {
+export function renderProfile({ csrf, message, values = {}, existing, company }) {
   const v = (name) => esc(values[name] ?? '');
   const chosen = new Set(values.categories ?? []);
-  const projects = Array.from({ length: 6 }, (_, i) => `<div class="proj">
+  const rows = existing ? 3 : 6;
+  const projects = Array.from({ length: rows }, (_, i) => `<div class="proj">
 <input aria-label="Project ${i + 1} title" name="project_title_${i}" placeholder="Project title" maxlength="250" value="${v(`project_title_${i}`)}">
 <input aria-label="Project ${i + 1} agency" name="project_agency_${i}" placeholder="Agency or client" maxlength="250" value="${v(`project_agency_${i}`)}">
 <input aria-label="Project ${i + 1} value in S$" name="project_value_${i}" placeholder="Value S$" inputmode="decimal" value="${v(`project_value_${i}`)}">
 <input aria-label="Project ${i + 1} GeBIZ tender number" name="project_gebiz_${i}" placeholder="GeBIZ tender no." maxlength="100" value="${v(`project_gebiz_${i}`)}"></div>`).join('');
-  return layout({ title: 'Company profile', csrf, body: `<div><h1>Tell us about your company</h1><p class="sub">You do this once. We use it to match tenders and to write your briefs.</p></div>
+  const listed = existing?.length ? `<ul class="feed">${existing.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>${p.verified ? '<span class="chip done">Checked</span>' : '<span class="chip warning">Unverified</span>'}</div></li>`).join('')}</ul>` : '';
+  return layout({ title: 'Company profile', csrf, company, signedIn: true, body: `<div><h1>${existing ? 'Your company profile' : 'Tell us about your company'}</h1><p class="sub">${existing ? 'Changes apply to your next matches and briefs.' : 'You do this once. We use it to match tenders and to write your briefs.'}</p></div>
 <section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}
-<label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}">
+<label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}>
 <label for="capabilities">What your company does</label><textarea id="capabilities" name="capabilities" rows="3" maxlength="4000" required>${v('capabilities')}</textarea>
 <fieldset><legend>Categories you bid in</legend><div class="cats">${tenderCategories.map((c) => `<label><input type="checkbox" name="categories" value="${c}"${chosen.has(c) ? ' checked' : ''}>${esc(categoryNames[c])}</label>`).join('')}</div></fieldset>
-<label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}">
-<label for="max">Largest contract you could deliver (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}">
-<fieldset><legend>Past projects</legend><span class="hint">For government work, add the GeBIZ tender number so we can check it against public award records. Only checked projects can be cited in a brief.</span>${projects}</fieldset>
+<label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}"><span class="hint">People who would work on a contract, including subcontractors you use regularly.</span>
+<label for="max">Largest contract you could deliver (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">We compare this with past award sizes to flag tenders that may be too big.</span>
+<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count. For government work, add the GeBIZ tender number so we can check it against public award records; for private work we may ask for proof. Only checked projects can be cited in a brief.</span>${listed}${projects}</fieldset>
 <div><button class="primary" type="submit">Save profile</button></div></form></section>` });
 }
 
@@ -219,7 +224,7 @@ ${projects.some((p) => !p.verified) ? '<p class="note">Unverified: we check thes
 <p class="sub">Open tenders in your categories, with what similar contracts were awarded for.</p></div>
 <div class="grid"><section class="panel"><header><h2>Open tenders for you</h2><span class="muted small">Updated ${esc(when(refreshedAt))}</span></header>${tenderList(matches, csrf, { matches: true })}</section>
 <div class="stack-gap"><section class="panel"><header><h2>Your briefs</h2></header>${requestRows}</section>
-<section class="panel"><header><h2>Your projects</h2></header>${projectRows}</section>${pasteForm(csrf)}</div></div>` });
+<section class="panel"><header><h2>Your projects</h2><a class="small" href="/profile">Edit profile</a></header>${projectRows}</section>${pasteForm(csrf)}</div></div>` });
 }
 function greeting() {
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hour: '2-digit', hour12: false }).format(new Date()));
@@ -238,7 +243,8 @@ ${refusal ? banner(refusal) : `${banner(notice)}
 ${noChecked ? '<p class="banner">None of your projects has been checked yet, so this brief cannot cite your track record. You can go ahead now, or wait until we have checked your projects against GeBIZ.</p>' : ''}
 <section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range, who usually wins, a requirements check and questions to ask</dd></div>
 <div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
-<div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div></dl>
+<div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div>
+<div><dt>Example</dt><dd><a href="/sample">See a sample brief</a></dd></div></dl>
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
     : `<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
 <label for="requirements">Key requirements from the tender <span class="hint">(optional, up to 4000 characters: we check each one against your projects)</span></label>
@@ -321,4 +327,27 @@ ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recom
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>
 <p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · closes ${esc(day(request.closes_at))}` : ''}</p></div>
 ${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
+}
+
+// A fictional sample brief, so a customer sees what a credit buys before spending one. Every figure is invented and labelled so.
+const sampleAwards = [86000, 92500, 104000, 118000, 121500, 133000, 140000, 152000, 168000, 189000, 210000, 265000].map((dollars, i) => ({
+  tender_no: `SAMPLE${String(i + 1).padStart(3, '0')}`, cents: dollars * 100, description: ['Community festival production', 'National Day celebrations at a community club',
+    'School carnival and games', 'Heritage week events', 'Mid-Autumn lantern festival'][i % 5], agency: ['A town council', 'A community development council', 'A school', 'A heritage agency'][i % 4],
+  date: `${2021 + (i % 5)}-0${(i % 9) + 1}-15`, winner: ['Example Events Pte Ltd', 'Sample Productions', 'Demo Stage Co'][i % 3] }));
+export function renderSample({ csrf, company }) {
+  const request = { status: 'approved', reference: 'SAMPLE', title: 'Event management for a community festival (sample)', agency: 'A town council', source: 'pasted',
+    recommendation: 'bid', price_band: { low_cents: 11050000, median_cents: 13650000, high_cents: 17325000 }, n: sampleAwards.length, wide_band: false, query_used: 'event management',
+    parts: { recommendation: 'bid', n: sampleAwards.length, query_used: 'event management',
+      reasons: ['You have run community festivals for town councils before, which is exactly what this buyer is asking for.',
+        'The scope sits comfortably inside the size of contract your team delivers.', 'This buyer issues this kind of work every year, so a good result builds a track record for later tenders.'],
+      price_position: { band: 'lower_quartile_to_median', why: 'Your experience is strong but the scope is standard, so stay near the middle of past awards rather than at the top.' },
+      suggested_range: { from_cents: 11050000, to_cents: 13650000, text: 'S$110,500 to S$136,500' },
+      winners: [{ name: 'Example Events Pte Ltd', wins: 4 }, { name: 'Sample Productions', wins: 4 }, { name: 'Demo Stage Co', wins: 4 }],
+      requirements: [{ requirement: 'Has delivered a public event for a government agency', status: 'met', evidence: 'Community festival for a town council' },
+        { requirement: 'Holds public liability insurance', status: 'partly_met', evidence: 'Policy on file, but its cover may be below what the agency asks for' },
+        { requirement: 'Has a certified crowd-control officer', status: 'gap', evidence: 'Not shown in your profile' }],
+      questions: ['Can the event date move if the weather is bad?', 'Will the agency provide the venue permits, or is that the supplier\'s job?'],
+      risks: ['Crowd-control certification may need a subcontractor, which adds cost.'], cited: [{ title: 'Community festival for a town council', agency: 'A town council' }] } };
+  const page = renderRequest({ request, company, csrf, awards: sampleAwards });
+  return page.replace('<main class="wrap">', '<main class="wrap"><p class="banner">Sample brief: a fictional example. The company, the awards and the figures are invented to show what a reviewed brief contains.</p>');
 }

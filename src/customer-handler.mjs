@@ -3,7 +3,7 @@
 // page's CSRF token, matched against a cookie scoped to this app.
 import { randomBytes } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { assistantCss, creditWord, layout, renderCheck, renderCheckout, renderCredits, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
+import { assistantCss, creditWord, layout, renderCheck, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
 import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mjs';
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
@@ -163,6 +163,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       return html(200, renderCheck({ tender, reading, check, csrf, company, notice, refusal }));
     }
 
+    if (path === '/sample' && !post) return html(200, renderSample({ csrf, company }));
     if (path === '/signup' && !post) return customer ? redirect('/home') : html(200, renderSignup({ csrf }));
     if (path === '/signup' && post) {
       let result;
@@ -185,12 +186,21 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     // Everything below needs a signed-in account.
     if (!userId) return redirect(path === '/checkout' || path === '/checkout/start' ? '/signup' : '/signin');
     if (path === '/profile') {
-      if (customer) return redirect('/home');
-      if (!post) return html(200, renderProfile({ csrf }));
+      const context = customer ? await customer.context() : undefined;
+      const current = context ? { name: context.client.name, capabilities: context.client.capabilities, categories: context.client.categories,
+        team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : {};
+      if (!post) return html(200, renderProfile({ csrf, values: current, existing: context?.projects, company }));
       const values = Object.fromEntries([...form.keys()].filter((k) => k !== 'csrf' && k !== 'categories').map((k) => [k, form.get(k)]));
       values.categories = form.getAll('categories');
+      if (context) form.set('name', context.client.name);
       const parsed = profileFromForm(form);
-      if (parsed.error) return html(400, renderProfile({ csrf, message: parsed.error, values }));
+      if (parsed.error) return html(400, renderProfile({ csrf, message: parsed.error, values: { ...current, ...values }, existing: context?.projects, company }));
+      if (context) {
+        const { name, ...changes } = parsed.profile;
+        const updated = await customer.updateProfile(changes);
+        if (updated.outcome !== 'allowed') return html(400, renderProfile({ csrf, message: updated.reason, values, existing: context.projects, company }));
+        return redirect('/home', { cookies: [`td_cflash=saved; ${cookieFlags}; Max-Age=30`] });
+      }
       const created = await desk.registerCustomer(userId, parsed.profile);
       if (created.outcome !== 'allowed') return html(400, renderProfile({ csrf, message: created.reason, values }));
       return redirect('/home');
@@ -202,13 +212,15 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const context = await customer.context();
       const tenders = await listOpenTenders(database, { categories: context.client.categories, now: now(), limit: 15 });
       const verified = context.projects.filter((p) => p.verified);
+      const flash = cookieValue(cookieHeader, 'td_cflash') === 'saved' ? 'Profile saved.' : undefined;
+      tenders.sort((a, b) => (a.closes_at ? new Date(a.closes_at).getTime() : Infinity) - (b.closes_at ? new Date(b.closes_at).getTime() : Infinity));
       const owned = new Map(context.requests.filter((r) => ['requested', 'drafted', 'approved'].includes(r.status)).map((r) => [r.tender_no, r.reference]));
       const matches = tenders.map((tender) => {
         const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category });
-        return { tender, check, ownRequest: owned.get(tender.tender_no), fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
+        return { tender, check, ownRequest: owned.get(tender.tender_no), closesInDays: tender.closes_at ? Math.max(0, Math.ceil((new Date(tender.closes_at) - now()) / 86400000)) : undefined, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
       for (const match of matches) if (!match.ownRequest) match.taken = (await customer.canRequest(match.tender.tender_no, { now: now() })).reason === 'held';
-      return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf }));
+      return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf, flash }), { cookies: flash ? [`td_cflash=; Max-Age=0; ${cookieFlags}`] : [] });
     }
 
     if ((path === '/checkout' && !post) || path === '/checkout/start') {
