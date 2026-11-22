@@ -139,3 +139,11 @@ test('operator calls are recorded as the admin\'s QwenWork, never as the custome
   const actions = (await db.query('SELECT DISTINCT action FROM tender_desk.audit_log')).rows.map((r) => r.action);
   assert.deepEqual(actions.filter((action) => !actionLabels[action]), []);
 });
+
+test('the review pack lists the client\'s profile gaps, so a thin profile is caught before approval', async () => {
+  const brief = await pendingBrief();
+  const pack = await operator.invoke('get_review_pack', { brief_id: brief.brief_id });
+  assert.equal(pack.outcome, 'allowed');
+  assert.ok(Array.isArray(pack.profile_gaps));
+  assert.ok(pack.profile_gaps.some((g) => g.code === 'thin_description'), JSON.stringify(pack.profile_gaps));
+});

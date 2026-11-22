@@ -27,12 +27,13 @@ Find them in the tool catalog under their real exposed names, and never invent o
    - **Citations.** Every verified project mentioned in the text is cited. Nothing unverified or unrelated is cited.
    - **Price.** The suggested range matches the band position and its reason. Look at the comparables: if many are flagged `far_from_median`, or are clearly different work, say the band may be misleading.
    - **Requirements.** If the customer pasted requirements, each one is judged fairly from the client's projects.
+   - **Profile.** Read `profile_gaps`. If the profile is too thin for useful advice (no checked projects, no related work), say so in your note: the admin may ask the client to add projects rather than approve a generic brief.
    - **Tone.** Plain English, no win probabilities, no invented figures.
 4. Then do one of these:
    - **Good as it is:** `add_review_note` with a two-sentence reason and `suggested_action: approve`.
    - **Fixable:** call `propose_revision` with the improved reasons, band, why, questions and risks.
      - The server runs every check. If it refuses, read the reason, fix it and try once more.
-     - On success, the server leaves an approve note automatically.
+     - On success, the server leaves a note that the draft was revised. Re-read it, then add your own approve note if it is good.
    - **Not advisable:** `add_review_note` with `suggested_action: decline` and the reason the customer should read.
 5. For waiting requests (no draft yet), the admin drafts in the console. You may leave a note with what the draft should cover.
 6. For unverified projects the admin asks about, call `prepare_project_check` and report the result. The admin verifies.

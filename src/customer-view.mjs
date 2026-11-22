@@ -192,7 +192,7 @@ export function renderSignin({ csrf, message }) {
 <p class="small">New here? <a href="/signup">Create an account</a></p></form></section>` });
 }
 
-export function renderProfile({ csrf, message, values = {}, existing, company }) {
+export function renderProfile({ csrf, message, notice, values = {}, existing, company, pasted = '' }) {
   const v = (name) => esc(values[name] ?? '');
   const chosen = new Set(values.categories ?? []);
   const rows = existing ? 3 : 6;
@@ -203,7 +203,16 @@ export function renderProfile({ csrf, message, values = {}, existing, company })
 <input aria-label="Project ${i + 1} GeBIZ tender number" name="project_gebiz_${i}" placeholder="GeBIZ tender no." maxlength="100" value="${v(`project_gebiz_${i}`)}"></div>`).join('');
   const listed = existing?.length ? `<ul class="feed">${existing.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>${p.verified ? '<span class="chip done">Checked</span>' : '<span class="chip warning">Unverified</span>'}</div></li>`).join('')}</ul>` : '';
   return layout({ title: 'Company profile', csrf, company, signedIn: true, body: `<div><h1>${existing ? 'Your company profile' : 'Tell us about your company'}</h1><p class="sub">${existing ? 'Changes apply to your next matches and briefs.' : 'You do this once. We use it to match tenders and to write your briefs.'}</p></div>
-<section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}
+${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
+<p>We look up government contracts awarded to <strong>${esc(values.name ?? '')}</strong> and add them below for you to check. Projects with a GeBIZ tender number are checked fastest, and only checked projects can be cited in a brief.</p>
+<div><button type="submit">Find my GeBIZ awards</button></div></form></section>`
+    : `<section class="panel"><header><h2>Fill this in for me</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
+<label for="aname">Company name, as registered</label><input id="aname" name="name" maxlength="150" required value="${v('name')}">
+<label for="atext">Paste your capability statement, company profile or website "About" page <span class="hint">(optional)</span></label>
+<textarea id="atext" name="text" rows="5" maxlength="6000">${esc(pasted)}</textarea>
+<span class="hint">Our AI reads it into the form below, and we look up GeBIZ awards under your company name. Nothing is saved until you check it and press Save.</span>
+<div><button type="submit">Fill in the form</button></div></form></section>`}
+<section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}${notice ? banner(notice, 'ok') : ''}
 <label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}>
 <label for="uen">UEN</label><input id="uen" name="uen" maxlength="10" autocapitalize="characters" ${existing ? 'readonly' : 'required'} value="${v('uen')}"><span class="hint">${existing ? 'To correct your UEN, contact Tender Desk.' : 'Your company\'s Unique Entity Number, as registered with ACRA. One account per company.'}</span>
 <label for="capabilities">What your company does</label><textarea id="capabilities" name="capabilities" rows="3" maxlength="4000" required>${v('capabilities')}</textarea>
@@ -242,15 +251,17 @@ function greeting() {
 
 export const creditWord = (n) => `${n} credit${Number(n) === 1 ? '' : 's'}`;
 
-export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice, credits, requirements }) {
+export function renderCheckout({ tender, company, csrf, refusal, terms, category, gaps = [], outside, notice, credits, requirements }) {
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   const perBrief = credits?.perBrief ?? 1;
   const short = credits && credits.balance < perBrief;
   return layout({ title: 'Checkout', csrf, company, body: `<div><p class="eyebrow">Reviewed brief</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.pasted ? '' : ` · <span class="num">${esc(tender.tender_no)}</span>`}</p></div>
 ${refusal ? banner(refusal) : `${banner(notice)}
-${noChecked ? '<p class="banner">None of your projects has been checked yet, so this brief cannot cite your track record. You can go ahead now, or wait until we have checked your projects against GeBIZ.</p>' : ''}
-<section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range, who usually wins, a requirements check and questions to ask</dd></div>
+${gaps.length ? `<section class="panel"><header><h2>Before you spend a credit</h2><span class="muted small">A brief is only as good as your profile</span></header><div class="form">
+<ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
+<div><a class="btn outline" href="/profile">Improve your profile</a> <span class="muted small">or go ahead below.</span></div></div></section>` : ''}
+<section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range when there are enough comparable awards, who usually wins, a requirements check and questions to ask</dd></div>
 <div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
 <div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div>
 <div><dt>Example</dt><dd><a href="/sample">See a sample brief</a></dd></div></dl>

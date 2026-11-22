@@ -3,6 +3,7 @@
 import { renderBriefHtml } from './brief-render.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { referenceCode, referenceLabel } from './references.mjs';
+import { profileGaps } from './profile-help.mjs';
 import { actionLabels, ago, esc, form, icon, money, notesPanel, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
 
 // Audit rows written by the admin: 'admin' today, an older operator name on rows from before the rename. Agents,
@@ -128,6 +129,10 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
     ['Team size', esc(owner.team_size)],
     ['Largest contract', money(owner.max_contract_cents)],
     ['Verified projects', esc(verifiedCount)],
+    ['Profile gaps', (() => {
+      const gaps = profileGaps({ client: owner, projects: state.projects.filter((p) => p.client_id === brief.client_id), terms: snapshot?.filters?.query ? [snapshot.filters.query] : [] });
+      return gaps.length ? `<ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>` : '<span class="muted">None</span>';
+    })()],
   ])) : '';
   const requirementsPanel = brief.requirements_text ? panel('Requirements the client pasted', `<div class="prose"><p>${esc(brief.requirements_text).replace(/\n/g, '<br>')}</p></div>`) : '';
 

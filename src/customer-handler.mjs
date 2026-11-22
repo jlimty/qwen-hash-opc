@@ -9,6 +9,8 @@ import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.
 import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { uenPattern } from './governance-agent.mjs';
+import { plural } from './console-view.mjs';
+import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile } from './profile-help.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
 
 const maxBodyBytes = 256 * 1024;
@@ -191,6 +193,24 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
 
     // Everything below needs a signed-in account.
     if (!userId) return redirect(path === '/checkout' || path === '/checkout/start' ? '/signup' : '/signin');
+    // Profile help: look up the company's own GeBIZ awards and (for a new profile) read pasted text into a draft.
+    // It only fills the form; the customer checks and saves it.
+    if (path === '/profile/assist' && post) {
+      if (!allowCheck(`customer:${userId}`, customerChecksPerHour)) return html(429, layout({ title: 'Slow down', csrf, body: '<p class="banner bad" role="alert">You have used the assistant a lot this hour. Try again later.</p>' }));
+      const context = customer ? await customer.context() : undefined;
+      const name = context ? context.client.name : String(form.get('name') ?? '').trim().slice(0, 150);
+      const text = String(form.get('text') ?? '').slice(0, maxProfileText);
+      const awards = name ? ownAwards(dataset, name) : [];
+      const read = !context && text.trim() ? await readProfile({ name, text }, { llm, model: models.read }) : undefined;
+      const listed = (context?.projects ?? []).map((p) => p.gebiz_tender_no).filter(Boolean);
+      const filled = prefillValues({ reading: read?.ok ? read.profile : undefined, awards, slots: context ? 3 : 6, listed });
+      const found = awards.filter((a) => !listed.includes(a.gebiz_tender_no)).length;
+      const notes = [found ? `Found ${plural(found, 'GeBIZ award')} under "${name}".` : `No GeBIZ awards found under "${name}" (we match the exact registered name).`,
+        read && !read.ok ? read.reason : '', 'Check everything, then save.'].filter(Boolean).join(' ');
+      const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
+        team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : { name, uen: String(form.get('uen') ?? '').trim() };
+      return html(200, renderProfile({ csrf, notice: notes, values: { ...current, ...filled }, existing: context?.projects, company, pasted: text }));
+    }
     if (path === '/profile') {
       const context = customer ? await customer.context() : undefined;
       const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
@@ -248,9 +268,10 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const thin = priceCheck(dataset, { terms, category }).status !== 'ready';
       const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.'
         : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
-      const noChecked = !(await customer.context()).projects.some((project) => project.verified);
-      const outside = !(await customer.context()).client.categories.includes(category);
-      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, credits: await customer.credits(),
+      const profile = await customer.context();
+      const gaps = profileGaps({ client: profile.client, projects: profile.projects, terms });
+      const outside = !profile.client.categories.includes(category);
+      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, gaps, outside, credits: await customer.credits(),
         requirements: post ? String(form.get('requirements') ?? '').slice(0, 4000) : '' }));
     }
     if (path === '/checkout' && post) {

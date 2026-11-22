@@ -274,4 +274,5 @@ test('the briefs list and review page show the tender title, agency, closing dat
   assert.match(page.text, /Largest contract/);
   assert.match(page.text, /Must hold a crowd-control licence\./);
   assert.match(page.text, /<details class="decline"/);
+  assert.match(page.text, /<dt>Profile gaps<\/dt><dd>[\s\S]*what your company does/);
 });

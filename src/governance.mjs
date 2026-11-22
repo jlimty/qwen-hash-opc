@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential, submitBrief } from './governance-agent.mjs';
 import { fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
+import { profileGaps } from './profile-help.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
 import { referenceCode } from './references.mjs';
@@ -150,7 +151,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const projects = (await tx.query('SELECT id,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects WHERE client_id=$1 ORDER BY reference_number', [request.client_id])).rows;
           const notes = (await tx.query('SELECT author,note,suggested_action,created_at FROM tender_desk.review_notes WHERE subject_id=ANY($1::uuid[]) ORDER BY created_at',
             [[request.id, ...(brief ? [brief.id] : [])]])).rows;
-          return { outcome: 'allowed', tender: facts.tender, requirements_text: facts.requirements_text,
+          const profile_gaps = profileGaps({ client: facts.client, projects, terms: facts.query_used ? [facts.query_used] : [] });
+          return { outcome: 'allowed', tender: facts.tender, requirements_text: facts.requirements_text, profile_gaps,
             band: facts.snapshot?.price_band ?? null, n: facts.snapshot?.n ?? 0, search_terms: facts.query_used, comparables,
             client: { ...facts.client, verified_projects: facts.verifiedProjects, all_projects: projects },
             ...(brief && { brief: { brief_id: brief.id, status: brief.status, recommendation: brief.recommendation, content: brief.content, parts: brief.parts, risk_level: brief.risk_level, risk_facts: brief.risk_facts } }),

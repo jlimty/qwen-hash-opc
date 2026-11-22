@@ -31,6 +31,7 @@ function fetchFeeds(url) {
 const llm = async ({ name }) => {
   llmCalls++;
   if (name === 'tender_reading') return { terms: ['audit'], category: 'other', agency: null };
+  if (name === 'profile_reading') return { capabilities: 'Audits for public bodies and schools, run by chartered accountants.', categories: ['other'], team_size: 12, max_contract_sgd: null, past_projects: [{ title: 'Audit for a polytechnic', agency: null, value_sgd: null }] };
   throw new Error('not used here');
 };
 
@@ -553,4 +554,39 @@ test('an approved brief shows every step done, and the sample shows no payment s
   assert.match(html, /<li class="done"[^>]*>Brief ready/);
   const { renderSample } = await import('../src/customer-view.mjs');
   assert.doesNotMatch(renderSample({ csrf: 'c' }), /<ol class="steps">/);
+});
+
+test('a new customer can paste their company text: the profile form comes back filled in, with their own GeBIZ awards, and nothing is saved yet', async () => {
+  const b = browser('10.0.0.21');
+  await b.get('/signup');
+  await b.post('/signup', { email: `assist-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
+  const blank = await b.get('/profile');
+  assert.match(blank.text, /Fill this in for me/);
+  const filled = await b.post('/profile/assist', { name: 'Auditor 3 Pte Ltd', text: 'We audit public bodies and schools. Team of twelve accountants.' });
+  assert.equal(filled.status, 200);
+  assert.match(filled.text, /Check everything, then save/);
+  assert.match(filled.text, /value="Auditor 3 Pte Ltd"/);
+  assert.match(filled.text, />Audits for public bodies and schools, run by chartered accountants\.</);
+  assert.match(filled.text, /name="project_gebiz_0"[^>]*value="AUD-3"/);
+  assert.match(filled.text, /name="project_title_1"[^>]*value="Audit for a polytechnic"/);
+  const home = await b.get('/home');
+  assert.equal(home.location, `${base}/profile`, 'nothing was saved: there is still no company');
+});
+
+test('an existing customer can look up their GeBIZ awards into the add-project slots', async () => {
+  const b = await signedUpCustomer('Lookup');
+  await db.query("UPDATE tender_desk.clients SET name='Auditor 5' WHERE id=(SELECT client_id FROM tender_desk.customers ORDER BY created_at DESC LIMIT 1)");
+  const page = await b.get('/profile');
+  assert.match(page.text, /Find my GeBIZ awards/);
+  const found = await b.post('/profile/assist', {});
+  assert.match(found.text, /name="project_gebiz_0"[^>]*value="AUD-5"/);
+  assert.match(found.text, /Found 1 GeBIZ award/);
+});
+
+test('checkout lists what would make the brief weak before a credit is spent', async () => {
+  const b = await signedUpCustomer('Gappy');
+  const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
+  assert.match(start.text, /Before you spend a credit/);
+  assert.match(start.text, /None of your projects has been checked yet/);
+  assert.match(start.text, /href="[^"]*\/profile"[^>]*>Improve your profile/);
 });
