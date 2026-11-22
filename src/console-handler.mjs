@@ -1,6 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { auditFilters, briefQuery, renderAudit, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
+import { draftBrief } from './brief-drafting.mjs';
+import { auditFilters, briefQuery, renderAudit, renderRequests, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
 import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail, renderTender } from './console-records.mjs';
 import { parseReference } from './references.mjs';
 
@@ -27,7 +28,7 @@ const actions = {
   'credential/revoke': (ops, id) => ops.revokeAgentCredential({ credential_id: id }),
 };
 // Where an action may send the admin back to: a record page or a list, never anywhere else.
-const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts)$/;
+const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts|requests)$/;
 const routeKinds = { briefs: 'brief', conflicts: 'conflict', clients: 'client', projects: 'project', audit: 'audit' };
 const stateKey = { brief: 'briefs', conflict: 'conflicts', client: 'clients', project: 'projects' };
 const detailRenderers = { brief: renderBriefDetail, conflict: renderConflictDetail, client: renderClientDetail, project: renderProjectDetail, audit: renderAuditDetail };
@@ -57,7 +58,7 @@ export function createSecretAuth(adminToken) {
   };
 }
 
-export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false }) {
+export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false, llm, models = {}, now = () => new Date() }) {
   if (typeof admin !== 'function') throw new Error('A admin function is required.');
   const ops = admin(adminToken);
   const provider = auth ?? createSecretAuth(adminToken);
@@ -191,6 +192,10 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
         const back = briefBackPattern.test(url.searchParams.get('back') ?? '') ? url.searchParams.get('back') : undefined;
         return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row, back }));
       }
+      if (path === '/requests') {
+        const rows = await ops.listBriefRequests({ now: now() });
+        return render((context) => renderRequests({ ...context, rows, aiReady: typeof llm === 'function' }));
+      }
       if (path === '/conflicts') return render((context) => renderConflicts(context));
       if (path === '/clients') return render((context) => renderClients(context));
       if (path === '/backtest/reveal-all') return render((context) => renderRevealConfirm(context));
@@ -224,6 +229,32 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
       const flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` }
         : { ok: true, text: result.scope === 'all' ? `Revealed ${result.revealed_count} outcomes.` : 'Outcome revealed.' };
       return redirect('/backtest', { cookies: [flashCookie(flash)] });
+    }
+    const requestAction = /^\/actions\/request\/([^/]+)\/(draft|decline)$/.exec(path);
+    if (requestAction) {
+      const [, id, verb] = requestAction;
+      if (!idPattern.test(id)) return text(404, 'Not found');
+      let flash;
+      try {
+        if (verb === 'decline') {
+          const result = await ops.declineRequest({ request_id: id, reason: String(form.get('reason') ?? '').slice(0, 500) });
+          flash = result.outcome === 'blocked' ? { ok: false, text: result.reason } : { ok: true, text: 'Request declined. The customer can see your reason, and the tender is free again.' };
+        } else if (typeof llm !== 'function') {
+          flash = { ok: false, text: 'AI drafting is not configured (TD_OPENROUTER_KEY).' };
+        } else {
+          const facts = await ops.prepareDraft(id);
+          if (!facts) flash = { ok: false, text: 'That request was not found.' };
+          else {
+            const drafted = await draftBrief(facts, { llm, model: models.draft });
+            const result = drafted.ok ? await ops.saveDraft({ request_id: id, ...drafted.draft }) : await ops.recordDraftFailure({ request_id: id, reason: drafted.reason });
+            flash = drafted.ok && result.outcome === 'allowed' ? { ok: true, text: `Draft saved: review ${result.brief_reference}.` }
+              : { ok: false, text: `Draft failed: ${drafted.ok ? result.reason : drafted.reason}` };
+          }
+        }
+      } catch {
+        flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };
+      }
+      return redirect('/requests', { cookies: [flashCookie(flash)] });
     }
     const match = /^\/actions\/(brief|conflict|project|credential)\/([^/]+)\/([a-z-]+)$/.exec(path);
     const actionKey = match && `${match[1]}/${match[3]}`;

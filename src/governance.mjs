@@ -367,6 +367,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             holds: (await tx.query('SELECT * FROM tender_desk.pricing_holds ORDER BY tender_no')).rows,
             briefs: (await tx.query('SELECT * FROM tender_desk.briefs ORDER BY created_at,id')).rows,
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
+            requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,
             audit: (await tx.query('SELECT * FROM tender_desk.audit_log ORDER BY id DESC LIMIT 200')).rows,
             credentials: (await tx.query('SELECT id,role,client_id,created_at FROM tender_desk.agent_credentials ORDER BY created_at,id')).rows,

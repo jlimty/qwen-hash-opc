@@ -30,6 +30,7 @@ const icons = {
   clients: '<circle cx="9" cy="8" r="3.5"/><path d="M2.7 20a6.3 6.3 0 0 1 12.6 0"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M17.8 14.6a6.3 6.3 0 0 1 3.5 5.4"/>',
   backtest: '<path d="M3.5 21h17"/><path d="M7.5 17v-4"/><path d="M12 17V9"/><path d="M16.5 17V5"/>',
   audit: '<path d="M8.5 6h12"/><path d="M8.5 12h12"/><path d="M8.5 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>',
+  requests: '<path d="M4 6.5h16v11H4z"/><path d="M4 10h16"/><path d="M7.5 14h4"/>',
   check: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.4 2.4 4.6-5"/>',
   cross: '<circle cx="12" cy="12" r="8.5"/><path d="m9.2 9.2 5.6 5.6"/><path d="m14.8 9.2-5.6 5.6"/>',
   alert: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 10v4"/><path d="M12 17.2h.01"/>',
@@ -103,10 +104,11 @@ ${banner(message)}
 <button class="primary" type="submit">Change password</button></form>`);
 }
 
-const groupOf = { briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
+const groupOf = { requests: 'Decisions', briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
 
 export function renderShell({ state, csrf, active, title, sub, crumbs = '', actions = '', flash, body }) {
   const pending = state.briefs.filter((b) => b.status === 'pending_approval').length;
+  const waiting = (state.requests ?? []).filter((r) => r.status === 'requested').length;
   const openConflicts = state.conflicts.filter((c) => c.status === 'open').length;
   const unverified = state.projects.filter((p) => !p.verified).length;
   const badge = (n) => n ? `<span class="count">${n}</span>` : '';
@@ -119,7 +121,7 @@ export function renderShell({ state, csrf, active, title, sub, crumbs = '', acti
 <a class="brand" href="/">${mark}<span>Tender Desk</span></a>
 <div class="nav">
 ${navItem('overview', 'Overview')}
-${group('Decisions', [navItem('briefs', 'Briefs', pending), navItem('conflicts', 'Conflicts', openConflicts)])}
+${group('Decisions', [navItem('requests', 'Brief requests', waiting), navItem('briefs', 'Briefs', pending), navItem('conflicts', 'Conflicts', openConflicts)])}
 ${group('Clients', [navItem('clients', 'Clients'), navItem('projects', 'Projects', unverified)])}
 ${group('Records', [navItem('backtest', 'Backtest'), navItem('audit', 'Audit log')])}
 </div>
@@ -369,4 +371,33 @@ export function renderRevealConfirm({ state, csrf, flash }) {
 <a class="btn outline" href="/backtest">Cancel</a>
 <form method="post" action="/actions/backtest/all/reveal"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="confirm" value="yes"><button class="primary" type="submit">Yes, reveal all ${remaining}</button></form>
 </div></div></section>` : '<section class="panel"><div class="empty"><strong>Everything is already revealed.</strong><a href="/backtest">Back to the backtest</a></div></section>' });
+}
+
+const requestStatus = { requested: ['Waiting for a draft', 'progress'], drafted: ['Draft in review', 'progress'], approved: ['Approved', 'done'],
+  declined: ['Declined', 'danger'], cancelled: ['Cancelled', ''] };
+
+// Paid brief requests from customers: draft (or redraft) with AI, or decline with a reason the customer reads.
+export function renderRequests({ state, csrf, flash, rows, aiReady }) {
+  const briefs = new Map(state.briefs.map((b) => [b.id, b]));
+  const items = rows.map((r) => {
+    const [label, chip] = requestStatus[r.status] ?? [r.status, ''];
+    const brief = r.brief_id ? briefs.get(r.brief_id) : undefined;
+    const waiting = r.status === 'requested';
+    const draftAction = !waiting ? '' : aiReady
+      ? form(csrf, `/actions/request/${r.id}/draft`, r.last_error ? 'Redraft' : 'Draft', 'primary', '/requests')
+      : '<span class="muted small">AI drafting is not configured (TD_OPENROUTER_KEY).</span>';
+    const decline = waiting ? `<form class="decline" method="post" action="/actions/request/${esc(r.id)}/decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<label for="reason-${esc(r.id)}">Reason the customer will read</label><textarea id="reason-${esc(r.id)}" name="reason" rows="2" maxlength="500"></textarea>
+<div><button type="submit">Decline</button></div></form>` : '';
+    return `<li><div><span class="num">${esc(r.reference)}</span><br>${r.closed ? '<span class="chip danger">Closed</span>' : ''}</div>
+<div><strong>${esc(r.title)}</strong><span class="muted">${esc(r.client_name)} · ${esc(r.agency ?? '')} · <span class="num">${esc(r.tender_no)}</span></span>
+<span class="muted">${r.payment_status === 'test' ? 'Test payment' : esc(r.payment_status ?? 'No payment')} · ${money(r.amount_cents ?? 0)} · requested ${esc(ago(r.created_at))}</span>
+${r.last_error ? `<span class="muted">Last draft failed: ${esc(r.last_error)}</span>` : ''}
+${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
+<div class="row-actions"><span class="chip ${chip}">${esc(label)}</span>${draftAction}</div></li>`;
+  });
+  const body = `<section class="panel"><header><h2>Requests</h2><span class="muted small">${plural(rows.filter((r) => r.status === 'requested').length, 'waiting request')}</span></header>
+${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty"><strong>No brief requests yet.</strong>Paid requests from customers appear here.</p>'}</section>`;
+  return renderShell({ state, csrf, active: 'requests', title: 'Brief requests', flash,
+    sub: 'Customers paid (in test mode) for a reviewed brief. Draft it with AI, then approve or decline the brief. A request you decline frees the tender.', body });
 }
