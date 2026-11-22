@@ -144,8 +144,7 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
 <p class="note">Prose is not semantically checked; you are the check.</p></section>
 ${requirementsPanel}
 ${notesPanel((state.notes ?? []).filter((n) => n.subject_id === brief.id || n.subject_id === state.requests?.find((r) => r.brief_id === brief.id)?.id))}
-${editor}
-${comparablesPanel(snapshot, dataset, brief.price_band)}</div>
+${editor}</div>
 <aside class="stack-gap">
 ${clientPanel}
 ${panel('Details', props([
@@ -153,13 +152,13 @@ ${panel('Details', props([
     ['Tender', tenderLink(brief.tender_no)],
     ['Agency', esc(brief.tender_agency ?? tender?.agency ?? 'Not given')],
     ['Recommendation', brief.recommendation === 'bid' ? chip('Bid', 'progress') : chip('No-bid')],
-    ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>${snapshot?.thin || (n && n < 10) ? '<span class="sub-line"><span class="chip warning">Thin evidence: the customer sees no quartiles</span></span>' : ''}`],
+    ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>${snapshot?.thin || (n && n < 10) ? '<span class="sub-line"><span class="chip warning wrap">Thin evidence: the customer sees no quartiles</span></span>' : ''}`],
     ['Conflicts', conflicts.length ? conflicts.map((c) => recordLink('conflict', c, c.tender_no)).join('<br>') : '<span class="muted">None</span>'],
     ['Submitted', stamp(brief.created_at)],
     ...(brief.decided_at ? [['Decided', stamp(brief.decided_at)]] : []),
   ]))}
 ${panel('Before you decide', `<ul class="checks">${checks.join('')}</ul><p class="note">Blocked approvals keep the brief pending and explain the rule.</p>`)}
-</aside></div>${actions}` });
+</aside></div><div class="full-row">${comparablesPanel(snapshot, dataset, brief.price_band)}</div>${actions}` });
 }
 
 export function renderProjectDetail({ state, dataset, csrf, flash, project }) {

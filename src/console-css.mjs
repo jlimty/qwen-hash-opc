@@ -49,6 +49,9 @@ h1{font-size:1.5rem;line-height:1.25;font-weight:650;letter-spacing:-.015em}
 .panel h2{font-size:.9375rem;font-weight:650}
 .panel-foot{display:flex;justify-content:space-between;align-items:center;gap:1rem;padding:.7rem 1rem;border-top:1px solid var(--line);font-size:.875rem}
 .stack-gap{display:grid;gap:1.25rem}
+.full-row{margin-top:1.25rem;min-width:0}
+.chip.wrap{white-space:normal;height:auto;line-height:1.3;padding-top:.15rem;padding-bottom:.15rem}
+.full-row:empty{display:none}
 
 .queue li{display:grid;grid-template-columns:5.5rem minmax(0,1fr) auto;gap:1rem;align-items:center;padding:.9rem 1rem;border-bottom:1px solid var(--line)}
 .queue li:last-child{border-bottom:0}

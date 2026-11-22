@@ -158,6 +158,8 @@ test('the brief review page shows the live agency and the comparable awards behi
   assert.match(page.text, /OLD-6/);
   // The description column keeps a readable width; nothing wide sits in a no-wrap cell beside it.
   assert.match(page.text, /<td class="desc">/);
+  // The table runs full width below both columns, not squeezed into the left one.
+  assert.match(page.text, /<\/aside><\/div><div class="full-row">[\s\S]*Comparable awards/);
   // Three columns so the table fits beside the client panel: the award date sits under the tender number.
   assert.match(page.text, /<td class="num nowrap">OLD-\d+<span class="sub-line muted">\d{4}-\d{2}-\d{2}<\/span><\/td>/);
   assert.match(page.text, /<th>Tender<\/th><th>Description<\/th><th class="r">Awarded<\/th><\/tr>/);
@@ -166,7 +168,9 @@ test('the brief review page shows the live agency and the comparable awards behi
   assert.match(css, /\.comparables td\.desc\{min-width:/);
   assert.match(css, /\.decision:has\(details\[open\]\) \.decisions\{flex-basis:100%/);
   assert.match(page.text, /Lower quartile/);
-  assert.match(page.text, /Thin evidence: the customer sees no quartiles/);
+  // The long chip wraps inside the narrow Details panel instead of pushing the page sideways.
+  assert.match(page.text, /<span class="chip warning wrap">Thin evidence: the customer sees no quartiles/);
+  assert.match((await c.get('/console.css')).text, /\.chip\.wrap\{white-space:normal/);
   assert.doesNotMatch(page.text, /##/);
 });
 
