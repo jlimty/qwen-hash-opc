@@ -99,8 +99,8 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
 <form method="post" action="/actions/brief/${brief.id}/edit" class="form-grid"><input type="hidden" name="csrf" value="${esc(csrf)}">
 <label>Recommendation <select name="recommendation"><option value="bid"${brief.recommendation === 'bid' ? ' selected' : ''}>Bid</option><option value="no-bid"${brief.recommendation === 'no-bid' ? ' selected' : ''}>Do not bid</option></select></label>
 <label>Reasons, one per line <textarea name="reasons" rows="4">${lines(parts.reasons)}</textarea></label>
-<label>Where to price <select name="band">${bands.map(([v, l]) => `<option value="${v}"${parts.price_position?.band === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
-<label>Why price there <textarea name="why" rows="2">${esc(parts.price_position?.why ?? '')}</textarea></label>
+${brief.recommendation === 'no-bid' ? '<details class="price-fields"><summary>Price position (only used for a Bid)</summary>' : ''}<label>Where to price <select name="band">${bands.map(([v, l]) => `<option value="${v}"${parts.price_position?.band === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+<label>Why price there <textarea name="why" rows="2">${esc(parts.price_position?.why ?? '')}</textarea></label>${brief.recommendation === 'no-bid' ? '</details>' : ''}
 <label>Questions to ask the agency, one per line <textarea name="questions" rows="3">${lines(parts.questions)}</textarea></label>
 <label>Risks, one per line <textarea name="risks" rows="2">${lines(parts.risks)}</textarea></label>
 <div><button type="submit">Save edits</button></div></form>
@@ -118,7 +118,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
   const daysLeft = closes ? Math.ceil((closes.getTime() - Date.now()) / 86400000) : null;
   const dayText = (date) => date.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' });
   const sub = [esc(brief.tender_agency ?? tender?.agency ?? 'Agency not given'), `<span class="num">${esc(brief.tender_no)}</span>`,
-    closes ? `Closes ${dayText(closes)}${daysLeft !== null && daysLeft >= 0 ? ` (${daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`})` : ' (closed)'}` : 'No closing date'].join(' · ');
+    closes ? `<span class="nowrap">Closes ${dayText(closes)}${daysLeft !== null && daysLeft >= 0 ? ` (${daysLeft === 0 ? 'today' : `in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`})` : ' (closed)'}</span>` : 'No closing date'].join(' · ');
   const clientPanel = owner ? panel('Client', props([
     ['Company', clientLink(brief.client_id)],
     ['UEN', owner.uen ? `<span class="num">${esc(owner.uen)}</span>` : '<span class="muted">Not given</span>'],
@@ -127,7 +127,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
     ['Largest contract', money(owner.max_contract_cents)],
     ['Verified projects', esc(verifiedCount)],
     ['Profile gaps', (() => {
-      const gaps = profileGaps({ client: owner, projects: state.projects.filter((p) => p.client_id === brief.client_id), terms: snapshot?.filters?.query ? [snapshot.filters.query] : [] });
+      const gaps = profileGaps({ client: owner, projects: state.projects.filter((p) => p.client_id === brief.client_id), terms: snapshot?.filters?.query ? [snapshot.filters.query] : [], audience: 'admin' });
       return gaps.length ? `<ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>` : '<span class="muted">None</span>';
     })()],
   ])) : '';

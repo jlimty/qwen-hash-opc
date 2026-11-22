@@ -80,8 +80,8 @@ test('hides actual winners and amounts from the console read model until the adm
   assert.match(page.text, /Backtest: <span class="num">0 of 2<\/span> outcomes revealed/);
   const backtestPage = await http({ path: '/backtest', headers: { Cookie: cookie } });
   assert.match(backtestPage.text, /Reveal all 2 remaining outcomes/);
-  assert.doesNotMatch(backtestPage.text, /Zebra Secret|98,765\.43|300,000\.00/);
-  assert.doesNotMatch(page.text, /Zebra Secret|98,765\.43|300,000\.00/);
+  assert.doesNotMatch(backtestPage.text, /Zebra Secret|98,765\.43|S\$300,000(?![\d.])/);
+  assert.doesNotMatch(page.text, /Zebra Secret|98,765\.43|S\$300,000(?![\d.])/);
 });
 
 test('revealing one tender shows the real award, scores it, and is recorded in the append-only audit log', async () => {
@@ -147,7 +147,7 @@ test('the console reveal button works over HTTP, then a reveal-all completes the
   assert.match(page.text, /Revealed 1 outcomes/);
   assert.match(page.text, /Zebra Secret Pte/);
   assert.match(page.text, /S\$98,765\.43/);
-  assert.match(page.text, /S\$300,000\.00/);
+  assert.match(page.text, /S\$300,000(?![\d.])/);
   assert.match(page.text, /50%/);
   assert.match(page.text, /by design/);
   assert.doesNotMatch(page.text, /Reveal all/);

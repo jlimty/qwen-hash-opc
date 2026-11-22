@@ -213,7 +213,7 @@ test("the brief page shows the AI reviewer's notes as suggestions", async () => 
   const page = await c.get(`/briefs/BRF${String(brief.reference_number).padStart(5, '0')}`);
   assert.match(page.text, /AI reviewer's notes \(suggestions; you decide\)/);
   assert.match(page.text, /Checked against the comparables; approve\./);
-  assert.match(page.text, /Suggests: approve/);
+  assert.match(page.text, /Suggests: Approve/);
 });
 
 test('batch approve covers only low or medium risk briefs the AI reviewer suggested approving', async () => {
@@ -275,7 +275,7 @@ test('the briefs list and review page show the tender title, agency, closing dat
   assert.match(page.text, /Largest contract/);
   assert.match(page.text, /Must hold a crowd-control licence\./);
   assert.match(page.text, /<details class="decline"/);
-  assert.match(page.text, /<dt>Profile gaps<\/dt><dd>[\s\S]*what your company does/);
+  assert.match(page.text, /<dt>Profile gaps<\/dt><dd>[\s\S]*Says little about what the company does/);
 });
 
 test('the admin can ask the client for more from the queue or the brief page; the queue shows who is waiting on whom', async () => {
@@ -321,4 +321,20 @@ test('the project check reminds the admin that a GeBIZ name match proves the awa
   await c.login();
   const page = await c.get(`/projects/PRJ${String(project.reference_number).padStart(5, '0')}`);
   assert.match(page.text, /Confirm on bizfile that .+ has UEN [0-9A-Z]{9,10}/);
+});
+
+test('console polish: readable suggestions, profile gaps in the admin\'s voice, no trailing cents, no-bid price fields folded away', async () => {
+  const request = await paidRequest();
+  modelReply = { ...clean(request.project_id), recommendation: 'no-bid' };
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const brief = (await db.query('SELECT b.id, b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0];
+  await db.query("INSERT INTO tender_desk.review_notes (subject,subject_id,author,note,suggested_action) VALUES ('brief',$1,'operator','Ask about equipment.','ask_for_more')", [brief.id]);
+  const page = await c.get(`/briefs/BRF${String(brief.reference_number).padStart(5, '0')}`);
+  assert.match(page.text, /Suggests: Ask for more/);
+  assert.doesNotMatch(page.text, /ask_for_more|ask for_more/);
+  assert.match(page.text, /<dt>Profile gaps<\/dt><dd>[\s\S]*?Says little about what the company does/);
+  assert.doesNotMatch(page.text, /S\$[\d,]+\.00\b/);
+  assert.match(page.text, /<details class="price-fields"><summary>Price position \(only used for a Bid\)/);
 });

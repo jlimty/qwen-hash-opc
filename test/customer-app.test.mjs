@@ -688,3 +688,11 @@ test('checkout shows when the tender closes', async () => {
   const page = await b.get(`/checkout?tender=${tender.tender_no}`);
   assert.match(page.text, /<dt>Closes<\/dt><dd>\d{1,2} [A-Z][a-z]{2} 20\d\d/);
 });
+
+test('a declined request does not invite asking again for the same tender', async () => {
+  const { b, ref, request } = await requestAs('NoRetry');
+  await desk.admin(adminToken).declineRequest({ request_id: request.id, reason: 'Different trade.' });
+  const page = await b.get(`/requests/${ref}`);
+  assert.doesNotMatch(page.text, /Ask for a brief again/);
+  assert.equal((page.text.match(/credit has been returned|credit is back/g) ?? []).length, 1);
+});

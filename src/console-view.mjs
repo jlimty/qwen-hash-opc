@@ -8,9 +8,10 @@ const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', 
 import { referenceCode } from './references.mjs';
 import { isAdminActor, recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
 
+// Whole dollars unless there are cents to show, the same rule as everywhere else.
 export function money(cents) {
   const total = Number(cents);
-  return `S$${Math.floor(total / 100).toLocaleString('en-US')}.${String(total % 100).padStart(2, '0')}`;
+  return `S$${(total / 100).toLocaleString('en-US', { minimumFractionDigits: total % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 export function ago(ts) {
@@ -382,7 +383,7 @@ ${select('outcome', 'Outcome', opt(auditFilters.outcome, filters.outcome, 'Any o
 <thead><tr><th>Ref</th><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
 <tbody>${rows.length ? rows.map((row) => {
       const who = actorName(row, (id) => esc(clients.get(id) ?? 'Client'));
-      return `<tr><td class="num nowrap">${recordLink('audit', row)}</td><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
+      return `<tr><td class="num nowrap">${recordLink('audit', row)}</td><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num nowrap">${esc(row.tender_no ?? '')}</td></tr>`;
     }).join('') : '<tr><td colspan="6"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
 </table></div><div class="panel-foot"><span class="muted">Showing the latest ${plural(rows.length, 'entry')}.</span></div></section>` });
 }
@@ -450,10 +451,11 @@ ${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty">
 }
 
 // Notes the admin's AI reviewer left: shown as suggestions, never as decisions.
+const suggestionLabels = { approve: 'Approve', redraft: 'Redraft', ask_for_more: 'Ask for more', decline: 'Decline', verify: 'Verify', do_not_verify: "Don't verify" };
 export function notesPanel(notes) {
   if (!notes?.length) return '';
   return `<section class="panel"><header><h2>AI reviewer's notes (suggestions; you decide)</h2></header><ul class="feed">${notes.map((n) => `<li><div class="line"><span>${esc(n.note)}</span>
-${n.suggested_action ? `<span class="chip ${n.suggested_action === 'approve' || n.suggested_action === 'verify' ? 'done' : 'warning'}">Suggests: ${esc(n.suggested_action.replace('_', ' '))}</span>` : ''}</div>
+${n.suggested_action ? `<span class="chip ${n.suggested_action === 'approve' || n.suggested_action === 'verify' ? 'done' : 'warning'}">Suggests: ${esc(suggestionLabels[n.suggested_action] ?? n.suggested_action)}</span>` : ''}</div>
 <span class="meta">${esc(ago(n.created_at))}${n.redraft_note ? ` · redraft note: ${esc(n.redraft_note)}` : ''}</span></li>`).join('')}</ul></section>`;
 }
 

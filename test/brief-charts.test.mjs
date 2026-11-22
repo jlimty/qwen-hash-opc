@@ -69,3 +69,9 @@ test('on thin evidence the price chart shows the awards only: no shaded quartile
   assert.doesNotMatch(svg, /class="band"|class="median"|Middle half|Median/);
   assert.match(svg, />Each dot is one past award</);
 });
+
+test('the years chart keeps years with no awards, so gaps are visible', () => {
+  const svg = yearsChart([{ year: '2021' }, { year: '2023' }]);
+  assert.deepEqual([...svg.matchAll(/>(20\d\d)</g)].map((m) => m[1]), ['2021', '2022', '2023']);
+  assert.match(svg, /<title>2022 · 0 awards<\/title>/);
+});

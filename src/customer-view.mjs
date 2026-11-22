@@ -59,6 +59,7 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .steps li{flex:1;min-width:8rem;padding:.55rem .8rem;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-weight:600;font-size:.875rem}
 .steps li.done{border-color:#A9D3BA;background:var(--ok-bg);color:var(--ok)}
 .steps li.current{border-color:var(--accent);background:var(--tint);color:var(--accent-dark)}
+.steps li.current.waiting{border-color:#E8C27A;background:var(--warn-bg);color:var(--warn)}
 .inset-banner{margin:.75rem 1rem 0}
 .tick{display:flex;gap:.5rem;align-items:flex-start;font-weight:500}
 .inset{padding:.75rem 1rem 0}
@@ -163,7 +164,7 @@ ${check.snapshot.top_suppliers?.length ? ` The most frequent winner took ${esc(p
         : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · 1 credit</button></form>`)
       : '<a class="btn primary" href="/signup">Create an account: your first reviewed brief is free</a>';
   return layout({ title: 'Price check', csrf, company, body: `<div><p class="eyebrow">Free price check</p><h1>${esc(tender.title)}</h1>
-<p class="sub">${esc(tender.agency ?? '')}${tender.tender_no && !tender.pasted ? ` · <span class="num">${esc(tender.tender_no)}</span>` : ''}${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}</p></div>
+<p class="sub">${esc(tender.agency ?? '')}${tender.tender_no && !tender.pasted ? ` · <span class="num">${esc(tender.tender_no)}</span>` : ''}${tender.closes_at ? ` · <span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''}</p></div>
 ${banner(notice, 'ok')}
 <section class="panel"><header><h2>What comparable contracts were awarded for</h2></header>${stats}${agencies}
 <form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
@@ -359,7 +360,7 @@ ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recom
 <p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`)
     : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><div class="form"><p>${esc(request.decline_reason ?? '')}</p>
 <p class="muted">Your credit has been returned.</p>
-<div class="row-actions">${request.source === 'feed' && request.closes_at && new Date(request.closes_at) > new Date() ? `<a class="btn outline" href="/checkout?tender=${encodeURIComponent(request.tender_no)}">Ask for a brief again</a>` : ''}<a class="btn outline" href="/">Browse open tenders</a></div></div></section>`
+<div class="row-actions"><a class="btn outline" href="/">Browse open tenders</a></div></div></section>`
       : request.status === 'needs_info' ? `<section class="panel"><header><h2>We need a bit more before we can advise</h2></header><div class="form">
 <p class="banner">${esc(request.info_request ?? '')}</p>
 ${request.info_due_at ? `<p><strong>Reply by ${esc(day(request.info_due_at))}.</strong> After that we close the request and return your credit, so the tender is free for others.</p>` : ''}
@@ -374,10 +375,10 @@ ${request.status === 'requested' ? `<form method="post" action="/requests/${esc(
   // An approved brief is finished: every step is done, none is current. The sample shows no steps at all.
   const stage = request.reference === 'SAMPLE' ? undefined : { requested: 1, drafted: 1, needs_info: 1, approved: 3 }[request.status];
   const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', request.status === 'needs_info' ? 'Needs your reply' : 'In review', 'Brief ready'].map((label, at) =>
-    `<li class="${at < stage ? 'done' : at === stage ? 'current' : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
+    `<li class="${at < stage ? 'done' : at === stage ? `current${request.status === 'needs_info' ? ' waiting' : ''}` : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
   const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>
-<p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · closes ${esc(day(request.closes_at))}` : ''}</p></div>
+<p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · <span class="nowrap">closes ${esc(day(request.closes_at))}</span>` : ''}</p></div>
 ${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
 }
 

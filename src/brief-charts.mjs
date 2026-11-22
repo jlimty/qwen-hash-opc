@@ -87,10 +87,13 @@ export function winnersChart(winners, n) {
 // How many comparable awards there were each year: shows whether this kind of work is bought steadily.
 export function yearsChart(awards) {
   const counts = new Map();
-  for (const award of awards ?? []) if (award.year) counts.set(award.year, (counts.get(award.year) ?? 0) + 1);
+  for (const award of awards ?? []) if (award.year) counts.set(String(award.year), (counts.get(String(award.year)) ?? 0) + 1);
   if (!counts.size) return '';
-  const years = [...counts.keys()].sort();
-  const max = Math.max(...counts.values()); const plotH = 70; const step = Math.min(70, 380 / years.length); const barW = step * 0.6;
+  // Every year from the first to the last, including years with no awards, so a gap shows as a gap.
+  const known = [...counts.keys()].map(Number).filter(Number.isInteger).sort((a, b) => a - b);
+  const years = known.length ? Array.from({ length: known.at(-1) - known[0] + 1 }, (_, i) => String(known[0] + i)) : [...counts.keys()].sort();
+  for (const year of years) if (!counts.has(year)) counts.set(year, 0);
+  const max = Math.max(1, ...counts.values()); const plotH = 70; const step = Math.min(70, 380 / years.length); const barW = step * 0.6;
   const bars = years.map((year, i) => {
     const h = Math.max(3, (counts.get(year) / max) * plotH); const x = 20 + i * step;
     return `<rect class="bar" x="${x.toFixed(1)}" y="${(plotH - h + 18).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4"><title>${year} · ${counts.get(year)} award${counts.get(year) === 1 ? '' : 's'}</title></rect>

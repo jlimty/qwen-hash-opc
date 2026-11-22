@@ -79,13 +79,21 @@ export function prefillValues({ reading, awards = [], slots = 6, listed = [] }) 
 const words = (text) => (String(text ?? '').toLowerCase().match(/[a-z0-9]+/g) ?? []).filter((w) => w.length >= 4);
 const related = (title, terms) => words(title).some((w) => terms.flatMap(words).some((t) => w.startsWith(t) || t.startsWith(w)));
 
-// What would make a brief on this tender weak. Advice only: nothing is blocked.
-export function profileGaps({ client, projects = [], terms = [] }) {
-  const gaps = [];
-  if (String(client?.capabilities ?? '').trim().length < 60) gaps.push({ code: 'thin_description', message: 'Say more about what your company does: the work, the clients you serve and the size of jobs you take on.' });
+// What would make a brief on this tender weak. Advice only: nothing is blocked. Worded for the customer, or for the admin.
+const gapText = {
+  customer: { thin_description: 'Say more about what your company does: the work, the clients you serve and the size of jobs you take on.',
+    no_projects: 'Add past projects. A brief can only point to work you have done.',
+    none_checked: 'None of your projects has been checked yet, so the brief cannot cite your track record. Projects with a GeBIZ tender number are checked fastest.',
+    no_related_project: "None of your checked projects looks like this tender's work. If you have done similar work, add it." },
+  admin: { thin_description: 'Says little about what the company does.', no_projects: 'No past projects listed.',
+    none_checked: 'No project checked yet, so nothing can be cited.', no_related_project: 'No checked project matches this work.' },
+};
+export function profileGaps({ client, projects = [], terms = [], audience = 'customer' }) {
+  const codes = [];
+  if (String(client?.capabilities ?? '').trim().length < 60) codes.push('thin_description');
   const verified = projects.filter((p) => p.verified);
-  if (!projects.length) gaps.push({ code: 'no_projects', message: 'Add past projects. A brief can only point to work you have done.' });
-  else if (!verified.length) gaps.push({ code: 'none_checked', message: 'None of your projects has been checked yet, so the brief cannot cite your track record. Projects with a GeBIZ tender number are checked fastest.' });
-  else if (terms.length && !verified.some((p) => related(p.title, terms))) gaps.push({ code: 'no_related_project', message: "None of your checked projects looks like this tender's work. If you have done similar work, add it." });
-  return gaps;
+  if (!projects.length) codes.push('no_projects');
+  else if (!verified.length) codes.push('none_checked');
+  else if (terms.length && !verified.some((p) => related(p.title, terms))) codes.push('no_related_project');
+  return codes.map((code) => ({ code, message: gapText[audience][code] }));
 }

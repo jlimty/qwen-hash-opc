@@ -154,7 +154,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const projects = (await tx.query('SELECT id,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects WHERE client_id=$1 ORDER BY reference_number', [request.client_id])).rows;
           const notes = (await tx.query('SELECT author,note,suggested_action,created_at FROM tender_desk.review_notes WHERE subject_id=ANY($1::uuid[]) ORDER BY created_at',
             [[request.id, ...(brief ? [brief.id] : [])]])).rows;
-          const profile_gaps = profileGaps({ client: facts.client, projects, terms: facts.query_used ? [facts.query_used] : [] });
+          const profile_gaps = profileGaps({ client: facts.client, projects, terms: facts.query_used ? [facts.query_used] : [], audience: 'admin' });
           return { outcome: 'allowed', tender: facts.tender, requirements_text: facts.requirements_text, profile_gaps,
             band: facts.snapshot?.price_band ?? null, n: facts.snapshot?.n ?? 0, search_terms: facts.query_used, comparables,
             client: { ...facts.client, verified_projects: facts.verifiedProjects, all_projects: projects },
@@ -246,7 +246,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
   async function expireStale(tx, now = new Date()) {
     const stale = (await tx.query("SELECT * FROM tender_desk.brief_requests WHERE status='needs_info' AND info_due_at <= $1 FOR UPDATE", [now])).rows;
     for (const request of stale) {
-      const reason = 'We did not hear back before the reply deadline, so we closed this request. Your credit is back in your account.';
+      const reason = 'We did not hear back before the reply deadline, so we closed this request.';
       await tx.query("UPDATE tender_desk.brief_requests SET status='declined', decline_reason=$1, updated_at=now() WHERE id=$2", [reason, request.id]);
       await releaseHold(tx, request.tender_no, request.client_id);
       await refundRequest(tx, request);
