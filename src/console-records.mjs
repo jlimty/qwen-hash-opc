@@ -3,7 +3,7 @@
 import { renderBriefHtml } from './brief-render.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { referenceCode, referenceLabel } from './references.mjs';
-import { actionLabels, ago, esc, form, icon, money, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
+import { actionLabels, ago, esc, form, icon, money, notesPanel, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
 
 // Audit rows written by the admin: 'admin' today, an older operator name on rows from before the rename. Agents,
 // customers and rejected callers always carry their own prefix, so anything else is the admin.
@@ -123,6 +123,7 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
 <section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${clientLink(brief.client_id)}</span></header>
 <div class="prose brief-prose">${renderBriefHtml(brief.content)}</div>
 <p class="note">Prose is not semantically checked; you are the check.</p></section>
+${notesPanel((state.notes ?? []).filter((n) => n.subject_id === brief.id || n.subject_id === state.requests?.find((r) => r.brief_id === brief.id)?.id))}
 ${editor}
 ${comparablesPanel(snapshot, dataset, brief.price_band)}</div>
 <aside class="stack-gap">

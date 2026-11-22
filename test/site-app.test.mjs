@@ -26,7 +26,7 @@ const resetRequests = [];
 const validResetToken = 'valid-reset-token-000000';
 const openDatabase = (url) => createPgDatabase(connectPg(postgres, url, { max: 1, ssl: false }));
 const openFast = (url) => createPgDatabase(connectPg(postgres, url, { max: 1, ssl: false, connect_timeout: 2 }));
-let pglite; let socket; let authServer; let app; let clientToken; let intakeToken; let databaseUrl; let authUrl; let backtestJson;
+let pglite; let socket; let authServer; let app; let clientToken; let intakeToken; let operatorToken; let databaseUrl; let authUrl; let backtestJson;
 
 before(async () => {
   authServer = createServer(async (req, res) => {
@@ -68,6 +68,7 @@ before(async () => {
   const client = await seedAdmin.createClient({ name: 'Edge Events', capabilities: 'Events', categories: ['events-community'], team_size: 3, max_contract_cents: 100000000, past_projects: [{ title: 'Festival project' }] });
   clientToken = (await seedAdmin.issueAgentCredential({ role: 'client', client_id: client.client_id })).token;
   intakeToken = (await seedAdmin.issueAgentCredential({ role: 'intake' })).token;
+  operatorToken = (await seedAdmin.issueAgentCredential({ role: 'operator' })).token;
   await seedSql.close();
   backtestJson = backtestToJson(buildBacktest(dataset), dataset);
   const config = { TD_DB_URL: databaseUrl, TD_AUTH_URL: authUrl };
@@ -163,26 +164,18 @@ test('logout revokes the session at Neon Auth, so the old cookie stops working e
   assert.equal((await call('/', { headers: { Cookie: cookie } })).status, 303);
 });
 
-test('the MCP endpoint works through the same app with the same governance, and never accepts a console session', async () => {
-  const rpc = (method, params, token = clientToken) => call('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
+test('the MCP endpoint serves only the admin operator connector; customer and intake keys are refused', async () => {
+  const rpc = (method, params, token = operatorToken) => call('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) });
   assert.equal((await rpc('tools/list', {}, 'nope')).status, 401);
   assert.equal((await rpc('tools/list', {}, 'tok-other-user')).status, 401);
+  assert.equal((await rpc('tools/list', {}, clientToken)).status, 401);
+  assert.equal((await rpc('tools/list', {}, intakeToken)).status, 401);
   assert.equal((await (await rpc('initialize', { protocolVersion: '2025-03-26' })).json()).result.serverInfo.name, 'tender-desk');
-  const priced = await (await rpc('tools/call', { name: 'request_pricing', arguments: { tender_no: 'NEW-1', query: 'event management' } })).json();
-  assert.equal(JSON.parse(priced.result.content[0].text).outcome, 'allowed');
-  const incoming = await (await rpc('tools/call', { name: 'get_incoming_tenders', arguments: {} })).json();
-  assert.doesNotMatch(JSON.stringify(incoming), /Zebra Secret|9876543/);
-  assert.equal((await call('/mcp', { method: 'GET', headers: { Authorization: `Bearer ${clientToken}` } })).status, 405);
-});
-
-test('intake through the site returns a connector pointing at this site', async () => {
-  const body = { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'create_client', arguments: { name: 'Site Signup Events', capabilities: 'Events', categories: ['events-community'], team_size: 2, max_contract_cents: 1000000 } } };
-  const response = await call('/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${intakeToken}` }, body: JSON.stringify(body) });
-  const created = JSON.parse((await response.json()).result.content[0].text);
-  const server = created.connector_config.mcpServers[created.connector_name];
-  assert.equal(server.url, `${origin}${publicBase}/mcp`);
-  assert.equal(server.headers.Origin, origin);
-  assert.equal(server.timeout, 60);
+  const tools = (await (await rpc('tools/list', {})).json()).result.tools.map((t) => t.name).sort();
+  assert.deepEqual(tools, ['add_review_note', 'get_review_pack', 'list_queue', 'prepare_project_check', 'propose_revision']);
+  const queue = await (await rpc('tools/call', { name: 'list_queue', arguments: {} })).json();
+  assert.equal(JSON.parse(queue.result.content[0].text).outcome, 'allowed');
+  assert.equal((await call('/mcp', { method: 'GET', headers: { Authorization: `Bearer ${operatorToken}` } })).status, 405);
 });
 
 test('auth or database outages become safe responses without leaking details', async () => {

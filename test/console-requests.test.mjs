@@ -193,3 +193,57 @@ test('a redraft with a note sends the note to the model and replaces the pending
   assert.equal(lastUser.admin_note, 'Mention the school programmes.');
   assert.match((await db.query('SELECT content FROM tender_desk.briefs WHERE id=$1', [brief.id])).rows[0].content, /redraft mentions the school programmes/);
 });
+
+async function draftedBrief(c) {
+  const request = await paidRequest();
+  modelReply = clean(request.project_id);
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  return (await db.query('SELECT b.* FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0];
+}
+const note = (brief, action) => db.query("INSERT INTO tender_desk.review_notes (subject,subject_id,author,note,suggested_action) VALUES ('brief',$1,'agent:test',$2,$3)",
+  [brief.id, `Checked against the comparables; ${action}.`, action]);
+
+test("the brief page shows the AI reviewer's notes as suggestions", async () => {
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  const brief = await draftedBrief(c);
+  await note(brief, 'approve');
+  const page = await c.get(`/briefs/BRF${String(brief.reference_number).padStart(5, '0')}`);
+  assert.match(page.text, /AI reviewer's notes \(suggestions; you decide\)/);
+  assert.match(page.text, /Checked against the comparables; approve\./);
+  assert.match(page.text, /Suggests: approve/);
+});
+
+test('batch approve covers only low or medium risk briefs the AI reviewer suggested approving', async () => {
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  const one = await draftedBrief(c);
+  const two = await draftedBrief(c);
+  await note(one, 'approve');
+  await note(two, 'redraft');
+  await db.query("UPDATE tender_desk.briefs SET risk_level='medium' WHERE id=ANY($1::uuid[])", [[one.id, two.id]]);
+  const list = await c.get('/briefs');
+  assert.match(list.text, new RegExp(`name="brief_ids" value="${one.id}"`));
+  assert.doesNotMatch(list.text, new RegExp(`name="brief_ids" value="${two.id}"`));
+  const done = await c.post('/actions/briefs/batch-approve', { brief_ids: one.id });
+  assert.equal(done.status, 303);
+  assert.match((await c.get('/briefs')).text, /Approved 1 brief/);
+  assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [one.id])).rows[0].status, 'approved');
+  assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [two.id])).rows[0].status, 'pending_approval');
+  await c.post('/actions/briefs/batch-approve', { brief_ids: two.id });
+  assert.equal((await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [two.id])).rows[0].status, 'pending_approval', 'not eligible, so not approved');
+});
+
+test('the operator page issues a QwenWork connector once and lists it for revoking', async () => {
+  const c = consoleWith({ llm, models: { draft: 'd' }, connector: { url: 'https://site.example/mcp', origin: 'https://site.example', timeout: 60 } });
+  await c.login();
+  const page = await c.get('/operator');
+  assert.match(page.text, /Your QwenWork back office/);
+  const shown = await c.post('/actions/operator/issue', {});
+  assert.equal(shown.status, 200);
+  assert.match(shown.text, /&quot;mcpServers&quot;/);
+  assert.match(shown.text, /shown once/i);
+  assert.match(shown.text, /tender-desk-operator/);
+  assert.doesNotMatch((await c.get('/operator')).text, /mcpServers/, 'the connector is not shown again');
+  assert.match((await c.get('/operator')).text, /Revoke/);
+});

@@ -40,14 +40,16 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'auth';
     const auth = createNeonAuth({ baseUrl: authUrl, adminUserId, origin, fetchImpl });
     stage = 'desk';
-    const desk = createTenderDesk({ database, dataset, adminToken, backtest: backtestFromJson(backtestJson, dataset),
+    // Customers use the web app; the connector endpoint serves only the admin's own QwenWork (the operator role).
+    const desk = createTenderDesk({ database, dataset, adminToken, backtest: backtestFromJson(backtestJson, dataset), agentRoles: ['operator'],
       connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } });
     stage = 'ai';
     const openRouterKey = clean(env('TD_OPENROUTER_KEY'));
     const llm = openRouterKey ? createOpenRouterLlm({ apiKey: openRouterKey, referer: origin }) : undefined;
     const models = { read: clean(env('TD_MODEL_READ')) ?? 'qwen/qwen3.8-flash', draft: clean(env('TD_MODEL_DRAFT')) ?? 'qwen/qwen3.8-max-0902' };
     return {
-      console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true, llm, models }),
+      console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true, llm, models,
+        connector: { url: `${origin}${publicBase}/mcp`, origin, timeout: 60 } }),
       assistant: createCustomerHandler({ desk, dataset, llm, models, database, basePath: `${publicBase}/assistant`, secureCookies: true, waitUntil,
         auth: createCustomerAuth({ baseUrl: authUrl, origin, adminUserId, fetchImpl }),
         refresh: () => refreshOpenTenders(database, { fetchImpl: feedFetch,

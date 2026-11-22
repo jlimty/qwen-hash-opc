@@ -1,7 +1,8 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
 import { checkDraft, draftBrief } from './brief-drafting.mjs';
-import { auditFilters, briefQuery, renderAudit, renderRequests, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
+import { connectorConfig } from './connector-config.mjs';
+import { auditFilters, briefQuery, renderAudit, renderOperator, renderRequests, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
 import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail, renderTender } from './console-records.mjs';
 import { parseReference } from './references.mjs';
 
@@ -28,7 +29,7 @@ const actions = {
   'credential/revoke': (ops, id) => ops.revokeAgentCredential({ credential_id: id }),
 };
 // Where an action may send the admin back to: a record page or a list, never anywhere else.
-const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts|requests)$/;
+const backPattern = /^\/(?:(?:briefs\/BRF|conflicts\/CON|clients\/CLI|projects\/PRJ)\d{5,}|clients|conflicts|requests|operator)$/;
 const routeKinds = { briefs: 'brief', conflicts: 'conflict', clients: 'client', projects: 'project', audit: 'audit' };
 const stateKey = { brief: 'briefs', conflict: 'conflicts', client: 'clients', project: 'projects' };
 const detailRenderers = { brief: renderBriefDetail, conflict: renderConflictDetail, client: renderClientDetail, project: renderProjectDetail, audit: renderAuditDetail };
@@ -58,7 +59,7 @@ export function createSecretAuth(adminToken) {
   };
 }
 
-export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false, llm, models = {}, now = () => new Date() }) {
+export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false, llm, models = {}, now = () => new Date(), connector }) {
   if (typeof admin !== 'function') throw new Error('An admin function is required.');
   const ops = admin(adminToken);
   const provider = auth ?? createSecretAuth(adminToken);
@@ -193,6 +194,7 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
         const snapshot = kind === 'brief' ? await ops.readSnapshot({ client_id: row.client_id, tender_no: row.tender_no, stat_id: row.stat_id }) : undefined;
         return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row, back, snapshot }));
       }
+      if (path === '/operator') return render((context) => renderOperator(context));
       if (path === '/requests') {
         const rows = await ops.listBriefRequests({ now: now() });
         return render((context) => renderRequests({ ...context, rows, aiReady: typeof llm === 'function' }));
@@ -230,6 +232,27 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
       const flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` }
         : { ok: true, text: result.scope === 'all' ? `Revealed ${result.revealed_count} outcomes.` : 'Outcome revealed.' };
       return redirect('/backtest', { cookies: [flashCookie(flash)] });
+    }
+    if (path === '/actions/operator/issue') {
+      const issued = await ops.issueAgentCredential({ role: 'operator' });
+      if (issued.outcome !== 'allowed') return redirect('/operator', { cookies: [flashCookie({ ok: false, text: issued.reason })] });
+      const config = connector ? JSON.stringify(connectorConfig({ name: 'tender-desk-operator', ...connector, token: issued.token }), null, 2)
+        : `Bearer ${issued.token}`;
+      return html(200, renderOperator({ state: await ops.readConsole(), csrf, issued: config }));
+    }
+    if (path === '/actions/briefs/batch-approve') {
+      const state = await ops.readConsole();
+      const ids = new Set(form.getAll('brief_ids'));
+      let approved = 0; let skipped = 0;
+      for (const brief of state.briefs.filter((b) => ids.has(b.id))) {
+        const note = state.notes.find((n) => n.subject === 'brief' && n.subject_id === brief.id);
+        const eligible = brief.status === 'pending_approval' && ['low', 'medium'].includes(brief.risk_level) && note?.suggested_action === 'approve';
+        if (!eligible) { skipped++; continue; }
+        const result = await ops.reviewBrief({ brief_id: brief.id, decision: 'approved' }).catch(() => ({ outcome: 'blocked' }));
+        if (result.outcome === 'approved') approved++; else skipped++;
+      }
+      const text = `Approved ${approved} brief${approved === 1 ? '' : 's'}${skipped ? `; ${skipped} not approved (not eligible or blocked by a check)` : ''}.`;
+      return redirect('/briefs', { cookies: [flashCookie({ ok: approved > 0, text })] });
     }
     const briefEdit = /^\/actions\/brief\/([^/]+)\/(edit|redraft)$/.exec(path);
     if (briefEdit) {

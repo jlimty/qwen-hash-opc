@@ -13,7 +13,7 @@ function bearerToken(header) {
 }
 
 const catalogs = new Map();
-const readOnlyTools = new Set(['get_policies', 'get_client_context', 'get_incoming_tenders', 'search_tenders']);
+const readOnlyTools = new Set(['get_policies', 'get_client_context', 'get_incoming_tenders', 'search_tenders', 'list_queue', 'get_review_pack']);
 
 function catalogFor(agent) {
   const key = agent.tools.map(({ name }) => name).join(',');

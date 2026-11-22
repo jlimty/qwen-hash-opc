@@ -30,6 +30,7 @@ const icons = {
   conflicts: '<path d="M10.3 4.5 2 19a1.8 1.8 0 0 0 1.6 2.7h16.8A1.8 1.8 0 0 0 22 19L13.7 4.5a2 2 0 0 0-3.4 0z"/><path d="M12 10v4.5"/><path d="M12 17.8h.01"/>',
   clients: '<circle cx="9" cy="8" r="3.5"/><path d="M2.7 20a6.3 6.3 0 0 1 12.6 0"/><path d="M16 4.8a3.5 3.5 0 0 1 0 6.4"/><path d="M17.8 14.6a6.3 6.3 0 0 1 3.5 5.4"/>',
   backtest: '<path d="M3.5 21h17"/><path d="M7.5 17v-4"/><path d="M12 17V9"/><path d="M16.5 17V5"/>',
+  operator: '<path d="M4 5h16v10H4z"/><path d="M9 19h6"/><path d="M12 15v4"/><path d="m8 9 2 2-2 2"/><path d="M12 13h4"/>',
   audit: '<path d="M8.5 6h12"/><path d="M8.5 12h12"/><path d="M8.5 18h12"/><path d="M4 6h.01"/><path d="M4 12h.01"/><path d="M4 18h.01"/>',
   requests: '<path d="M4 6.5h16v11H4z"/><path d="M4 10h16"/><path d="M7.5 14h4"/>',
   check: '<circle cx="12" cy="12" r="8.5"/><path d="m8.5 12 2.4 2.4 4.6-5"/>',
@@ -107,7 +108,7 @@ ${banner(message)}
 <button class="primary" type="submit">Change password</button></form>`);
 }
 
-const groupOf = { requests: 'Decisions', briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
+const groupOf = { operator: 'Records', requests: 'Decisions', briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
 
 // Who acted, from the stored actor: the admin, a customer, a customer's AI agent, or a rejected caller.
 function actorName(row, clientName) {
@@ -135,7 +136,7 @@ export function renderShell({ state, csrf, active, title, sub, crumbs = '', acti
 ${navItem('overview', 'Overview')}
 ${group('Decisions', [navItem('requests', 'Brief requests', waiting), navItem('briefs', 'Briefs', pending), navItem('conflicts', 'Conflicts', openConflicts)])}
 ${group('Clients', [navItem('clients', 'Clients'), navItem('projects', 'Projects', unverified)])}
-${group('Records', [navItem('backtest', 'Backtest'), navItem('audit', 'Audit log')])}
+${group('Records', [navItem('backtest', 'Backtest'), navItem('audit', 'Audit log'), navItem('operator', 'QwenWork')])}
 </div>
 <div class="side-foot"><p class="env">Local only · fictional demo clients</p>
 <form method="post" action="/logout"><input type="hidden" name="csrf" value="${esc(csrf)}"><button class="link" type="submit">Sign out</button></form></div>
@@ -229,8 +230,10 @@ export function renderBriefs({ state, dataset, csrf, flash, query = briefQuery(n
       || (query.sort === 'newest' ? new Date(b.created_at) - new Date(a.created_at) : new Date(a.created_at) - new Date(b.created_at)));
   const back = encodeURIComponent(briefListHref(query));
   const statusChip = (b) => ({ approved: '<span class="chip done">Approved</span>', declined: '<span class="chip danger">Declined</span>' }[b.status] ?? '<span class="chip progress">Pending</span>');
+  const latestNote = (b) => (state.notes ?? []).find((n) => n.subject === 'brief' && n.subject_id === b.id);
+  const eligible = (b) => b.status === 'pending_approval' && ['low', 'medium'].includes(b.risk_level) && latestNote(b)?.suggested_action === 'approve';
   const row = (b) => `<tr>
-<td><a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
+<td>${eligible(b) ? `<input type="checkbox" name="brief_ids" value="${esc(b.id)}" aria-label="Select ${esc(recordCode('brief', b))} for batch approval"> ` : ''}<a href="${recordHref('brief', b)}?back=${back}">${esc(recordCode('brief', b))} - ${esc(b.tender_no)}</a><span class="sub-line">${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')}</span></td>
 <td>${esc(clients.get(b.client_id) ?? 'Unknown client')}</td>
 <td>${statusChip(b)} ${riskChip(b.risk_level)}</td>
 <td class="r num nowrap">${money(b.price_band.low_cents)} – ${money(b.price_band.high_cents)}</td>
@@ -243,10 +246,11 @@ ${select('status', 'Status', [['pending', 'Waiting for approval'], ['approved', 
 ${select('risk', 'Risk', [['any', 'Any risk'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']], query.risk)}
 ${select('sort', 'Sort', [['risk', 'Highest risk first'], ['newest', 'Newest first'], ['oldest', 'Oldest first']], query.sort)}
 <button class="outline" type="submit">Apply</button></form>
-<section class="panel"><div class="table-wrap"><table class="stack">
+<form method="post" action="/actions/briefs/batch-approve"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<section class="panel"><header><h2>Briefs</h2>${list.some(eligible) ? '<span class="row-actions"><span class="muted small">Ticked briefs are low or medium risk, and your AI reviewer suggested approving them.</span><button class="primary" type="submit">Approve selected</button></span>' : ''}</header><div class="table-wrap"><table class="stack">
 <thead><tr><th>Brief</th><th>Client</th><th>Status</th><th class="r">Historical band</th><th>Submitted</th><th><span class="visually-hidden">Open</span></th></tr></thead>
 <tbody>${list.length ? list.map(row).join('') : '<tr><td colspan="6"><div class="empty"><strong>No briefs in this view.</strong>When an agent submits one it appears here for your decision.</div></td></tr>'}</tbody>
-</table></div></section>` });
+</table></div></section></form>` });
 }
 
 export function renderConflicts({ state, csrf, flash }) {
@@ -417,4 +421,30 @@ ${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
 ${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty"><strong>No brief requests yet.</strong>Paid requests from customers appear here.</p>'}</section>`;
   return renderShell({ state, csrf, active: 'requests', title: 'Brief requests', flash,
     sub: 'Customers paid (in test mode) for a reviewed brief. Draft it with AI, then approve or decline the brief. A request you decline frees the tender.', body });
+}
+
+// Notes the admin's AI reviewer left: shown as suggestions, never as decisions.
+export function notesPanel(notes) {
+  if (!notes?.length) return '';
+  return `<section class="panel"><header><h2>AI reviewer's notes (suggestions; you decide)</h2></header><ul class="feed">${notes.map((n) => `<li><div class="line"><span>${esc(n.note)}</span>
+${n.suggested_action ? `<span class="chip ${n.suggested_action === 'approve' || n.suggested_action === 'verify' ? 'done' : 'warning'}">Suggests: ${esc(n.suggested_action.replace('_', ' '))}</span>` : ''}</div>
+<span class="meta">${esc(ago(n.created_at))}${n.redraft_note ? ` · redraft note: ${esc(n.redraft_note)}` : ''}</span></li>`).join('')}</ul></section>`;
+}
+
+// Issue and revoke the connector for the admin's own QwenWork (the operator role). The connector is shown once.
+export function renderOperator({ state, csrf, flash, issued }) {
+  const operators = state.credentials.filter((c) => c.role === 'operator');
+  const rows = operators.length ? `<ul class="feed">${operators.map((c) => `<li><div class="line"><span>Operator connector · issued ${esc(ago(c.created_at))}</span>
+${form(csrf, `/actions/credential/${c.id}/revoke`, 'Revoke', 'outline', '/operator')}</div></li>`).join('')}</ul>` : '<p class="empty">No operator connector yet.</p>';
+  return renderShell({ state, csrf, active: 'operator', title: 'Your QwenWork back office', flash,
+    sub: 'Paste the connector into QwenWork, with the tender-desk-operator skill, to work the queue faster. It prepares reviews, leaves notes and proposes revisions; approving, declining and verifying stay here.',
+    body: `${issued ? `<section class="panel"><header><h2>New connector: shown once</h2></header><div class="form"><p>Paste this into QwenWork → Connectors now. It is not stored and won't be shown again.</p>
+<pre class="prose">${esc(issued)}</pre></div></section>` : ''}
+<section class="panel"><header><h2>Connectors</h2>${form(csrf, '/actions/operator/issue', 'Issue a connector', 'primary')}</header>${rows}</section>
+<section class="panel"><header><h2>What it can do</h2></header><ul class="feed">
+<li>List the queue: paid requests and pending briefs, soonest-closing first.</li>
+<li>Read a review pack: the draft, comparables with outliers flagged, the customer's projects and requirements.</li>
+<li>Leave a note with a suggested action. Briefs it suggests approving (low or medium risk) can be batch-approved on the Briefs page.</li>
+<li>Propose a revised draft. Every server check runs before it replaces the pending draft.</li>
+<li>Prepare a project check against GeBIZ awards. You still verify.</li></ul></section>` });
 }

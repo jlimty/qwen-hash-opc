@@ -7,6 +7,7 @@ import { buildBacktest, summarize } from './backtest.mjs';
 import { referenceCode } from './references.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { computeRiskFacts } from './brief-risk.mjs';
+import { bandPositions, checkDraft } from './brief-drafting.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
@@ -45,6 +46,7 @@ async function releaseHold(tx, tender_no, client_id) {
 }
 const credentialSchema = z.discriminatedUnion('role', [
   z.strictObject({ role: z.literal('intake') }),
+  z.strictObject({ role: z.literal('operator') }),
   z.strictObject({ role: z.literal('client'), client_id: z.uuid() }),
 ]);
 function validate(schema, input) {
@@ -54,10 +56,13 @@ function validate(schema, input) {
   return { denial: blocked(keys.includes('client_id') ? 'G1' : keys.includes('verified') ? 'G3' : 'VALIDATION', 'Input does not match the permitted tool schema.') };
 }
 
-export function createTenderDesk({ database, dataset, adminToken, backtest: precomputed, connector }) {
+// agentRoles: which connector roles may sign in. The live site allows only 'operator' (the admin's own QwenWork);
+// the older customer and intake connectors stay available to tests and local tools.
+export function createTenderDesk({ database, dataset, adminToken, backtest: precomputed, connector, agentRoles = ['client', 'intake', 'operator'] }) {
   if (typeof adminToken !== 'string' || !/^[a-f0-9]{64}$/.test(adminToken)) throw new Error('A 32-byte hexadecimal admin token is required.');
   const expectedAdmin = digest(adminToken);
-  const workflows = agentWorkflows(dataset, connector ? { connector } : {});
+  const contractsByNumber = new Map(dataset.contracts.map((contract) => [contract.tender_no, contract]));
+  const workflows = { ...agentWorkflows(dataset, connector ? { connector } : {}), ...operatorWorkflows() };
   const tenderNumbers = new Set(dataset.contracts.map((contract) => contract.tender_no));
   const backtest = precomputed ?? buildBacktest(dataset);
   // Dataset tenders, live GeBIZ numbers and PASTED-<hash> ids are kept in the audit log; anything else is dropped.
@@ -67,6 +72,120 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const { rows } = await tx.query(`SELECT tender_no, summary->>'scope' AS scope FROM tender_desk.audit_log
       WHERE action='reveal_backtest' AND outcome='allowed'`);
     return rows.some((row) => row.scope === 'all') ? new Set(backtest.predictions.keys()) : new Set(rows.map((row) => row.tender_no).filter(Boolean));
+  }
+
+  // Everything a draft may use, assembled by code. Verified projects only.
+  async function draftFacts(tx, request) {
+    const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
+      [request.client_id, request.tender_no, request.stat_id])).rows[0]?.snapshot;
+    const client = (await tx.query('SELECT id,name,capabilities,categories,team_size,max_contract_cents FROM tender_desk.clients WHERE id=$1', [request.client_id])).rows[0];
+    const verifiedProjects = (await tx.query(`SELECT id,title,agency,value_cents FROM tender_desk.projects WHERE client_id=$1 AND verified ORDER BY reference_number`,
+      [request.client_id])).rows.map((p) => ({ ...p, value_cents: p.value_cents === null ? null : Number(p.value_cents) }));
+    const open = (await tx.query('SELECT category,closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [request.tender_no])).rows[0];
+    const query_used = snapshot?.filters?.query ?? null;
+    const tender = { tender_no: request.tender_no, title: request.title, agency: request.agency, closes_at: open?.closes_at ?? null,
+      category: snapshot?.filters?.category ?? open?.category ?? null, pasted_text: request.pasted_text };
+    const clientFacts = { ...client, max_contract_cents: Number(client.max_contract_cents) };
+    return { request, tender, snapshot, query_used, client: clientFacts, verifiedProjects, requirements_text: request.requirements_text ?? null,
+      fit: fitFacts({ client: clientFacts, verifiedProjects, tender, check: { status: snapshot?.status, snapshot, query_used } }) };
+  }
+  // Replace a pending brief's text and parts in place. Citations re-checked, risk facts recomputed. Never approves.
+  async function reviseBrief(tx, input) {
+    const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
+    if (!brief || brief.status !== 'pending_approval') return blocked('G5', 'Only a pending brief can be revised.');
+    if (!await hasVerifiedCitations(tx, brief.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
+    const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
+      [brief.client_id, brief.tender_no, brief.stat_id])).rows[0]?.snapshot;
+    const counts = (await tx.query(`SELECT (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
+      (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
+      (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1 AND id<>$2) AS prior`, [brief.client_id, brief.id])).rows[0];
+    const risk = computeRiskFacts({ n: Number(snapshot?.n ?? 0), band: brief.price_band, maxContractCents: Number(counts.max_contract_cents),
+      content: input.risk_text ?? input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
+    await tx.query(`UPDATE tender_desk.briefs SET recommendation=$1, content=$2, credentials_cited=$3, parts=COALESCE($4,parts), risk_facts=$5, risk_level=$6 WHERE id=$7`,
+      [input.recommendation, input.content, input.credentials_cited, input.parts ? JSON.stringify(input.parts) : null, JSON.stringify(risk.facts), risk.level, brief.id]);
+    return { outcome: 'allowed', brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number), client_id: brief.client_id, tender_no: brief.tender_no };
+  }
+  async function addNote(tx, author, input) {
+    await tx.query('INSERT INTO tender_desk.review_notes (subject,subject_id,author,note,suggested_action,redraft_note) VALUES ($1,$2,$3,$4,$5,$6)',
+      [input.subject, input.id, author, input.note, input.suggested_action ?? null, input.redraft_note ?? null]);
+  }
+  // The admin's QwenWork: it prepares and suggests; it never approves, declines or verifies.
+  function operatorWorkflows() {
+    const roles = ['operator'];
+    const text = (max) => z.string().trim().min(1).max(max);
+    return {
+      list_queue: { roles, description: 'List the work waiting for the admin: paid requests with no draft yet, and pending briefs, soonest-closing first, with risk level and notes so far. Read only.',
+        schema: z.strictObject({}),
+        run: async (tx) => {
+          const requests = (await tx.query(`SELECT r.id,r.reference_number,r.title,r.agency,r.tender_no,r.created_at,c.name AS client,o.closes_at
+            FROM tender_desk.brief_requests r JOIN tender_desk.clients c ON c.id=r.client_id LEFT JOIN tender_desk.open_tenders o ON o.tender_no=r.tender_no
+            WHERE r.status='requested' ORDER BY o.closes_at NULLS LAST, r.created_at`)).rows;
+          const briefs = (await tx.query(`SELECT b.id,b.reference_number,b.tender_no,b.recommendation,b.risk_level,r.title,c.name AS client,o.closes_at,
+              (SELECT count(*)::int FROM tender_desk.review_notes n WHERE n.subject='brief' AND n.subject_id=b.id) AS notes
+            FROM tender_desk.briefs b JOIN tender_desk.clients c ON c.id=b.client_id LEFT JOIN tender_desk.brief_requests r ON r.brief_id=b.id
+            LEFT JOIN tender_desk.open_tenders o ON o.tender_no=b.tender_no WHERE b.status='pending_approval' ORDER BY o.closes_at NULLS LAST, b.created_at`)).rows;
+          return { outcome: 'allowed',
+            waiting_requests: requests.map((r) => ({ request_id: r.id, reference: referenceCode('REQ', r.reference_number), title: r.title, agency: r.agency, tender_no: r.tender_no, client: r.client, closes_at: r.closes_at, paid_at: r.created_at })),
+            pending_briefs: briefs.map((b) => ({ brief_id: b.id, reference: referenceCode('BRF', b.reference_number), title: b.title, tender_no: b.tender_no, client: b.client,
+              recommendation: b.recommendation, risk_level: b.risk_level, closes_at: b.closes_at, notes: b.notes })) };
+        } },
+      get_review_pack: { roles, description: 'Everything needed to judge one pending brief (brief_id) or one waiting request (request_id): the draft and its parts, risk facts, the tender, the comparable awards with outliers flagged, the client profile and projects, pasted requirements, and earlier notes. Read only.',
+        schema: z.strictObject({ brief_id: z.uuid().optional(), request_id: z.uuid().optional() }).refine((v) => Boolean(v.brief_id) !== Boolean(v.request_id), 'Give brief_id or request_id.'),
+        run: async (tx, actor, input) => {
+          const brief = input.brief_id ? (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1', [input.brief_id])).rows[0] : undefined;
+          const request = (await tx.query(input.brief_id ? 'SELECT * FROM tender_desk.brief_requests WHERE brief_id=$1' : 'SELECT * FROM tender_desk.brief_requests WHERE id=$1',
+            [input.brief_id ?? input.request_id])).rows[0];
+          if (!request) return blocked('G5', 'Nothing to review there.');
+          const facts = await draftFacts(tx, request);
+          const median = Number(facts.snapshot?.price_band?.median_cents ?? 0);
+          const comparables = (facts.snapshot?.comparables ?? []).map((c) => ({ c, contract: contractsByNumber.get(c.tender_no) })).filter(({ contract }) => contract)
+            .map(({ c, contract }) => ({ tender_no: c.tender_no, description: contract.description, agency: contract.agency, award_date: contract.last_award_date,
+              awarded_sgd: Number(c.total_awarded_cents) / 100, far_from_median: Boolean(median && (Number(c.total_awarded_cents) > 5 * median || Number(c.total_awarded_cents) * 5 < median)) }))
+            .slice(0, 40);
+          const projects = (await tx.query('SELECT id,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects WHERE client_id=$1 ORDER BY reference_number', [request.client_id])).rows;
+          const notes = (await tx.query('SELECT author,note,suggested_action,created_at FROM tender_desk.review_notes WHERE subject_id=ANY($1::uuid[]) ORDER BY created_at',
+            [[request.id, ...(brief ? [brief.id] : [])]])).rows;
+          return { outcome: 'allowed', tender: facts.tender, requirements_text: facts.requirements_text,
+            band: facts.snapshot?.price_band ?? null, n: facts.snapshot?.n ?? 0, search_terms: facts.query_used, comparables,
+            client: { ...facts.client, verified_projects: facts.verifiedProjects, all_projects: projects },
+            ...(brief && { brief: { brief_id: brief.id, status: brief.status, recommendation: brief.recommendation, content: brief.content, parts: brief.parts, risk_level: brief.risk_level, risk_facts: brief.risk_facts } }),
+            notes };
+        } },
+      add_review_note: { roles, description: 'Leave a short note for the admin on a brief, a request or a project, with a suggested action. The admin decides; this changes nothing else.',
+        schema: z.strictObject({ subject: z.enum(['brief', 'request', 'project']), id: z.uuid(), note: text(2000),
+          suggested_action: z.enum(['approve', 'redraft', 'decline', 'verify', 'do_not_verify']).optional(), redraft_note: text(1000).optional() }),
+        run: async (tx, actor, input) => {
+          const table = { brief: 'briefs', request: 'brief_requests', project: 'projects' }[input.subject];
+          const found = (await tx.query(`SELECT client_id FROM tender_desk.${table} WHERE id=$1`, [input.id])).rows[0];
+          if (!found) return blocked('VALIDATION', 'That record does not exist.');
+          await addNote(tx, actor.name ?? 'operator', input);
+          return { outcome: 'allowed', client_id: found.client_id, reason: 'Note saved for the admin.' };
+        } },
+      propose_revision: { roles, description: 'Rewrite a pending brief. Every server check runs (no invented figures, no IDs, no price talk in reasons, verified citations only) before it replaces the draft. The brief stays pending: only the admin approves.',
+        schema: z.strictObject({ brief_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), reasons: z.array(text(600)).min(1).max(5),
+          price_position: z.strictObject({ band: z.enum(bandPositions), why: text(600) }), questions: z.array(text(300)).max(4).default([]), risks: z.array(text(300)).max(3).default([]) }),
+        run: async (tx, actor, input) => {
+          const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1', [input.brief_id])).rows[0];
+          const request = brief && (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE brief_id=$1', [brief.id])).rows[0];
+          if (!brief || !request || brief.status !== 'pending_approval') return blocked('G5', 'Only a pending brief can be revised.');
+          const checked = checkDraft({ recommendation: input.recommendation, reasons: input.reasons, price_position: input.price_position,
+            requirements: brief.parts?.requirements ?? [], questions: input.questions, risks: input.risks, credentials_cited: brief.credentials_cited }, await draftFacts(tx, request));
+          if (!checked.ok) return { ...blocked('G4', checked.reason.replace(/ Try Redraft\.$/, '')), client_id: brief.client_id, tender_no: brief.tender_no };
+          const result = await reviseBrief(tx, { brief_id: brief.id, ...checked.draft });
+          if (result.outcome === 'allowed') await addNote(tx, actor.name ?? 'operator', { subject: 'brief', id: brief.id, note: 'Revised the draft (all checks passed).', suggested_action: 'approve' });
+          return result;
+        } },
+      prepare_project_check: { roles, description: "Run the GeBIZ cross-check for a client's project and leave a note with a suggested verdict. Does not verify: the admin does.",
+        schema: z.strictObject({ project_id: z.uuid() }),
+        run: async (tx, actor, input) => {
+          const project = (await tx.query('SELECT p.*, c.name AS client_name FROM tender_desk.projects p JOIN tender_desk.clients c ON c.id=p.client_id WHERE p.id=$1', [input.project_id])).rows[0];
+          if (!project) return blocked('VALIDATION', 'That project does not exist.');
+          const check = crossCheckProject(dataset, project, project.client_name, new Set());
+          await addNote(tx, actor.name ?? 'operator', { subject: 'project', id: project.id, note: `GeBIZ cross-check: ${check.result}. ${(check.lines ?? []).join(' ')}`.slice(0, 2000),
+            suggested_action: check.result === 'match' ? 'verify' : 'do_not_verify' });
+          return { outcome: 'allowed', client_id: project.client_id, check_result: check.result, lines: check.lines ?? [], suggested_action: check.result === 'match' ? 'verify' : 'do_not_verify' };
+        } },
+    };
   }
 
   async function record(tx, actor, action, result, input = {}) {
@@ -255,7 +374,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       const tokenHash = typeof token === 'string' ? digest(token).toString('hex') : '';
       const actor = await database.transaction(async (tx) => {
         const found = await credential(tx, tokenHash);
-        if (!found) return authenticationFailed(tx);
+        if (!found || !agentRoles.includes(found.role)) return authenticationFailed(tx);
         return found;
       });
       if (actor.unauthorized) throw new Error('Unauthorized');
@@ -270,7 +389,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           try {
             result = await database.transaction(async (tx) => {
               const current = await credential(tx, tokenHash);
-              if (!current) return unauthorized(tx, action);
+              if (!current || !agentRoles.includes(current.role)) return unauthorized(tx, action);
               const identity = { name: `agent:${current.id}`, client_id: current.client_id };
               if (!known || !workflows[name].roles.includes(current.role)) {
                 return record(tx, identity, action, blocked('G5', 'This action is not available to this agent.'));
@@ -381,19 +500,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         prepareDraft: (request_id) => database.transaction(async (tx) => {
           if (!z.uuid().safeParse(request_id).success) return undefined;
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1', [request_id])).rows[0];
-          if (!request) return undefined;
-          const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
-            [request.client_id, request.tender_no, request.stat_id])).rows[0]?.snapshot;
-          const client = (await tx.query('SELECT id,name,capabilities,categories,team_size,max_contract_cents FROM tender_desk.clients WHERE id=$1', [request.client_id])).rows[0];
-          const verifiedProjects = (await tx.query(`SELECT id,title,agency,value_cents FROM tender_desk.projects WHERE client_id=$1 AND verified ORDER BY reference_number`,
-            [request.client_id])).rows.map((p) => ({ ...p, value_cents: p.value_cents === null ? null : Number(p.value_cents) }));
-          const open = (await tx.query('SELECT category,closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [request.tender_no])).rows[0];
-          const query_used = snapshot?.filters?.query ?? null;
-          const tender = { tender_no: request.tender_no, title: request.title, agency: request.agency, closes_at: open?.closes_at ?? null,
-            category: snapshot?.filters?.category ?? open?.category ?? null, pasted_text: request.pasted_text };
-          const clientFacts = { ...client, max_contract_cents: Number(client.max_contract_cents) };
-          return { request, tender, snapshot, query_used, client: clientFacts, verifiedProjects, requirements_text: request.requirements_text ?? null,
-            fit: fitFacts({ client: clientFacts, verifiedProjects, tender, check: { status: snapshot?.status, snapshot, query_used } }) };
+          return request ? draftFacts(tx, request) : undefined;
         }),
         saveDraft: adminOperation('save_draft', draftInputSchema, async (tx, input) => {
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 FOR UPDATE', [input.request_id])).rows[0];
@@ -414,21 +521,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         }),
         // The admin's edit or redraft of a pending brief, in place. Citations are re-checked and risk facts recomputed.
         reviseDraft: adminOperation('revise_draft', z.strictObject({ brief_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), content: short(20000),
-          credentials_cited: z.array(z.uuid()).max(30).default([]), parts: z.record(z.string(), z.unknown()).optional(), risk_text: z.string().max(20000).optional() }), async (tx, input) => {
-          const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
-          if (!brief || brief.status !== 'pending_approval') return blocked('G5', 'Only a pending brief can be revised.');
-          if (!await hasVerifiedCitations(tx, brief.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
-          const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
-            [brief.client_id, brief.tender_no, brief.stat_id])).rows[0]?.snapshot;
-          const counts = (await tx.query(`SELECT (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
-            (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
-            (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1 AND id<>$2) AS prior`, [brief.client_id, brief.id])).rows[0];
-          const risk = computeRiskFacts({ n: Number(snapshot?.n ?? 0), band: brief.price_band, maxContractCents: Number(counts.max_contract_cents),
-            content: input.risk_text ?? input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
-          await tx.query(`UPDATE tender_desk.briefs SET recommendation=$1, content=$2, credentials_cited=$3, parts=COALESCE($4,parts), risk_facts=$5, risk_level=$6 WHERE id=$7`,
-            [input.recommendation, input.content, input.credentials_cited, input.parts ? JSON.stringify(input.parts) : null, JSON.stringify(risk.facts), risk.level, brief.id]);
-          return { outcome: 'allowed', brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number), client_id: brief.client_id, tender_no: brief.tender_no };
-        }),
+          credentials_cited: z.array(z.uuid()).max(30).default([]), parts: z.record(z.string(), z.unknown()).optional(), risk_text: z.string().max(20000).optional() }),
+        (tx, input) => reviseBrief(tx, input)),
         recordDraftFailure: adminOperation('draft_failed', z.strictObject({ request_id: z.uuid(), reason: short(1000) }), async (tx, input) => {
           const { rows } = await tx.query(`UPDATE tender_desk.brief_requests SET last_error=$1, updated_at=now() WHERE id=$2
             RETURNING id, reference_number, client_id, tender_no`, [input.reason, input.request_id]);
@@ -458,6 +552,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             briefs: (await tx.query('SELECT * FROM tender_desk.briefs ORDER BY created_at,id')).rows,
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
             requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no,title,agency,created_at,brief_id FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
+            notes: (await tx.query('SELECT * FROM tender_desk.review_notes ORDER BY created_at DESC LIMIT 500')).rows,
             openTenders: (await tx.query(`SELECT tender_no,title,agency FROM tender_desk.open_tenders WHERE tender_no IN
               (SELECT tender_no FROM tender_desk.briefs UNION SELECT tender_no FROM tender_desk.brief_requests)`)).rows,
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,
