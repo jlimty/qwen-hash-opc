@@ -31,7 +31,7 @@ test('years and percentages are unmatched, and words after a number are not suff
 
 test('each fact has its exact message', () => {
   assert.equal(message(computeRiskFacts({ ...calm, n: 9 }), 'thin_evidence'), 'Only 9 comparable contracts.');
-  assert.equal(message(computeRiskFacts({ ...calm, band }), 'wide_band'), 'Band is wide: top is 5.5× the bottom.');
+  assert.equal(message(computeRiskFacts({ ...calm, band }), 'wide_band'), 'Band is wide: the upper quartile is 5.5× the lower quartile.');
   assert.equal(message(computeRiskFacts({ ...calm, band: { low_cents: 0, median_cents: 1, high_cents: 2 } }), 'wide_band'), 'Band is wide: the bottom is S$0.');
   assert.equal(message(computeRiskFacts({ ...calm, band: { ...band, median_cents: 61200000 }, maxContractCents: 20000000 }), 'above_ceiling'),
     "Median S$612,000 is above the client's S$200,000 ceiling.");

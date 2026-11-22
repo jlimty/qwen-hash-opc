@@ -324,10 +324,15 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
     let flash;
     try {
       if (actionKey === 'brief/decline' && form.get('confirm') !== 'yes') throw Object.assign(new Error('unconfirmed'), { unconfirmed: true });
+      // A high-risk brief is approved only with the tick, checked here as well as in the form.
+      if (actionKey === 'brief/approve' && form.get('confirm') !== 'yes') {
+        const risk = (await ops.readConsole()).briefs.find((b) => b.id === match[2])?.risk_level;
+        if (risk === 'high') throw Object.assign(new Error('unconfirmed'), { unconfirmed: true, highRisk: true });
+      }
       const result = await actions[actionKey](ops, match[2], form);
       flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` } : { ok: true, text: successText[actionKey] };
     } catch (error) {
-      flash = { ok: false, text: error?.unconfirmed ? 'Tick the box to confirm the decline. Nothing was changed.' : 'The action could not be completed. Nothing was changed.' };
+      flash = { ok: false, text: error?.highRisk ? 'This brief is high risk: tick the box to confirm the approval. Nothing was changed.' : error?.unconfirmed ? 'Tick the box to confirm the decline. Nothing was changed.' : 'The action could not be completed. Nothing was changed.' };
     }
     const back = String(form.get('back') ?? '');
     const landing = backPattern.test(back) ? back : { brief: `/briefs/${match[2]}`, conflict: '/conflicts', project: '/clients', credential: '/clients' }[match[1]];

@@ -42,7 +42,7 @@ function lookups(state) {
     projectLink: (id) => recordLink('project', projects.get(id), projects.get(id)?.title),
   };
 }
-export const tenderLink = (tenderNo) => `<a class="num" href="/tenders/${encodeURIComponent(tenderNo)}">${esc(tenderNo)}</a>`;
+export const tenderLink = (tenderNo) => `<a class="num nowrap" href="/tenders/${encodeURIComponent(tenderNo)}">${esc(tenderNo)}</a>`;
 const crumbs = (kind, code) => `<nav class="crumbs" aria-label="Breadcrumb"><a href="${recordKinds[kind].listPath ?? recordKinds[kind].path}">${recordKinds[kind].list}</a> / <span class="num">${esc(code)}</span></nav>`;
 const props = (pairs) => `<dl class="props">${pairs.map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
 const panel = (title, inner, extra = '') => `<section class="panel"><header><h2>${esc(title)}</h2>${extra}</header>${inner}</section>`;
@@ -63,7 +63,7 @@ function comparablesPanel(snapshot, dataset, band) {
     .sort((a, b) => b.cents - a.cents).slice(0, 30).map((c) => {
       const odd = median && (c.cents > 5 * median || c.cents * 5 < median);
       return `<tr><td class="num nowrap">${esc(c.tender_no)}<span class="sub-line muted">${esc(c.last_award_date ?? '')}</span></td><td class="desc">${esc(c.description ?? '')}<span class="sub-line muted">${esc(c.agency ?? '')}</span></td>
-<td class="r"><span class="num nowrap">${money(c.cents)}</span>${odd ? '<span class="chip warning far">Far from median</span>' : ''}</td></tr>`;
+<td class="r"><span class="num nowrap">${money(Math.round(c.cents / 100) * 100)}</span>${odd ? '<span class="chip warning far">Far from median</span>' : ''}</td></tr>`;
     }).join('');
   return `<section class="panel"><header><h2>Comparable awards</h2><span class="muted small">${snapshot.comparables.length} awards, largest first${snapshot.comparables.length > 30 ? ' (first 30)' : ''}</span></header>
 <div class="table-wrap"><table class="stack comparables"><thead><tr><th>Tender</th><th>Description</th><th class="r">Awarded</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
@@ -109,9 +109,9 @@ ${brief.recommendation === 'no-bid' ? '<details class="price-fields"><summary>Pr
 <div><button type="submit">Redraft</button></div></form></section>`;
   // A slim bar: Approve, and Decline tucked behind a disclosure so the reason box only takes space when needed.
   const actions = decided ? '' : `<div class="decision">
-<div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}"><button class="primary" type="submit">Approve</button></form>
+<div class="row-actions"><form method="post" action="/actions/brief/${brief.id}/approve"><input type="hidden" name="csrf" value="${esc(csrf)}"><input type="hidden" name="revision" value="${esc(brief.revision ?? '')}">${brief.risk_level === 'high' ? '<label class="tick"><input type="checkbox" name="confirm" value="yes" required> High risk: I have read the draft and the risk facts</label>' : ''}<button class="primary" type="submit">Approve</button></form>
 <span class="muted small">Approval re-checks the advice slot and the citations.</span></div>
-<div class="decisions">${decisionForms({ csrf, requestId: brief.request_id, declineAction: `/actions/brief/${brief.id}/decline` })}</div></div>`;
+<div class="decisions">${decisionForms({ csrf, requestId: brief.request_id, declineAction: `/actions/brief/${brief.id}/decline`, closesAt: brief.closes_at })}</div></div>`;
   const owner = client(brief.client_id);
   const verifiedCount = state.projects.filter((p) => p.client_id === brief.client_id && p.verified).length;
   const closes = brief.closes_at ? new Date(brief.closes_at) : null;

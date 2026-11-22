@@ -158,6 +158,9 @@ test('the brief review page shows the live agency and the comparable awards behi
   assert.match(page.text, /OLD-6/);
   // The description column keeps a readable width; nothing wide sits in a no-wrap cell beside it.
   assert.match(page.text, /<td class="desc">/);
+  // Tender numbers never break across lines, and the comparables table shows whole dollars.
+  assert.match(page.text, /<a class="num nowrap" href="\/tenders\//);
+  assert.doesNotMatch(page.text.slice(page.text.indexOf('Comparable awards</h2>')), /S\$[\d,]+\.\d\d/);
   // The table runs full width below both columns, not squeezed into the left one.
   assert.match(page.text, /<\/aside><\/div><div class="full-row">[\s\S]*Comparable awards/);
   // Three columns so the table fits beside the client panel: the award date sits under the tender number.
@@ -317,6 +320,8 @@ test('ask for more and decline are separate forms; a decline needs its confirmat
   const c = consoleWith({ llm, models: { draft: 'd' } });
   const queue = await c.login();
   assert.match(queue.text, new RegExp(`action="/actions/request/${request.request_id}/ask"[\\s\\S]*?name="message"[^>]*required`));
+  // The Ask form says when the client must reply, before the admin sends it.
+  assert.match(queue.text, /They have until \d{1,2} [A-Z][a-z]{2} 20\d\d to reply; after that the request closes itself and their credit is returned\./);
   assert.match(queue.text, new RegExp(`action="/actions/request/${request.request_id}/decline"[\\s\\S]*?name="confirm"[^>]*required`));
   const unconfirmed = await c.post(`/actions/request/${request.request_id}/decline`, { reason: 'Not our trade.' });
   assert.equal(unconfirmed.status, 303);

@@ -74,14 +74,15 @@ export function priceChart({ awards, band, suggested, thin = false }) {
 export function winnersChart(winners, n) {
   if (!winners?.length || !n) return '';
   // Drawn narrower than the price chart: it sits in a half-width column, and a narrower viewBox keeps the labels readable.
-  const width = 420; const rowH = 30; const labelW = 190; const barMax = width - labelW - 60;
+  // Each full name sits on its own line above its bar, so long company names are never cut off.
+  const width = 420; const rowH = 44; const barMax = width - 70;
   const rows = winners.slice(0, 5).map((w, i) => {
-    const y = i * rowH + 8; const width = Math.max(4, (w.wins / n) * barMax);
-    return `<text class="label" x="${labelW - 8}" y="${y + 15}" text-anchor="end">${esc(w.name.length > 20 ? `${w.name.slice(0, 19).trimEnd()}…` : w.name)}</text>
-<rect class="bar" x="${labelW}" y="${y + 3}" width="${width.toFixed(1)}" height="16" rx="4"><title>${esc(w.name)} · won ${w.wins} of ${n}</title></rect>
-<text class="tick" x="${(labelW + width + 8).toFixed(1)}" y="${y + 15}">${w.wins} of ${n}</text>`;
+    const y = i * rowH + 4; const bar = Math.max(4, (w.wins / n) * barMax);
+    return `<text class="label" x="0" y="${y + 12}">${esc(w.name)}</text>
+<rect class="bar" x="0" y="${y + 18}" width="${bar.toFixed(1)}" height="14" rx="4"><title>${esc(w.name)} · won ${w.wins} of ${n}</title></rect>
+<text class="tick" x="${(bar + 8).toFixed(1)}" y="${y + 30}">${w.wins} of ${n}</text>`;
   });
-  return `<svg class="chart" viewBox="0 0 ${width} ${winners.slice(0, 5).length * rowH + 12}" role="img" aria-label="${esc(`Most frequent winners of ${n} comparable awards`)}">${rows.join('')}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${width} ${winners.slice(0, 5).length * rowH + 4}" role="img" aria-label="${esc(`Most frequent winners of ${n} comparable awards`)}">${rows.join('')}</svg>`;
 }
 
 // How many comparable awards there were each year: shows whether this kind of work is bought steadily.
@@ -95,8 +96,10 @@ export function yearsChart(awards) {
   for (const year of years) if (!counts.has(year)) counts.set(year, 0);
   const max = Math.max(1, ...counts.values()); const plotH = 70; const step = Math.min(70, 380 / years.length); const barW = step * 0.6;
   const bars = years.map((year, i) => {
-    const h = Math.max(3, (counts.get(year) / max) * plotH); const x = 20 + i * step;
-    return `<rect class="bar" x="${x.toFixed(1)}" y="${(plotH - h + 18).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4"><title>${year} · ${counts.get(year)} award${counts.get(year) === 1 ? '' : 's'}</title></rect>
+    // A year with no awards draws no bar, only its 0.
+    const count = counts.get(year); const h = count ? Math.max(3, (count / max) * plotH) : 0; const x = 20 + i * step;
+    const title = `<title>${year} · ${count} award${count === 1 ? '' : 's'}</title>`;
+    return `${count ? `<rect class="bar" x="${x.toFixed(1)}" y="${(plotH - h + 18).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4">${title}</rect>` : `<g>${title}</g>`}
 <text class="tick" x="${(x + barW / 2).toFixed(1)}" y="${(plotH - h + 12).toFixed(1)}" text-anchor="middle">${counts.get(year)}</text>
 <text class="label" x="${(x + barW / 2).toFixed(1)}" y="${plotH + 34}" text-anchor="middle">${year}</text>`;
   });

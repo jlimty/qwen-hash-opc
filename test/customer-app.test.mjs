@@ -296,6 +296,17 @@ test('the rate limit keys on the proxy-appended address, not the first forwarded
   assert.equal(spoof.status, 429);
 });
 
+test('home reads a tender the same way the free check does, so the two never disagree', async () => {
+  const b = await signedUpCustomer('Quill');
+  await db.query("UPDATE tender_desk.open_tenders SET terms=NULL WHERE tender_no='RPO000ETQ26000129'");
+  const home = await b.get('/home');
+  const row = home.text.slice(home.text.indexOf('RPO000ETQ26000129'), home.text.indexOf('</li>', home.text.indexOf('RPO000ETQ26000129')));
+  assert.match(row, /Middle half of past awards: S\$162,500 to S\$387,500 \(median S\$275,000, 10 awards\)/);
+  assert.deepEqual((await db.query("SELECT terms FROM tender_desk.open_tenders WHERE tender_no='RPO000ETQ26000129'")).rows[0].terms, ['audit'], 'home stored the reading the free check uses');
+  const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
+  assert.match(check.text, /10 comparable awards|S\$275,000/);
+});
+
 test('home offers a brief only where one can be made, and links to an existing brief instead of selling it again', async () => {
   const b = await signedUpCustomer('Kale');
   await db.query("UPDATE tender_desk.open_tenders SET terms=ARRAY['qqqzzz'] WHERE tender_no='MOESCHETQ26006510'");
@@ -316,6 +327,10 @@ test('the terms note explains the most-specific rule, and a wide band carries a 
   await b.get('/');
   const check = await b.post('/check', { tender_no: 'MOESCHETQ26006510', terms: 'audit, zzzq' });
   assert.match(check.text, /Matched on "audit", the most specific of these terms with at least five past awards/);
+  // With too few awards there is no "matched on" claim to make.
+  const none = await b.post('/check', { tender_no: 'RPO000ETQ26000129', terms: 'qqqzzz' });
+  assert.doesNotMatch(none.text, /Matched on/);
+  assert.match(none.text, /No search terms found five past awards/);
   assert.doesNotMatch(check.text, /A rough guide only/, 'ten audit awards spanning about 2x are not thin');
   const { renderCheck } = await import('../src/customer-view.mjs');
   const wide = renderCheck({ tender: { tender_no: 'X1', title: 'T', agency: 'A' }, reading: { terms: ['t'] }, csrf: 'c',
@@ -459,6 +474,7 @@ test('a customer can edit their profile and add projects; new projects start unv
   assert.match(home.text, /Training for a hospital board/);
   const after = await b.get('/profile');
   assert.match(after.text, /value="9"/);
+  assert.match(after.text, /name="max_contract"[^>]*value="800,000"/, 'saved amounts come back with commas, like the assistant writes them');
 });
 
 test('a sample brief is public, labelled fictional, and linked from the landing page and checkout', async () => {
@@ -546,7 +562,11 @@ test('a no-bid report labels the price chart as context only', async () => {
 test('the report uses whole dollars, says when the awards date from, and how many panel awards were left out', async () => {
   const html = await reportFor({ recommendation: 'no-bid', excluded_panels: 3 });
   assert.doesNotMatch(html.replace(/<style[\s\S]*?<\/style>/g, ''), /S\$[\d,]+\.\d\d/);
-  assert.match(html, /Awarded between 2021 and 2025/);
+  assert.match(html, /These comparable awards date from 2021 to 2025\./);
+  // Shared awards make the winner counts add up to more than the awards: the report says so.
+  const shared = await reportFor({ recommendation: 'no-bid', n: 6, winners: [{ name: 'A Co', wins: 3 }, { name: 'B Co', wins: 2 }, { name: 'C Co', wins: 2 }] });
+  assert.match(shared, /Some awards went to more than one firm, so these counts add up to more than 6\./);
+  assert.doesNotMatch(await reportFor({ recommendation: 'no-bid', n: 6, winners: [{ name: 'A Co', wins: 3 }] }), /more than one firm/);
   assert.match(html, /3 panel awards \(one award shared by several firms\) were left out/);
 });
 
@@ -576,6 +596,9 @@ test('a new customer can paste their company text: the profile form comes back f
   assert.match(filled.text, /Fill the form again from text/);
   const none = await b.post('/profile/assist', { name: 'Nobody Known Pte Ltd' });
   assert.match(none.text, /<p class="banner note" role="status">No GeBIZ awards found/);
+  // Text read but no awards found: a neutral note that says what was done, never a green success box.
+  const readOnly = await b.post('/profile/assist', { name: 'Nobody Known Pte Ltd', text: 'We audit public bodies and schools.' });
+  assert.match(readOnly.text, /<p class="banner note" role="status">Filled the form from your text\. No GeBIZ awards found/);
   assert.match(filled.text, /value="Auditor 3 Pte Ltd"/);
   assert.match(filled.text, />Audits for public bodies and schools, run by chartered accountants\.</);
   assert.match(filled.text, /name="project_gebiz_0"[^>]*value="AUD-3"/);

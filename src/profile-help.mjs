@@ -3,7 +3,7 @@
 // it only fills the profile form, which the customer checks, edits and saves themselves.
 import { z } from 'zod';
 import { normaliseCompany } from './gebiz-check.mjs';
-import { categorize, tenderCategories } from './tender-data.mjs';
+import { categorize, tenderCategories, mentionsCategory } from './tender-data.mjs';
 
 export const maxProfileText = 6000;
 
@@ -44,14 +44,17 @@ export async function readProfile({ name, text } = {}, { llm, model } = {}) {
       user: JSON.stringify({ company: String(name ?? '').slice(0, 150), text: String(text ?? '').slice(0, maxProfileText) }) });
     const parsed = profileReadingSchema.safeParse(raw);
     if (!parsed.success) return { ok: false, reason: 'The AI reader could not read that text. Fill in the form yourself, or try pasting less.' };
-    return { ok: true, profile: { ...parsed.data, categories: [...new Set(parsed.data.categories)] } };
+    // The model is told to pick main services only, but does not always listen: a category is kept only when the text names
+    // that line of work, so "minor repairs for existing customers" never ticks construction.
+    const categories = [...new Set(parsed.data.categories)].filter((category) => mentionsCategory(category, text));
+    return { ok: true, profile: { ...parsed.data, categories } };
   } catch {
     return { ok: false, reason: 'The AI reader is busy right now, so only your GeBIZ awards were looked up.' };
   }
 }
 
 // Money in the form is written with thousands separators; the form parser accepts them.
-const dollars = (cents) => (cents / 100).toLocaleString('en-SG', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
+export const formDollars = (cents) => (cents / 100).toLocaleString('en-SG', { minimumFractionDigits: cents % 100 ? 2 : 0, maximumFractionDigits: 2 });
 const sameTitle = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
 // Form values for the profile page. GeBIZ awards come first because they can be checked and cited; projects from the
@@ -68,7 +71,7 @@ export function prefillValues({ reading, awards = [], slots = 6, listed = [] }) 
   if (categories.length) values.categories = categories;
   const fresh = awards.filter((award) => !listed.includes(award.gebiz_tender_no));
   const projects = [
-    ...fresh.map((a) => ({ title: a.title, agency: a.agency, value: dollars(a.value_cents), gebiz: a.gebiz_tender_no })),
+    ...fresh.map((a) => ({ title: a.title, agency: a.agency, value: formDollars(a.value_cents), gebiz: a.gebiz_tender_no })),
     ...(reading?.past_projects ?? []).filter((p) => !fresh.some((a) => sameTitle(a.title, p.title)))
       .map((p) => ({ title: p.title, agency: p.agency ?? '', value: p.value_sgd ? Math.round(p.value_sgd).toLocaleString('en-SG') : '', gebiz: '' })),
   ].slice(0, slots);

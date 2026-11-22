@@ -11,7 +11,7 @@ import { categorize, tenderCategories } from './tender-data.mjs';
 import { uenPattern } from './governance-agent.mjs';
 import { tooClose } from './governance.mjs';
 import { esc, plural } from './console-view.mjs';
-import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile } from './profile-help.mjs';
+import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile, formDollars } from './profile-help.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
 
 const maxBodyBytes = 256 * 1024;
@@ -91,7 +91,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     if (checks.size > 5000) checks.delete(checks.keys().next().value);
     return true;
   }
-  const tenderTerms = (row) => (row.terms?.length ? row.terms : keywordTerms(row.title).terms);
+  const homeReadBudgetMs = 6000;
 
   async function readFeedTender(row) {
     if (row.terms?.length) return { terms: row.terms, category: row.category };
@@ -207,16 +207,16 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const listed = (context?.projects ?? []).map((p) => p.gebiz_tender_no).filter(Boolean);
       const filled = prefillValues({ reading: read?.ok ? read.profile : undefined, awards, slots: context ? 3 : 6, listed });
       const found = awards.filter((a) => !listed.includes(a.gebiz_tender_no)).length;
-      const notes = [found ? `Found ${plural(found, 'GeBIZ award')} under "${name}".` : `No GeBIZ awards found under "${name}" (we match the exact registered name).`,
+      const notes = [read?.ok ? 'Filled the form from your text.' : '', found ? `Found ${plural(found, 'GeBIZ award')} under "${name}".` : `No GeBIZ awards found under "${name}" (we match the exact registered name).`,
         read && !read.ok ? read.reason : '', 'Check everything, then save.'].filter(Boolean).join(' ');
       const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
-        team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : { name, uen: String(form.get('uen') ?? '').trim() };
-      return html(200, renderProfile({ csrf, notice: notes, noticeKind: found || read?.ok ? 'ok' : 'note', values: { ...current, ...filled }, existing: context?.projects, company, pasted: text }));
+        team_size: String(context.client.team_size), max_contract: formDollars(context.client.max_contract_cents) } : { name, uen: String(form.get('uen') ?? '').trim() };
+      return html(200, renderProfile({ csrf, notice: notes, noticeKind: found ? 'ok' : 'note', values: { ...current, ...filled }, existing: context?.projects, company, pasted: text }));
     }
     if (path === '/profile') {
       const context = customer ? await customer.context() : undefined;
       const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
-        team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : {};
+        team_size: String(context.client.team_size), max_contract: formDollars(context.client.max_contract_cents) } : {};
       if (!post) return html(200, renderProfile({ csrf, values: current, existing: context?.projects, company }));
       const values = Object.fromEntries([...form.keys()].filter((k) => k !== 'csrf' && k !== 'categories').map((k) => [k, form.get(k)]));
       values.categories = form.getAll('categories');
@@ -243,8 +243,13 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const flash = cookieValue(cookieHeader, 'td_cflash') === 'saved' ? 'Profile saved.' : undefined;
       tenders.sort((a, b) => (a.closes_at ? new Date(a.closes_at).getTime() : Infinity) - (b.closes_at ? new Date(b.closes_at).getTime() : Infinity));
       const owned = new Map(context.requests.filter((r) => ['requested', 'drafted', 'approved'].includes(r.status)).map((r) => [r.tender_no, r.reference]));
+      // Home searches with the same reading of each tender as the free check and checkout (stored after the first read), so
+      // the three never disagree. Unread tenders are read now, in parallel within a short budget; any still unread show no figure.
+      const pause = (ms) => new Promise((resolve) => { setTimeout(resolve, ms); });
+      await Promise.all(tenders.filter((t) => !t.terms?.length).map((t) => Promise.race([
+        readFeedTender(t).then((reading) => { t.terms = reading.terms; }).catch(() => {}), pause(homeReadBudgetMs)])));
       const matches = tenders.map((tender) => {
-        const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category });
+        const check = tender.terms?.length ? priceCheck(dataset, { terms: tender.terms, category: tender.category }) : undefined;
         return { tender, check, ownRequest: owned.get(tender.tender_no), closesInDays: tender.closes_at ? Math.max(0, Math.ceil((new Date(tender.closes_at) - now()) / 86400000)) : undefined, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
       return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf, flash }), { cookies: flash ? [`td_cflash=; Max-Age=0; ${cookieFlags}`] : [] });
@@ -262,7 +267,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         tender = { pasted: true, title, agency: String(form.get('agency') ?? '').trim().slice(0, 250), text: String(form.get('text') ?? '').slice(0, maxTenderText) };
       }
       const typed = cleanTerms(String(params.get('terms') ?? ''));
-      const terms = typed.length ? typed : tender.pasted ? keywordTerms(`${tender.title} ${tender.text}`).terms : tenderTerms(tender);
+      const terms = typed.length ? typed : tender.pasted ? keywordTerms(`${tender.title} ${tender.text}`).terms : (await readFeedTender(tender)).terms;
       const requested = String(params.get('category') ?? '');
       const category = tenderCategories.includes(requested) ? requested : tender.pasted ? categorize(`${tender.title} ${tender.text}`) : tender.category;
       const allowed = await customer.canRequest(tender.pasted ? pastedTenderNo(tender) : tender.tender_no, { now: now() });

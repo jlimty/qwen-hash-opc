@@ -20,6 +20,11 @@ const liveRules = categoryRules.map(([category, pattern]) => (category === 'trai
 export function categorize(text) {
   return liveRules.find(([, pattern]) => pattern.test(String(text ?? '')))?.[0] ?? 'other';
 }
+// Whether text names a category's line of work at all ('other' has no words of its own, so it always passes).
+export function mentionsCategory(category, text) {
+  const rule = liveRules.find(([name]) => name === category);
+  return !rule || rule[1].test(String(text ?? ''));
+}
 export const tenderCategories = Object.freeze([...categoryRules.map(([category]) => category), 'other']);
 
 function parseDate(value, record) {

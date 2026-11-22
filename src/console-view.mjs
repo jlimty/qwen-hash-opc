@@ -5,7 +5,7 @@ const clock = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Singapore', yea
   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' });
 
-import { referenceCode } from './references.mjs';
+import { referenceCode, replyDueAt } from './references.mjs';
 import { isAdminActor, recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
 
 // Whole dollars unless there are cents to show, the same rule as everywhere else.
@@ -407,11 +407,15 @@ const requestStatus = { requested: ['Waiting for a draft', 'progress'], drafted:
 
 // Ask for more and Decline as two separate forms, each needing its own message; Decline also needs a confirmation tick,
 // because it frees the tender and returns the credit. Shared by the requests queue and the brief page.
-export function decisionForms({ csrf, requestId, declineAction, canAsk = true, declineLabel = 'Decline…' }) {
+export function decisionForms({ csrf, requestId, declineAction, canAsk = true, declineLabel = 'Decline…', closesAt, now = new Date() }) {
   const hiddenCsrf = `<input type="hidden" name="csrf" value="${esc(csrf)}">`;
+  const due = replyDueAt(now, closesAt);
+  const dueText = due <= now ? '<span class="muted small">The tender closes too soon to ask for more: approve or decline instead.</span>'
+    : `<span class="muted small">They have until ${esc(due.toLocaleDateString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Singapore' }))} to reply; after that the request closes itself and their credit is returned.</span>`;
   const ask = canAsk && requestId ? `<details class="decide ask"><summary>Ask the client for more…</summary><form class="decline" method="post" action="/actions/request/${esc(requestId)}/ask">${hiddenCsrf}
 <label for="ask-${esc(requestId)}">What should the client add? They keep the tender and resubmit for free.</label>
 <textarea id="ask-${esc(requestId)}" name="message" required maxlength="500" rows="2"></textarea>
+${dueText}
 <div><button type="submit">Send to the client</button></div></form></details>` : '';
   const id = `decline-${esc(requestId ?? 'brief')}`;
   return `${ask}<details class="decline"><summary>${esc(declineLabel)}</summary><form class="decline" method="post" action="${esc(declineAction)}">${hiddenCsrf}
@@ -432,7 +436,7 @@ export function renderRequests({ state, csrf, flash, rows, aiReady }) {
     const draftAction = !waiting ? '' : aiReady
       ? form(csrf, `/actions/request/${r.id}/draft`, r.last_error ? 'Redraft' : 'Draft', 'primary', '/requests')
       : '<span class="muted small">AI drafting is not configured (TD_OPENROUTER_KEY).</span>';
-    const decline = waiting || r.status === 'needs_info' ? `<div class="decisions">${decisionForms({ csrf, requestId: r.id, declineAction: `/actions/request/${r.id}/decline`, canAsk: waiting,
+    const decline = waiting || r.status === 'needs_info' ? `<div class="decisions">${decisionForms({ csrf, requestId: r.id, declineAction: `/actions/request/${r.id}/decline`, canAsk: waiting, closesAt: r.closes_at,
       declineLabel: r.status === 'needs_info' ? 'Decline (no reply)…' : 'Decline…' })}</div>` : '';
     const asked = r.status === 'needs_info' ? `<span class="muted">Asked the client for more ${esc(ago(r.updated_at))}: “${esc(r.info_request ?? '')}”</span>
 <span class="muted">Reply due ${esc(dayText(r.info_due_at))}; after that the request closes itself and the credit is returned.</span>` : '';

@@ -5,7 +5,7 @@ import { fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { profileGaps } from './profile-help.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
-import { referenceCode } from './references.mjs';
+import { referenceCode, replyDueAt } from './references.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { computeRiskFacts } from './brief-risk.mjs';
 import { bandPositions, checkDraft } from './brief-drafting.mjs';
@@ -589,7 +589,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           if (!request || !['requested', 'drafted'].includes(request.status)) return blocked('G5', 'Only a waiting or drafted request can be sent back to the client.');
           // Reply within five days, and at least two days before the tender closes, so a brief can still be written.
           const closes = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [request.tender_no])).rows[0]?.closes_at;
-          const due = new Date(Math.min(now.getTime() + 5 * 86400000, closes ? new Date(closes).getTime() - 2 * 86400000 : Infinity));
+          const due = replyDueAt(now, closes);
           if (due <= now) return blocked('G5', 'The tender closes too soon to ask the client for more. Approve or decline it instead.');
           if (request.brief_id) {
             await tx.query("UPDATE tender_desk.briefs SET status='declined', decline_reason='Set aside: more information was requested from the client.', decided_at=now() WHERE id=$1 AND status='pending_approval'", [request.brief_id]);

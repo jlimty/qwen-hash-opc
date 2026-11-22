@@ -107,9 +107,9 @@ function tenderList(tenders, csrf, { matches } = {}) {
   return `<ul class="tenders">${tenders.map((item) => {
     const tender = item.tender ?? item;
     const snap = item.check?.snapshot;
-    const summary = !item.check ? '' : item.check.status !== 'ready' ? 'Too few comparable awards for a price range'
+    const summary = !item.check ? (matches ? 'Run the free price check to see comparable awards' : '') : item.check.status !== 'ready' ? 'Too few comparable awards for a price range'
       : snap.thin ? `${thinLine(snap.n, (snap.comparables ?? []).map((c) => c.total_awarded_cents))} · a rough guide only`
-        : `Similar contracts were awarded ${wholeSgd(snap.price_band.low_cents)} to ${wholeSgd(snap.price_band.high_cents)} (median ${wholeSgd(snap.price_band.median_cents)}, ${plural(snap.n, 'award')})`;
+        : `Middle half of past awards: ${wholeSgd(snap.price_band.low_cents)} to ${wholeSgd(snap.price_band.high_cents)} (median ${wholeSgd(snap.price_band.median_cents)}, ${plural(snap.n, 'award')})`;
     const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
@@ -169,7 +169,7 @@ ${banner(notice, 'ok')}
 <section class="panel"><header><h2>What comparable contracts were awarded for</h2></header>${stats}${agencies}
 <form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
 <label for="terms">Search terms</label><input id="terms" name="terms" value="${esc(termsValue)}" maxlength="120">
-<span class="hint">Separate terms with commas. ${check.query_used ? `Matched on "${esc(check.query_used)}", the most specific of these terms with at least five past awards${check.snapshot.filters?.category ? ` (in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)})` : ''}. Awards under S$1,000 are left out: they are panel or nominal values, not prices.` : ''}</span>
+<span class="hint">Separate terms with commas. ${check.status !== 'ready' ? 'No search terms found five past awards. Try broader or different terms. ' : ''}${check.query_used && check.status === 'ready' ? `Matched on "${esc(check.query_used)}", the most specific of these terms with at least five past awards${check.snapshot.filters?.category ? ` (in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)})` : ''}. Awards under S$1,000 are left out: they are panel or nominal values, not prices.` : ''}</span>
 <div><button type="submit">Check again</button></div></form>
 ${rows ? `<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
 <p class="limits">${esc(priceLimits)}</p></section>
@@ -325,7 +325,7 @@ function renderReport(request, awards) {
 <p class="scorecard"><span class="chip done">${counts.met} met</span><span class="chip warning">${counts.partly_met} partly met</span><span class="chip danger">${counts.gap} gap</span></p>
 <ul class="reqs">${parts.requirements.map((r) => `<li><span><span class="chip ${statusChipFor[r.status][0]}">${statusChipFor[r.status][1]}</span></span><div>${esc(r.requirement)}<span class="evidence">${esc(r.evidence)}</span></div></li>`).join('')}</ul></section>` : '';
   const years = awards.map((a) => String(a.date ?? '').slice(0, 4)).filter((y) => /^\d{4}$/.test(y)).sort();
-  const span = years.length ? (years[0] === years.at(-1) ? `Awarded in ${years[0]}.` : `Awarded between ${years[0]} and ${years.at(-1)}.`) : '';
+  const span = years.length ? (years[0] === years.at(-1) ? `These comparable awards date from ${years[0]}.` : `These comparable awards date from ${years[0]} to ${years.at(-1)}.`) : '';
   const panels = Number(parts.excluded_panels ?? 0);
   const panelNote = panels ? ` ${plural(panels, 'panel award')} (one award shared by several firms) ${panels === 1 ? 'was' : 'were'} left out: their totals are not the price of one contract.` : '';
   const trips = Number(parts.excluded_trips ?? 0);
@@ -340,7 +340,7 @@ ${!bid ? '<header class="chart-head"><h2>Past awards, for context only</h2></hea
 <div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined, thin })}</div>
 ${!band ? '' : thin ? thinTile(parts.n, awards.map((a) => a.cents)) : quartileTiles(band, parts.n, `Comparable awards${parts.query_used ? ` for "${esc(parts.query_used)}"` : ''}`)}</section>
 <section class="panel"><header><h2>Why</h2></header>${list(parts.reasons)}</section>
-<div class="report-row"><section class="panel"><header><h2>Who usually wins</h2><span class="muted small">Most frequent winners of these awards</span></header><div class="chart-wrap">${winnersChart(parts.winners, parts.n) || '<p class="empty">No repeat winners.</p>'}</div></section>
+<div class="report-row"><section class="panel"><header><h2>Who usually wins</h2><span class="muted small">Most frequent winners of these awards</span></header><div class="chart-wrap">${winnersChart(parts.winners, parts.n) || '<p class="empty">No repeat winners.</p>'}</div>${(parts.winners ?? []).slice(0, 5).reduce((sum, w) => sum + Number(w.wins), 0) > Number(parts.n) ? `<p class="limits">Some awards went to more than one firm, so these counts add up to more than ${esc(String(parts.n))}.</p>` : ''}</section>
 <section class="panel"><header><h2>Awards per year</h2><span class="muted small">How steadily this work is bought</span></header><div class="chart-wrap">${yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) }))) || '<p class="empty">No dates.</p>'}</div></section></div>
 ${requirements}
 <div class="report-row"><section class="panel"><header><h2>Questions to ask the agency</h2></header>${list(parts.questions)}</section>

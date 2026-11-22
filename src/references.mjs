@@ -17,3 +17,8 @@ export function referenceLabel(prefix, n, subject = '') {
   const clean = String(subject ?? '').trim();
   return clean ? `${code} - ${clean}` : code;
 }
+
+// When a client must reply to "Ask for more": within five days, and at least two days before the tender closes.
+export function replyDueAt(now, closesAt) {
+  return new Date(Math.min(now.getTime() + 5 * 86400000, closesAt ? new Date(closesAt).getTime() - 2 * 86400000 : Infinity));
+}

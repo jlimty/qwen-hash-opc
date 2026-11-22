@@ -28,6 +28,10 @@ test('the winners chart labels each supplier with wins out of the total', () => 
   assert.equal((svg.match(/<rect class="bar"/g) ?? []).length, 2);
   assert.match(svg, />Alpha &lt;Pte&gt;</);
   assert.match(svg, />4 of 10</);
+  // Full names, never cut off: each name sits on its own line above its bar.
+  const long = winnersChart([{ name: 'VIVIDTHREE PRODUCTIONS PTE. LTD.', wins: 1 }], 6);
+  assert.match(long, />VIVIDTHREE PRODUCTIONS PTE\. LTD\.</);
+  assert.doesNotMatch(long, /…/);
 });
 
 test('the years chart counts awards per year, oldest first', () => {
@@ -74,4 +78,6 @@ test('the years chart keeps years with no awards, so gaps are visible', () => {
   const svg = yearsChart([{ year: '2021' }, { year: '2023' }]);
   assert.deepEqual([...svg.matchAll(/>(20\d\d)</g)].map((m) => m[1]), ['2021', '2022', '2023']);
   assert.match(svg, /<title>2022 · 0 awards<\/title>/);
+  // A year with no awards draws no bar, only its 0.
+  assert.equal((svg.match(/<rect class="bar"/g) ?? []).length, 2);
 });

@@ -168,7 +168,14 @@ test('the admin can approve and decline briefs, with a visible result and an aud
   const one = await pendingBrief('Brief one.');
   const two = await pendingBrief('Brief two.');
   const session = await login();
-  const approved = await act(session, `/actions/brief/${one.brief.brief_id}/approve`);
+  // A high-risk brief needs a tick before Approve goes through.
+  await db.query("UPDATE tender_desk.briefs SET risk_level='high' WHERE id=$1", [one.brief.brief_id]);
+  const page = (await open(session, `/briefs/${one.brief.brief_id}`)).text;
+  assert.match(page, /<input type="checkbox" name="confirm" value="yes" required> High risk: I have read the draft and the risk facts/);
+  const rushed = await act(session, `/actions/brief/${one.brief.brief_id}/approve`);
+  assert.equal(await status(one.brief.brief_id), 'pending_approval');
+  assert.match((await follow(session, rushed)).text, /This brief is high risk: tick the box to confirm the approval/);
+  const approved = await act(session, `/actions/brief/${one.brief.brief_id}/approve`, { confirm: 'yes' });
   assert.equal(approved.status, 303);
   assert.equal(approved.headers.location, `/briefs/${one.brief.brief_id}`);
   assert.equal(await status(one.brief.brief_id), 'approved');
@@ -194,7 +201,7 @@ test('a blocked approval is explained, not hidden', async () => {
   const brief = await pendingBrief('Cites a project.', true);
   await admin.verifyProject({ project_id: brief.a.projects[0].id, verified: false });
   const session = await login();
-  const blocked = await act(session, `/actions/brief/${brief.brief.brief_id}/approve`);
+  const blocked = await act(session, `/actions/brief/${brief.brief.brief_id}/approve`, { confirm: 'yes' });
   assert.equal(await status(brief.brief.brief_id), 'pending_approval');
   const page = await follow(session, blocked);
   assert.match(page.text, /Blocked · G3/);

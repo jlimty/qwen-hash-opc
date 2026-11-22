@@ -56,7 +56,7 @@ export function computeRiskFacts({ n, band, maxContractCents, content, citedCoun
   const low = Number(band.low_cents);
   const high = Number(band.high_cents);
   if (low <= 0) add('wide_band', 'Band is wide: the bottom is S$0.');
-  else if (high > riskThresholds.wideBandRatio * low) add('wide_band', `Band is wide: top is ${(high / low).toFixed(1)}× the bottom.`);
+  else if (high > riskThresholds.wideBandRatio * low) add('wide_band', `Band is wide: the upper quartile is ${(high / low).toFixed(1)}× the lower quartile.`);
   if (Number(band.median_cents) > Number(maxContractCents)) {
     add('above_ceiling', `Median ${formatSgd(band.median_cents)} is above the client's ${formatSgd(maxContractCents)} ceiling.`);
   }

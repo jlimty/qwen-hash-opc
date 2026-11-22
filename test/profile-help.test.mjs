@@ -25,14 +25,18 @@ const reading = { capabilities: 'Corporate events and community festivals with a
 
 test('readProfile turns pasted text into a draft profile, and says why when there is no model', async () => {
   let call;
-  const result = await readProfile({ name: 'Aster Events', text: 'We run events...' }, { llm: async (args) => { call = args; return reading; }, model: 'r' });
+  const result = await readProfile({ name: 'Aster Events', text: 'We run corporate events and community festivals...' }, { llm: async (args) => { call = args; return reading; }, model: 'r' });
   assert.equal(result.ok, true);
   assert.deepEqual(result.profile, reading);
   assert.match(call.system, /only what the text says/i);
-  assert.match(call.user, /We run events/);
+  assert.match(call.user, /We run corporate events/);
   assert.deepEqual(await readProfile({ name: 'x', text: 'y' }, {}), { ok: false, reason: 'The AI reader is not set up, so only your GeBIZ awards were looked up.' });
-  const twice = await readProfile({ name: 'x', text: 'y' }, { llm: async () => ({ ...reading, categories: ['events-community', 'events-community'] }), model: 'r' });
+  const twice = await readProfile({ name: 'x', text: 'Events and festivals.' }, { llm: async () => ({ ...reading, categories: ['events-community', 'events-community'] }), model: 'r' });
   assert.deepEqual(twice.profile.categories, ['events-community']);
+  // A category is kept only when the text names that line of work: "minor repairs" is not construction, whatever the model says.
+  const side = await readProfile({ name: 'x', text: 'Office and school cleaning, landscaping and pest control. We also handle minor repairs for existing customers.' },
+    { llm: async () => ({ ...reading, categories: ['cleaning-facilities', 'construction-renovation', 'other'] }), model: 'r' });
+  assert.deepEqual(side.profile.categories, ['cleaning-facilities', 'other']);
   const broken = await readProfile({ name: 'x', text: 'y' }, { llm: async () => ({ capabilities: 5 }), model: 'r' });
   assert.equal(broken.ok, false);
   assert.match(broken.reason, /could not read/);
