@@ -246,6 +246,9 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
           notice: 'Tick the box to confirm you want a brief on a tender outside your categories, then pay again.' }));
       }
       const result = await customer.requestBrief(input, { now: now() });
+      if (result.outcome === 'allowed' && !result.reason?.startsWith('This request already exists')) {
+        return redirect(`/requests/${result.request_reference}`, { cookies: [`td_paid=${result.request_reference}; ${cookieFlags}; Max-Age=600`] });
+      }
       if (result.outcome === 'allowed' || result.request_reference) return redirect(`/requests/${result.request_reference}`);
       const tender = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
       return html(409, renderCheckout({ tender, company, csrf, refusal: result.reason, terms }));
@@ -256,7 +259,8 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const ref = parseReference(requestRoute[1]);
       const mine = ref?.prefix === 'REQ' ? (await customer.context()).requests.find((r) => r.reference === requestRoute[1]) : undefined;
       if (!mine) return html(404, layout({ title: 'Not found', csrf, company, body: '<p class="banner bad">That request was not found.</p><p><a href="/home">Back to home</a></p>' }));
-      return html(200, renderRequest({ request: mine, company, csrf }));
+      const justPaid = cookieValue(cookieHeader, 'td_paid') === mine.reference;
+      return html(200, renderRequest({ request: mine, company, csrf, justPaid }), { cookies: justPaid ? [`td_paid=; Max-Age=0; ${cookieFlags}`] : [] });
     }
     return html(404, layout({ title: 'Not found', csrf, company, body: '<p class="banner bad">That page was not found.</p><p><a href="/">Open tenders</a></p>' }));
   };

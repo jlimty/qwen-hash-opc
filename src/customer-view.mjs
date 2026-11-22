@@ -36,6 +36,10 @@ export const assistantCss = `
 .tenders .meta{display:block;font-size:.8125rem;color:var(--muted);overflow-wrap:anywhere}
 .testmode{border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:.6rem .9rem;font-weight:600}
 .narrow{max-width:30rem}
+.steps{display:flex;gap:.5rem;list-style:none;padding:0;margin:0;flex-wrap:wrap}
+.steps li{flex:1;min-width:8rem;padding:.55rem .8rem;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-weight:600;font-size:.875rem}
+.steps li.done{border-color:#A9D3BA;background:var(--ok-bg);color:var(--ok)}
+.steps li.current{border-color:var(--accent);background:var(--tint);color:var(--accent-dark)}
 .inset-banner{margin:.75rem 1rem 0}
 .tick{display:flex;gap:.5rem;align-items:flex-start;font-weight:500}
 .inset{padding:.75rem 1rem 0}
@@ -182,6 +186,7 @@ export function renderProfile({ csrf, message, values = {} }) {
 
 const statusText = { requested: 'In review: usually within one business day', drafted: 'In review: usually within one business day', approved: 'Brief ready',
   declined: 'Declined', cancelled: 'Cancelled' };
+const chipText = { requested: 'In review', drafted: 'In review', approved: 'Brief ready', declined: 'Declined', cancelled: 'Cancelled' };
 const statusChip = { requested: 'progress', drafted: 'progress', approved: 'done', declined: 'danger', cancelled: '' };
 
 export function renderHome({ context, matches, refreshedAt, csrf, flash }) {
@@ -192,7 +197,7 @@ ${p.verified ? '<span class="chip done">Checked</span>' : '<span class="chip war
 ${projects.some((p) => !p.verified) ? '<p class="note">Unverified: we check these against GeBIZ before a brief can cite them.</p>' : ''}`
     : '<p class="empty">No past projects yet.</p>';
   const requestRows = requests.length ? `<ul class="feed">${requests.map((r) => `<li><div class="line"><a href="/requests/${esc(r.reference)}"><strong>${esc(r.title)}</strong></a>
-<span class="chip ${statusChip[r.status]}">${esc(statusText[r.status])}</span></div><span class="meta">${esc(r.reference)} · ${esc(r.agency ?? '')}</span></li>`).join('')}</ul>`
+<span class="chip ${statusChip[r.status]}">${esc(chipText[r.status])}</span></div><span class="meta">${esc(r.reference)} · ${esc(r.agency ?? '')}</span></li>`).join('')}</ul>`
     : '<p class="empty">No briefs yet. Ask for one on any open tender.</p>';
   return layout({ title: 'Home', csrf, company: client.name, body: `${banner(flash, 'ok')}<div><h1>Good ${greeting()}, ${esc(client.name)}</h1>
 <p class="sub">Open tenders in your categories, with what similar contracts were awarded for.</p></div>
@@ -221,7 +226,7 @@ ${outside ? `<p class="banner">This tender is outside the categories in your pro
 <p><a href="/home">Back to home</a></p>` });
 }
 
-export function renderRequest({ request, company, csrf, notice }) {
+export function renderRequest({ request, company, csrf, justPaid }) {
   const band = request.price_band;
   const priceRow = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award</span></div>
 <div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
@@ -233,8 +238,12 @@ ${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards fo
 ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recommendation', 'Comparable awards', 'Limits'] })}</div>
 <p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`
     : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><p class="form">${esc(request.decline_reason ?? '')}</p></section>`
-      : `<p class="banner">${esc(statusText[request.status])}</p>`;
+      : `<p class="banner">${esc(statusText[request.status])}. Your brief will appear on this page and on your home page.</p>`;
+  const stage = { requested: 1, drafted: 1, approved: 2 }[request.status];
+  const steps = stage === undefined ? '' : `<ol class="steps">${['Paid', 'In review', 'Brief ready'].map((label, at) =>
+    `<li class="${at < stage ? 'done' : at === stage ? 'current' : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
+  const paidBanner = justPaid ? `<p class="banner ok" role="status">Payment received (test mode) · S$99.00 · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>
 <p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · closes ${esc(day(request.closes_at))}` : ''}</p></div>
-${body}<p><a href="/home">Back to home</a></p>` });
+${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
 }

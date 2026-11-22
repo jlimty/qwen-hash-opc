@@ -350,3 +350,25 @@ test('an approved brief reads as a document: verdict block, price row, no Markdo
   assert.match(page.text, /<h3>Why<\/h3>/);
   assert.doesNotMatch(page.text, /<h3>Comparable awards<\/h3>/);
 });
+
+test('after paying, the request page confirms the payment once and shows where the brief is', async () => {
+  const b = await signedUpCustomer('Nutmeg');
+  const pasted = { title: 'Audit certification for a polytechnic board', agency: 'Agency A', text: '', terms: 'audit' };
+  await b.post('/checkout/start', pasted);
+  const paid = await b.post('/checkout', pasted);
+  const ref = paid.location.split('/').pop();
+  const first = await b.get(paid.location.slice(base.length));
+  assert.match(first.text, new RegExp(`Payment received \\(test mode\\) · S\\$99\\.00 · ${ref}`));
+  assert.match(first.text, /class="steps"[\s\S]*Paid[\s\S]*In review[\s\S]*Brief ready/);
+  assert.match(first.text, /aria-current="step"[^>]*>In review/);
+  const again = await b.get(paid.location.slice(base.length));
+  assert.doesNotMatch(again.text, /Payment received/, 'the confirmation shows once');
+  assert.match(again.text, /class="steps"/);
+});
+
+test('home status chips use short labels that fit the card', async () => {
+  const { renderHome } = await import('../src/customer-view.mjs');
+  const html = renderHome({ csrf: 'c', matches: [], refreshedAt: null,
+    context: { client: { name: 'C' }, projects: [], requests: [{ reference: 'REQ00009', title: 'T', agency: 'A', status: 'requested' }] } });
+  assert.match(html, /<span class="chip progress">In review<\/span>/);
+});
