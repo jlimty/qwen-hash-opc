@@ -420,7 +420,7 @@ ${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
   const body = `<section class="panel"><header><h2>Requests</h2><span class="muted small">${plural(rows.filter((r) => r.status === 'requested').length, 'waiting request')}</span></header>
 ${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty"><strong>No brief requests yet.</strong>Paid requests from customers appear here.</p>'}</section>`;
   return renderShell({ state, csrf, active: 'requests', title: 'Brief requests', flash,
-    sub: 'Customers paid (in test mode) for a reviewed brief. Draft it with AI, then approve or decline the brief. A request you decline frees the tender.', body });
+    sub: 'Customers spent a credit on a reviewed brief. Draft it with AI, edit or approve it, or decline it: a decline frees the tender and returns the credit.', body });
 }
 
 // Notes the admin's AI reviewer left: shown as suggestions, never as decisions.

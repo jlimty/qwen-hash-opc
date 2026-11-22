@@ -51,14 +51,15 @@ export function priceChart({ awards, band, suggested }) {
 // Who won the comparable awards most often: one bar per supplier, share of all comparable awards.
 export function winnersChart(winners, n) {
   if (!winners?.length || !n) return '';
-  const rowH = 30; const labelW = 230; const barMax = W - labelW - 90;
+  // Drawn narrower than the price chart: it sits in a half-width column, and a narrower viewBox keeps the labels readable.
+  const width = 420; const rowH = 30; const labelW = 170; const barMax = width - labelW - 60;
   const rows = winners.slice(0, 5).map((w, i) => {
     const y = i * rowH + 8; const width = Math.max(4, (w.wins / n) * barMax);
-    return `<text class="label" x="${labelW - 8}" y="${y + 15}" text-anchor="end">${esc(w.name.length > 34 ? `${w.name.slice(0, 33)}…` : w.name)}</text>
+    return `<text class="label" x="${labelW - 8}" y="${y + 15}" text-anchor="end">${esc(w.name.length > 24 ? `${w.name.slice(0, 23)}…` : w.name)}</text>
 <rect class="bar" x="${labelW}" y="${y + 3}" width="${width.toFixed(1)}" height="16" rx="4"><title>${esc(w.name)} · won ${w.wins} of ${n}</title></rect>
 <text class="tick" x="${(labelW + width + 8).toFixed(1)}" y="${y + 15}">${w.wins} of ${n}</text>`;
   });
-  return `<svg class="chart" viewBox="0 0 ${W} ${winners.slice(0, 5).length * rowH + 12}" role="img" aria-label="${esc(`Most frequent winners of ${n} comparable awards`)}">${rows.join('')}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${width} ${winners.slice(0, 5).length * rowH + 12}" role="img" aria-label="${esc(`Most frequent winners of ${n} comparable awards`)}">${rows.join('')}</svg>`;
 }
 
 // How many comparable awards there were each year: shows whether this kind of work is bought steadily.
@@ -67,14 +68,14 @@ export function yearsChart(awards) {
   for (const award of awards ?? []) if (award.year) counts.set(award.year, (counts.get(award.year) ?? 0) + 1);
   if (!counts.size) return '';
   const years = [...counts.keys()].sort();
-  const max = Math.max(...counts.values()); const plotH = 70; const step = Math.min(90, (W - 40) / years.length); const barW = step * 0.6;
+  const max = Math.max(...counts.values()); const plotH = 70; const step = Math.min(70, 380 / years.length); const barW = step * 0.6;
   const bars = years.map((year, i) => {
     const h = Math.max(3, (counts.get(year) / max) * plotH); const x = 20 + i * step;
     return `<rect class="bar" x="${x.toFixed(1)}" y="${(plotH - h + 18).toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4"><title>${year} · ${counts.get(year)} award${counts.get(year) === 1 ? '' : 's'}</title></rect>
 <text class="tick" x="${(x + barW / 2).toFixed(1)}" y="${(plotH - h + 12).toFixed(1)}" text-anchor="middle">${counts.get(year)}</text>
 <text class="label" x="${(x + barW / 2).toFixed(1)}" y="${plotH + 34}" text-anchor="middle">${year}</text>`;
   });
-  return `<svg class="chart" viewBox="0 0 ${Math.max(W / 2, 40 + years.length * step)} ${plotH + 40}" role="img" aria-label="Comparable awards per year">${bars.join('')}</svg>`;
+  return `<svg class="chart" viewBox="0 0 ${Math.max(300, 40 + years.length * step)} ${plotH + 40}" role="img" aria-label="Comparable awards per year">${bars.join('')}</svg>`;
 }
 
 export const chartCss = `
