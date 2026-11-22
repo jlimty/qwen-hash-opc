@@ -61,7 +61,7 @@ test('the requests queue lists a paid request with its test payment', async () =
   const page = await consoleWith({ llm, models: { draft: 'd' } }).login();
   assert.equal(page.status, 200);
   assert.match(page.text, new RegExp(request.request_reference));
-  assert.match(page.text, /Test payment · S\$99\.00/);
+  assert.match(page.text, /1 credit/);
   assert.match(page.text, />Draft</);
   assert.match(page.text, /Brief requests/);
 });

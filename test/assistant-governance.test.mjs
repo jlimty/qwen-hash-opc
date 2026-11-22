@@ -42,8 +42,8 @@ async function openTender({ closes = '2026-12-04T13:00:00+08:00' } = {}) {
   return tender_no;
 }
 const ask = (who, tender_no) => who.ops.requestBrief({ tender_no, terms: ['event management'] }, { now });
-const payments = async (client_id) => (await db.query(`SELECT p.* FROM tender_desk.payments p JOIN tender_desk.brief_requests r ON r.id=p.request_id
-  WHERE r.client_id=$1`, [client_id])).rows;
+const payments = async (client_id) => (await db.query("SELECT * FROM tender_desk.credit_ledger WHERE client_id=$1 AND reason='brief'", [client_id])).rows;
+const balance = async (client_id) => Number((await db.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
 const draft = (prepared, overrides = {}) => ({ recommendation: 'bid', content: 'Bid: the scope fits the team.',
   credentials_cited: prepared.verifiedProjects.map((project) => project.id), ...overrides });
 
@@ -61,22 +61,22 @@ test('customer() rejects an unknown user', async () => {
   await assert.rejects(desk.customer('user-unknown-0001'), /Unauthorized/);
 });
 
-test('requestBrief takes the hold and records a test payment of 9900', async () => {
+test('requestBrief takes the hold and spends one credit', async () => {
   const a = await customer('Birch');
   const tender_no = await openTender();
   assert.deepEqual(await a.ops.canRequest(tender_no, { now }), { ok: true });
   const result = await ask(a, tender_no);
   assert.equal(result.outcome, 'allowed');
   assert.match(result.request_reference, /^REQ\d{5}$/);
-  assert.equal(result.payment_status, 'test');
-  const [payment] = await payments(a.client_id);
-  assert.equal(Number(payment.amount_cents), 9900);
-  assert.equal(payment.status, 'test');
+  assert.equal(result.credits_spent, 1);
+  const [spend] = await payments(a.client_id);
+  assert.equal(spend.delta, -1);
+  assert.equal(await balance(a.client_id), 0, 'the welcome credit was spent');
   const hold = (await db.query('SELECT client_id FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0];
   assert.equal(hold.client_id, a.client_id);
   const audit = (await db.query("SELECT * FROM tender_desk.audit_log WHERE action='request_brief' ORDER BY id DESC LIMIT 1")).rows[0];
   assert.equal(audit.tender_no, tender_no);
-  assert.equal(audit.summary.payment_status, 'test');
+  assert.equal(audit.summary.credits_spent, 1);
 });
 
 test('a second customer is refused before checkout without learning the holder', async () => {
@@ -186,7 +186,7 @@ test('saveDraft enforces verified citations and leaves the request open with the
   await admin.recordDraftFailure({ request_id: requested.request_id, reason: 'The model was unavailable. Try Redraft.' });
   const listed = (await admin.listBriefRequests({ now })).find((request) => request.id === requested.request_id);
   assert.equal(listed.last_error, 'The model was unavailable. Try Redraft.');
-  assert.equal(listed.payment_status, 'test');
+  assert.equal(listed.credits_spent, 1);
   assert.equal(listed.client_name, a.name);
   assert.equal(listed.closed, false);
 });
@@ -227,4 +227,40 @@ test('an open conflict on a tender whose hold was released resolves instead of c
   const resolved = await admin.resolveConflict({ conflict_id: rows[0].id, resolution: 'serve_holder' });
   assert.equal(resolved.outcome, 'allowed');
   assert.equal((await db.query('SELECT status FROM tender_desk.conflicts WHERE id=$1', [rows[0].id])).rows[0].status, 'resolved');
+});
+
+test('a new customer starts with one free credit, and a request without credits is refused', async () => {
+  const a = await customer('Olive');
+  assert.equal((await a.ops.credits()).balance, 1);
+  await ask(a, await openTender());
+  const broke = await ask(a, await openTender());
+  assert.equal(broke.outcome, 'blocked');
+  assert.equal(broke.rule_id, 'CREDITS');
+  assert.match(broke.reason, /Not enough credits/);
+});
+
+test('buying a pack adds its credits in test mode, and only listed packs can be bought', async () => {
+  const a = await customer('Peach');
+  const credits = await a.ops.credits();
+  assert.deepEqual(credits.packs, [{ credits: 5, cents: 4950 }, { credits: 20, cents: 17900 }, { credits: 50, cents: 39900 }]);
+  assert.equal(credits.perBrief, 1);
+  const bought = await a.ops.buyCredits({ credits: 5 });
+  assert.equal(bought.outcome, 'allowed');
+  assert.equal((await a.ops.credits()).balance, 6);
+  const purchase = (await db.query('SELECT * FROM tender_desk.credit_purchases WHERE client_id=$1', [a.client_id])).rows[0];
+  assert.equal(purchase.status, 'test');
+  assert.equal(Number(purchase.amount_cents), 4950);
+  assert.equal((await a.ops.buyCredits({ credits: 7 })).outcome, 'blocked');
+  assert.deepEqual((await a.ops.credits()).history.map((h) => h.reason), ['purchase', 'welcome']);
+});
+
+test('a declined or cancelled request gives its credit back', async () => {
+  const a = await customer('Quince2');
+  const first = await ask(a, await openTender());
+  await admin.declineRequest({ request_id: first.request_id, reason: 'Not a fit.' });
+  assert.equal(await balance(a.client_id), 1);
+  const second = await ask(a, await openTender());
+  await a.ops.cancelRequest({ request_id: second.request_id });
+  assert.equal(await balance(a.client_id), 1);
+  assert.deepEqual((await a.ops.credits()).history.slice(0, 2).map((h) => h.reason), ['refund', 'brief']);
 });

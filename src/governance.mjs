@@ -9,7 +9,7 @@ import { crossCheckProject } from './gebiz-check.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
-const briefPriceCents = 9900;
+
 const refusal = 'Tender Desk already advises a client on this tender.';
 const short = (max) => z.string().trim().min(1).max(max).refine((value) => !value.includes('\u0000'), 'NUL characters are not allowed.');
 const requestSchema = z.strictObject({
@@ -21,6 +21,21 @@ const requestSchema = z.strictObject({
 const requestIdSchema = z.strictObject({ request_id: z.uuid() });
 const draftInputSchema = z.strictObject({ request_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), content: short(20000),
   credentials_cited: z.array(z.uuid()).max(30).default([]) });
+// Credit settings live in tender_desk.settings so the admin can reprice without a deploy.
+export async function creditSettings(tx) {
+  const rows = Object.fromEntries((await tx.query("SELECT key,value FROM tender_desk.settings WHERE key IN ('credit_price_cents','credits_per_brief','welcome_credits','credit_packs')")).rows.map((r) => [r.key, r.value]));
+  const packs = String(rows.credit_packs ?? '').split(',').map((pack) => pack.split(':').map(Number))
+    .filter(([credits, cents]) => Number.isInteger(credits) && credits > 0 && Number.isInteger(cents) && cents > 0).map(([credits, cents]) => ({ credits, cents }));
+  return { priceCents: Number(rows.credit_price_cents ?? 990), perBrief: Number(rows.credits_per_brief ?? 1), welcome: Number(rows.welcome_credits ?? 0), packs };
+}
+const creditBalance = async (tx, client_id) => Number((await tx.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
+// Give back whatever a request spent (credits, never cash): used when a request is declined or cancelled.
+async function refundRequest(tx, request) {
+  const spent = -Number((await tx.query("SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE request_id=$1 AND reason IN ('brief','refund')", [request.id])).rows[0].n);
+  if (spent > 0) await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason,request_id) VALUES ($1,$2,'refund',$3)", [request.client_id, spent, request.id]);
+  return spent;
+}
+
 // Release a tender's advice slot when no advice was given to its holder (a declined or cancelled request).
 async function releaseHold(tx, tender_no, client_id) {
   const approved = (await tx.query("SELECT 1 FROM tender_desk.briefs WHERE tender_no=$1 AND client_id=$2 AND status='approved' LIMIT 1", [tender_no, client_id])).rows.length;
@@ -55,7 +70,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
-    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason', 'project_reference', 'check_result', 'note', 'request_id', 'request_reference', 'payment_status']) {
+    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason', 'project_reference', 'check_result', 'note', 'request_id', 'request_reference', 'payment_status', 'credits_spent', 'credits_bought', 'amount_cents']) {
       if (result[key]) summary[key] = result[key];
     }
     await tx.query(`INSERT INTO tender_desk.audit_log (actor,action,client_id,tender_no,outcome,rule_id,reason,summary)
@@ -124,13 +139,17 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const existing = (await tx.query(`SELECT r.id, r.reference_number FROM tender_desk.brief_requests r
       WHERE r.client_id=$1 AND r.tender_no=$2 AND r.status IN ('requested','drafted')`, [client_id, tender.tender_no])).rows[0];
     if (existing) return { outcome: 'allowed', request_id: existing.id, request_reference: referenceCode('REQ', existing.reference_number),
-      payment_status: 'test', tender_no: tender.tender_no, reason: 'This request already exists; no second payment was taken.' };
+      credits_spent: 0, tender_no: tender.tender_no, reason: 'This request already exists; no second credit was spent.' };
     const allowed = await requestable(tx, client_id, tender.tender_no, now);
     if (allowed.reason === 'closed') return { ...blocked('VALIDATION', 'This tender has closed.'), tender_no: tender.tender_no };
     if (allowed.reason === 'approved') return { ...blocked('G5', 'You already have an approved brief on this tender.'), tender_no: tender.tender_no, request_reference: allowed.request_reference };
     if (!allowed.ok) return { ...blocked('G2', refusal), tender_no: tender.tender_no };
     const check = priceCheck(dataset, { terms: input.terms, category: input.category ?? tender.category });
     if (check.status !== 'ready') return { ...blocked('G4', 'At least five comparable awards are needed for a brief. Try broader terms.'), tender_no: tender.tender_no };
+    // Lock the client so two requests at once can't spend the same credit.
+    await tx.query('SELECT id FROM tender_desk.clients WHERE id=$1 FOR UPDATE', [client_id]);
+    const { perBrief } = await creditSettings(tx);
+    if (await creditBalance(tx, client_id) < perBrief) return { ...blocked('CREDITS', `Not enough credits: a reviewed brief needs ${perBrief}. Buy credits to continue.`), tender_no: tender.tender_no };
     await tx.query(`INSERT INTO tender_desk.stats_snapshots (client_id,tender_no,stat_id,snapshot) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
       [client_id, tender.tender_no, check.snapshot.stat_id, JSON.stringify(check.snapshot)]);
     await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [tender.tender_no, client_id]);
@@ -140,9 +159,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const { rows } = await tx.query(`INSERT INTO tender_desk.brief_requests (client_id,tender_no,source,title,agency,pasted_text,terms,stat_id,status)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'requested') RETURNING id, reference_number`,
     [client_id, tender.tender_no, tender.source, tender.title, tender.agency, tender.pasted_text, terms, check.snapshot.stat_id]);
-    await tx.query("INSERT INTO tender_desk.payments (request_id,amount_cents,status) VALUES ($1,$2,'test')", [rows[0].id, briefPriceCents]);
-    return { outcome: 'allowed', request_id: rows[0].id, request_reference: referenceCode('REQ', rows[0].reference_number), payment_status: 'test',
-      tender_no: tender.tender_no, reason: 'Brief requested; test payment recorded.' };
+    await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason,request_id) VALUES ($1,$2,'brief',$3)", [client_id, -perBrief, rows[0].id]);
+    return { outcome: 'allowed', request_id: rows[0].id, request_reference: referenceCode('REQ', rows[0].reference_number), credits_spent: perBrief,
+      tender_no: tender.tender_no, reason: `Brief requested; ${perBrief} credit${perBrief === 1 ? '' : 's'} spent.` };
   }
   async function customerContext(tx, client_id) {
     const client = (await tx.query('SELECT id,name,capabilities,categories,team_size,max_contract_cents,reference_number FROM tender_desk.clients WHERE id=$1', [client_id])).rows[0];
@@ -174,7 +193,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(userId)) return record(tx, actor, 'register_customer', blocked('G1', 'Sign in again to continue.'));
         if (await customerClient(tx, userId)) return record(tx, actor, 'register_customer', blocked('G1', 'This account already has a company profile.'));
         const created = await createClient(tx, checked.input);
-        if (created.outcome === 'allowed') await tx.query('INSERT INTO tender_desk.customers (user_id,client_id) VALUES ($1,$2)', [userId, created.client_id]);
+        if (created.outcome === 'allowed') {
+          await tx.query('INSERT INTO tender_desk.customers (user_id,client_id) VALUES ($1,$2)', [userId, created.client_id]);
+          const { welcome } = await creditSettings(tx);
+          if (welcome > 0) await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason) VALUES ($1,$2,'welcome')", [created.client_id, welcome]);
+        }
         return record(tx, created.client_id ? { name: `customer:${created.client_id}`, client_id: created.client_id } : actor, 'register_customer', created);
       });
     },
@@ -193,11 +216,26 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         context: () => database.transaction((tx) => customerContext(tx, client_id)),
         canRequest: (tender_no, { now = new Date() } = {}) => database.transaction((tx) => requestable(tx, client_id, String(tender_no ?? ''), now)),
         requestBrief: operation('request_brief', requestSchema, (tx, input, now) => requestBrief(tx, client_id, input, now)),
+        credits: () => database.transaction(async (tx) => {
+          const settings = await creditSettings(tx);
+          const history = (await tx.query(`SELECT l.delta,l.reason,l.created_at,r.reference_number,r.title FROM tender_desk.credit_ledger l
+            LEFT JOIN tender_desk.brief_requests r ON r.id=l.request_id WHERE l.client_id=$1 ORDER BY l.id DESC LIMIT 50`, [client_id])).rows
+            .map((h) => ({ delta: h.delta, reason: h.reason, created_at: h.created_at, title: h.title ?? null, reference: h.reference_number ? referenceCode('REQ', h.reference_number) : null }));
+          return { balance: await creditBalance(tx, client_id), perBrief: settings.perBrief, priceCents: settings.priceCents, packs: settings.packs, history };
+        }),
+        buyCredits: operation('buy_credits', z.strictObject({ credits: z.number().int().positive().max(1000) }), async (tx, input) => {
+          const pack = (await creditSettings(tx)).packs.find((p) => p.credits === input.credits);
+          if (!pack) return blocked('VALIDATION', 'That credit pack is not on offer.');
+          const { rows } = await tx.query("INSERT INTO tender_desk.credit_purchases (client_id,credits,amount_cents,status) VALUES ($1,$2,$3,'test') RETURNING id", [client_id, pack.credits, pack.cents]);
+          await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason,purchase_id) VALUES ($1,$2,'purchase',$3)", [client_id, pack.credits, rows[0].id]);
+          return { outcome: 'allowed', credits_bought: pack.credits, amount_cents: pack.cents, reason: `Bought ${pack.credits} credits (test mode).` };
+        }),
         cancelRequest: operation('cancel_request', requestIdSchema, async (tx, input) => {
           const request = (await tx.query('SELECT * FROM tender_desk.brief_requests WHERE id=$1 AND client_id=$2 FOR UPDATE', [input.request_id, client_id])).rows[0];
           if (!request || request.status !== 'requested') return blocked('G5', 'Only a request that is still waiting can be cancelled.');
           await tx.query("UPDATE tender_desk.brief_requests SET status='cancelled', updated_at=now() WHERE id=$1", [request.id]);
           await releaseHold(tx, request.tender_no, client_id);
+          await refundRequest(tx, request);
           return { outcome: 'allowed', request_id: request.id, request_reference: referenceCode('REQ', request.reference_number), tender_no: request.tender_no };
         }),
       });
@@ -285,7 +323,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const decline_reason = input.decision === 'declined' ? input.reason : null;
           await tx.query('UPDATE tender_desk.briefs SET status=$1, decided_at=now(), decline_reason=$2 WHERE id=$3', [input.decision, decline_reason, brief.id]);
           await tx.query('UPDATE tender_desk.brief_requests SET status=$1, decline_reason=$2, updated_at=now() WHERE brief_id=$3', [input.decision, decline_reason, brief.id]);
-          if (input.decision === 'declined') await releaseHold(tx, brief.tender_no, brief.client_id);
+          if (input.decision === 'declined') {
+            await releaseHold(tx, brief.tender_no, brief.client_id);
+            const request = (await tx.query('SELECT id,client_id FROM tender_desk.brief_requests WHERE brief_id=$1', [brief.id])).rows[0];
+            if (request) await refundRequest(tx, request);
+          }
           return { outcome: input.decision, status: input.decision, brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number),
             client_id: brief.client_id, tender_no: brief.tender_no, ...(decline_reason && { decline_reason }) };
         }),
@@ -313,7 +355,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             reason: 'Revealed one backtest outcome.' };
         }),
         listBriefRequests: ({ now = new Date() } = {}) => database.transaction(async (tx) => (await tx.query(`SELECT r.*, c.name AS client_name,
-            c.reference_number AS client_reference_number, p.status AS payment_status, p.amount_cents, o.closes_at
+            c.reference_number AS client_reference_number, p.status AS payment_status, p.amount_cents, o.closes_at,
+            (SELECT -COALESCE(sum(l.delta),0) FROM tender_desk.credit_ledger l WHERE l.request_id=r.id AND l.reason='brief')::int AS credits_spent
           FROM tender_desk.brief_requests r JOIN tender_desk.clients c ON c.id=r.client_id
           LEFT JOIN tender_desk.payments p ON p.request_id=r.id LEFT JOIN tender_desk.open_tenders o ON o.tender_no=r.tender_no
           ORDER BY (r.status IN ('requested','drafted')) DESC, r.created_at, r.reference_number`)).rows
@@ -365,6 +408,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           if (!request || request.status !== 'requested') return blocked('G5', 'Only a waiting request can be declined here; decline a drafted brief from its brief page.');
           await tx.query("UPDATE tender_desk.brief_requests SET status='declined', decline_reason=$1, updated_at=now() WHERE id=$2", [input.reason, request.id]);
           await releaseHold(tx, request.tender_no, request.client_id);
+          await refundRequest(tx, request);
           return { outcome: 'declined', request_id: request.id, request_reference: referenceCode('REQ', request.reference_number), client_id: request.client_id,
             tender_no: request.tender_no, decline_reason: input.reason };
         }),

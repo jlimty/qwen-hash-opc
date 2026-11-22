@@ -408,7 +408,7 @@ export function renderRequests({ state, csrf, flash, rows, aiReady }) {
 <div><button type="submit">Decline</button></div></form>` : '';
     return `<li><div><span class="num">${esc(r.reference)}</span><br>${r.closed ? '<span class="chip danger">Closed</span>' : ''}</div>
 <div><strong>${esc(r.title)}</strong><span class="muted">${esc(r.client_name)} · ${esc(r.agency ?? '')} · <span class="num">${esc(r.tender_no)}</span></span>
-<span class="muted">${r.payment_status === 'test' ? 'Test payment' : esc(r.payment_status ?? 'No payment')} · ${money(r.amount_cents ?? 0)} · requested ${esc(ago(r.created_at))}</span>
+<span class="muted">${r.credits_spent ? `${r.credits_spent} credit${r.credits_spent === 1 ? '' : 's'}` : r.payment_status === 'test' ? `Test payment · ${money(r.amount_cents ?? 0)}` : 'No charge'} · requested ${esc(ago(r.created_at))}</span>
 ${r.last_error ? `<span class="muted">Last draft failed: ${esc(r.last_error)}</span>` : ''}
 ${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
 <div class="row-actions"><span class="chip ${chip}">${esc(label)}</span>${draftAction}</div></li>`;

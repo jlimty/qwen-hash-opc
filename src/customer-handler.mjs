@@ -3,7 +3,7 @@
 // page's CSRF token, matched against a cookie scoped to this app.
 import { randomBytes } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { assistantCss, layout, renderCheck, renderCheckout, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
+import { assistantCss, creditWord, layout, renderCheck, renderCheckout, renderCredits, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
 import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mjs';
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
@@ -104,7 +104,10 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     const existingCsrf = cookieValue(cookieHeader, 'td_ccsrf');
     const csrf = /^[a-f0-9]{64}$/.test(existingCsrf ?? '') ? existingCsrf : randomBytes(32).toString('hex');
     const baseCookies = csrf === existingCsrf ? [] : [`td_ccsrf=${csrf}; ${cookieFlags}; Max-Age=${sessionSeconds}`];
-    const html = (status, body, { cookies = [], headers } = {}) => respond(status, 'text/html; charset=utf-8', withBase(body), { cookies: [...baseCookies, ...cookies], headers });
+    let balance;
+    const html = (status, body, { cookies = [], headers } = {}) => respond(status, 'text/html; charset=utf-8',
+      withBase(body.replace('<!--credits-->', balance === undefined ? '' : `<a class="credit-pill" href="/credits">${creditWord(balance)}</a>`)),
+      { cookies: [...baseCookies, ...cookies], headers });
     const redirect = (location, { cookies = [] } = {}) => respond(303, 'text/plain', null, { headers: { Location: `${basePath}${location}` }, cookies: [...baseCookies, ...cookies] });
 
     const rawSession = cookieValue(cookieHeader, 'td_customer');
@@ -113,6 +116,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     let customer;
     if (userId) { try { customer = await desk.customer(userId); } catch { customer = undefined; } }
     const company = customer ? (await customer.context()).client.name : undefined;
+    if (customer) balance = (await customer.credits()).balance;
     const sessionCookie = (session) => `td_customer=${encodeURIComponent(session)}; ${cookieFlags}; Max-Age=${sessionSeconds}`;
 
     let form;
@@ -229,7 +233,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
       const noChecked = !(await customer.context()).projects.some((project) => project.verified);
       const outside = !(await customer.context()).client.categories.includes(category);
-      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside }));
+      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, credits: await customer.credits() }));
     }
     if (path === '/checkout' && post) {
       const tenderNo = String(form.get('tender_no') ?? '').trim();
@@ -242,7 +246,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const tenderCategory = category.category ?? (tenderNo ? (await getOpenTender(database, tenderNo))?.category : categorize(`${input.pasted.title} ${input.pasted.text ?? ''}`));
       if (!(await customer.context()).client.categories.includes(tenderCategory) && form.get('confirm_outside') !== 'yes') {
         const shown = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
-        return html(409, renderCheckout({ tender: shown, company, csrf, terms, category: tenderCategory, outside: true,
+        return html(409, renderCheckout({ tender: shown, company, csrf, terms, category: tenderCategory, outside: true, credits: await customer.credits(),
           notice: 'Tick the box to confirm you want a brief on a tender outside your categories, then pay again.' }));
       }
       const result = await customer.requestBrief(input, { now: now() });
@@ -252,6 +256,13 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       if (result.outcome === 'allowed' || result.request_reference) return redirect(`/requests/${result.request_reference}`);
       const tender = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
       return html(409, renderCheckout({ tender, company, csrf, refusal: result.reason, terms }));
+    }
+
+    if (path === '/credits' && !post) return html(200, renderCredits({ company, csrf, credits: await customer.credits() }));
+    if (path === '/credits/buy' && post) {
+      const result = await customer.buyCredits({ credits: Number(form.get('credits')) });
+      if (result.outcome !== 'allowed') return html(400, renderCredits({ company, csrf, credits: await customer.credits(), notice: result.reason }));
+      return redirect('/credits');
     }
 
     const requestRoute = /^\/requests\/([^/]+)$/.exec(path);

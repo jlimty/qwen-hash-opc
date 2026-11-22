@@ -36,6 +36,8 @@ export const assistantCss = `
 .tenders .meta{display:block;font-size:.8125rem;color:var(--muted);overflow-wrap:anywhere}
 .testmode{border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:.6rem .9rem;font-weight:600}
 .narrow{max-width:30rem}
+.plus{color:var(--ok);font-weight:650}.minus{color:var(--muted);font-weight:650}
+.credit-pill{font-weight:600;color:var(--accent-dark)}
 .steps{display:flex;gap:.5rem;list-style:none;padding:0;margin:0;flex-wrap:wrap}
 .steps li{flex:1;min-width:8rem;padding:.55rem .8rem;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-weight:600;font-size:.875rem}
 .steps li.done{border-color:#A9D3BA;background:var(--ok-bg);color:var(--ok)}
@@ -67,7 +69,7 @@ const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value=
 
 export function layout({ title, csrf, company, body }) {
   const nav = company
-    ? `<a href="/home">Home</a><a href="/">Open tenders</a><form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
+    ? `<a href="/home">Home</a><a href="/">Open tenders</a><!--credits--><form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
     : '<a href="/">Open tenders</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -91,7 +93,7 @@ function tenderList(tenders, csrf, { matches } = {}) {
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
 ${!matches ? '' : item.taken ? '<span class="muted small">Not available: Tender Desk already advises a client on this tender.</span>' : item.ownRequest ? `<a class="btn outline" href="/requests/${esc(item.ownRequest)}">View your brief</a>`
-    : item.check?.status === 'ready' ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Reviewed brief · S$99</a>` : ''}</div></li>`;
+    : item.check?.status === 'ready' ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Reviewed brief · 1 credit</a>` : ''}</div></li>`;
   }).join('')}</ul>`;
 }
 
@@ -129,9 +131,9 @@ ${check.snapshot.top_suppliers?.length ? ` The most frequent winner took ${esc(p
   const next = refusal ? banner(refusal, 'bad') : !band
     ? '<p>A reviewed brief needs at least five comparable awards. Try other search terms above first.</p>'
     : company
-      ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?${esc(checkoutQuery)}">Ask for a reviewed brief · S$99</a>`
-        : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · S$99</button></form>`)
-      : '<a class="btn primary" href="/signup">Create an account for a reviewed brief · S$99</a>';
+      ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?${esc(checkoutQuery)}">Ask for a reviewed brief · 1 credit</a>`
+        : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · 1 credit</button></form>`)
+      : '<a class="btn primary" href="/signup">Create an account: your first reviewed brief is free</a>';
   return layout({ title: 'Price check', csrf, company, body: `<div><p class="eyebrow">Free price check</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.tender_no && !tender.pasted ? ` · <span class="num">${esc(tender.tender_no)}</span>` : ''}${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}</p></div>
 ${banner(notice, 'ok')}
@@ -210,20 +212,39 @@ function greeting() {
   return hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
 }
 
-export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice }) {
+export const creditWord = (n) => `${n} credit${Number(n) === 1 ? '' : 's'}`;
+
+export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice, credits }) {
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
+  const perBrief = credits?.perBrief ?? 1;
+  const short = credits && credits.balance < perBrief;
   return layout({ title: 'Checkout', csrf, company, body: `<div><p class="eyebrow">Reviewed brief</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.pasted ? '' : ` · <span class="num">${esc(tender.tender_no)}</span>`}</p></div>
-${refusal ? banner(refusal) : `${banner(notice)}<p class="testmode" role="note">Test mode: no card is charged</p>
+${refusal ? banner(refusal) : `${banner(notice)}
 ${noChecked ? '<p class="banner">None of your projects has been checked yet, so this brief cannot cite your track record. You can go ahead now, or wait until we have checked your projects against GeBIZ.</p>' : ''}
-<section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, with a price position against comparable awards</dd></div>
-<div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Amount</dt><dd class="num">S$99.00</dd></div>
-<div><dt>When</dt><dd>Usually within one business day, after a person reviews it</dd></div></dl>
-<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
-${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the S$99 is not refunded for that.</p>
+<section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range, who usually wins, a requirements check and questions to ask</dd></div>
+<div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
+<div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div></dl>
+${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
+    : `<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
+${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the credit is not returned for that.</p>
 <label class="tick"><input type="checkbox" name="confirm_outside" value="yes" required> I understand and still want a brief on this tender</label>` : ''}
-<div><button class="primary" type="submit">Pay S$99 (test mode)</button></div></form></section>`}
+<div><button class="primary" type="submit">Use ${creditWord(perBrief)}</button></div></form>`}</section>`}
 <p><a href="/home">Back to home</a></p>` });
+}
+
+const reasonText = { welcome: 'Welcome credit', purchase: 'Bought credits', brief: 'Reviewed brief', refund: 'Credit returned', adjustment: 'Adjustment' };
+export function renderCredits({ company, csrf, credits, notice }) {
+  const sgd = (cents) => `S$${(cents / 100).toFixed(2)}`;
+  const packs = credits.packs.map((pack) => `<li><div><strong>${creditWord(pack.credits)}</strong><span class="meta">${sgd(pack.cents)} · ${sgd(Math.round(pack.cents / pack.credits))} a credit</span></div>
+<div class="row-actions"><form method="post" action="/credits/buy">${hidden('csrf', csrf)}${hidden('credits', pack.credits)}<button class="primary" type="submit">Buy ${pack.credits}</button></form></div></li>`).join('');
+  const history = credits.history.length ? `<ul class="feed">${credits.history.map((h) => `<li><div class="line"><strong>${esc(h.reason === 'purchase' ? `Bought ${creditWord(h.delta)}` : reasonText[h.reason] ?? h.reason)}</strong>
+<span class="num ${h.delta > 0 ? 'plus' : 'minus'}">${h.delta > 0 ? '+' : ''}${h.delta}</span></div><span class="meta">${esc(day(h.created_at))}${h.reference ? ` · ${esc(h.reference)} · ${esc(h.title ?? '')}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No credit activity yet.</p>';
+  return layout({ title: 'Credits', csrf, company, body: `${banner(notice, 'ok')}<div><h1>You have ${creditWord(credits.balance)}</h1>
+<p class="sub">A reviewed brief uses ${creditWord(credits.perBrief)}. Credits don't expire, and a declined request gives its credit back.</p></div>
+<p class="testmode" role="note">Test mode: no card is charged</p>
+<div class="grid"><section class="panel"><header><h2>Buy credits</h2></header><ul class="tenders">${packs}</ul></section>
+<section class="panel"><header><h2>History</h2></header>${history}</section></div>` });
 }
 
 export function renderRequest({ request, company, csrf, justPaid }) {
@@ -242,7 +263,7 @@ ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recom
   const stage = { requested: 1, drafted: 1, approved: 2 }[request.status];
   const steps = stage === undefined ? '' : `<ol class="steps">${['Paid', 'In review', 'Brief ready'].map((label, at) =>
     `<li class="${at < stage ? 'done' : at === stage ? 'current' : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
-  const paidBanner = justPaid ? `<p class="banner ok" role="status">Payment received (test mode) · S$99.00 · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
+  const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>
 <p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · closes ${esc(day(request.closes_at))}` : ''}</p></div>
 ${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });

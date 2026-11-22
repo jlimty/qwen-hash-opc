@@ -152,13 +152,12 @@ test('sign up, profile, and home shows projects with their verification state', 
   assert.equal((await b.get('/')).location, `${base}/home`);
 });
 
-test('checkout shows the test-mode banner, and paying twice creates one request', async () => {
+test('checkout spends one credit, and paying twice creates one request', async () => {
   const b = await signedUpCustomer('Birch');
   const checkout = await b.get('/checkout?tender=RPO000ETQ26000129');
   assert.equal(checkout.status, 200);
-  assert.match(checkout.text, /Test mode: no card is charged/);
-  assert.match(checkout.text, /S\$99\.00/);
-  assert.match(checkout.text, /Pay S\$99 \(test mode\)/);
+  assert.match(checkout.text, /Uses 1 credit · you have 1/);
+  assert.match(checkout.text, /Use 1 credit/);
   const paid = await b.post('/checkout', { tender_no: 'RPO000ETQ26000129', terms: 'audit' });
   assert.equal(paid.status, 303);
   assert.match(paid.location, new RegExp(`^${base}/requests/REQ\\d{5}$`));
@@ -166,7 +165,7 @@ test('checkout shows the test-mode banner, and paying twice creates one request'
   assert.equal(again.location, paid.location);
   const request = await b.get(paid.location.slice(base.length));
   assert.match(request.text, /In review: usually within one business day/);
-  const { rows } = await db.query("SELECT count(*)::int AS n FROM tender_desk.payments p JOIN tender_desk.brief_requests r ON r.id=p.request_id WHERE r.tender_no='RPO000ETQ26000129'");
+  const { rows } = await db.query("SELECT count(*)::int AS n FROM tender_desk.credit_ledger l JOIN tender_desk.brief_requests r ON r.id=l.request_id WHERE r.tender_no='RPO000ETQ26000129' AND l.reason='brief'");
   assert.equal(rows[0].n, 1);
 });
 
@@ -174,7 +173,7 @@ test('a second customer sees the refusal and no pay button', async () => {
   const b = await signedUpCustomer('Cedar');
   const checkout = await b.get('/checkout?tender=RPO000ETQ26000129');
   assert.match(checkout.text, /Tender Desk already advises a client on this tender\./);
-  assert.doesNotMatch(checkout.text, /Pay S\$99/);
+  assert.doesNotMatch(checkout.text, /Use 1 credit/);
   assert.doesNotMatch(checkout.text, /Birch/);
 });
 
@@ -182,7 +181,7 @@ test('a pasted tender goes through checkout too', async () => {
   const b = await signedUpCustomer('Dahlia');
   const start = await b.post('/checkout/start', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management' });
   assert.equal(start.status, 200);
-  assert.match(start.text, /Pay S\$99 \(test mode\)/);
+  assert.match(start.text, /Use 1 credit/);
   const paid = await b.post('/checkout', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management', confirm_outside: 'yes' });
   assert.equal(paid.status, 303);
 });
@@ -216,7 +215,7 @@ test('a too-few check does not offer a brief, and checkout with such terms hides
   assert.doesNotMatch(thin.text, /Ask for a reviewed brief/);
   assert.match(thin.text, /A reviewed brief needs at least five comparable awards/);
   const checkout = await b.get('/checkout?tender=MOESCHETQ26006510&terms=qqqzzz');
-  assert.doesNotMatch(checkout.text, /Pay S\$99/);
+  assert.doesNotMatch(checkout.text, /Use 1 credit/);
   assert.match(checkout.text, /A reviewed brief needs at least five comparable awards/);
 });
 
@@ -231,7 +230,7 @@ test('edited terms carry into checkout, and the brief is priced on the band the 
   const seen = await b.post('/check', { ...pasted, terms: 'event management' });
   const median = /<span class="big">(S\$[\d,.]+)<\/span><span class="label">Median award/.exec(seen.text)?.[1];
   const start = await b.post('/checkout/start', { ...pasted, terms: 'event management', category: 'other' });
-  assert.match(start.text, /Pay S\$99/);
+  assert.match(start.text, /Use 1 credit/);
   const paid = await b.post('/checkout', { ...pasted, terms: 'event management', category: 'other' });
   assert.equal(paid.status, 303);
   const row = (await db.query("SELECT s.snapshot FROM tender_desk.brief_requests r JOIN tender_desk.stats_snapshots s ON s.stat_id=r.stat_id AND s.client_id=r.client_id WHERE r.title=$1", [pasted.title])).rows[0];
@@ -255,7 +254,7 @@ test('checkout tells a customer with no checked projects what a brief can cite',
   await b.post('/profile', { name: `Nocheck ${randomBytes(3).toString('hex')}`, capabilities: 'Audit.', categories: 'other', team_size: '2', max_contract: '100000', project_title_0: 'Unchecked audit' });
   const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
   assert.match(start.text, /None of your projects has been checked yet/);
-  assert.match(start.text, /Pay S\$99/);
+  assert.match(start.text, /Use 1 credit/);
 });
 
 test('after a brief is approved, checkout for the same tender opens that brief instead of charging again', async () => {
@@ -358,7 +357,7 @@ test('after paying, the request page confirms the payment once and shows where t
   const paid = await b.post('/checkout', pasted);
   const ref = paid.location.split('/').pop();
   const first = await b.get(paid.location.slice(base.length));
-  assert.match(first.text, new RegExp(`Payment received \\(test mode\\) · S\\$99\\.00 · ${ref}`));
+  assert.match(first.text, new RegExp(`1 credit spent · ${ref}`));
   assert.match(first.text, /class="steps"[\s\S]*Paid[\s\S]*In review[\s\S]*Brief ready/);
   assert.match(first.text, /aria-current="step"[^>]*>In review/);
   const again = await b.get(paid.location.slice(base.length));
@@ -371,4 +370,30 @@ test('home status chips use short labels that fit the card', async () => {
   const html = renderHome({ csrf: 'c', matches: [], refreshedAt: null,
     context: { client: { name: 'C' }, projects: [], requests: [{ reference: 'REQ00009', title: 'T', agency: 'A', status: 'requested' }] } });
   assert.match(html, /<span class="chip progress">In review<\/span>/);
+});
+
+test('the credits page shows the balance, sells packs in test mode, and keeps a history', async () => {
+  const b = await signedUpCustomer('Olive2');
+  const home = await b.get('/home');
+  assert.match(home.text, /1 credit/);
+  const page = await b.get('/credits');
+  assert.match(page.text, /You have 1 credit/);
+  assert.match(page.text, /Test mode: no card is charged/);
+  assert.match(page.text, /5 credits[\s\S]*S\$49\.50/);
+  const bought = await b.post('/credits/buy', { credits: '5' });
+  assert.equal(bought.status, 303);
+  const after = await b.get('/credits');
+  assert.match(after.text, /You have 6 credits/);
+  assert.match(after.text, /Bought 5 credits/);
+  assert.match(after.text, /Welcome credit/);
+});
+
+test('with no credits left, checkout offers to buy credits instead of spending', async () => {
+  const b = await signedUpCustomer('Plum');
+  const pasted = { title: 'Audit certification for a statutory board', agency: 'Agency A', text: '', terms: 'audit' };
+  await b.post('/checkout/start', pasted);
+  await b.post('/checkout', pasted);
+  const second = await b.post('/checkout/start', { ...pasted, title: 'Audit certification for a town council' });
+  assert.doesNotMatch(second.text, /Use 1 credit/);
+  assert.match(second.text, /href="[^"]*\/credits"[^>]*>Buy credits/);
 });
