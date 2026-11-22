@@ -44,6 +44,13 @@ function brief(context, pricing, overrides = {}) {
     recommendation: 'bid', content: 'Assess staffing and delivery capacity before bidding.', credentials_cited: [], ...overrides };
 }
 
+test('audit keeps a live GeBIZ tender number that is not in the dataset', async () => {
+  const result = await founder.revealBacktest({ tender_no: 'RPO000ETQ26000129' });
+  assert.equal(result.outcome, 'blocked');
+  const { rows } = await db.query('SELECT tender_no FROM tender_desk.audit_log ORDER BY id DESC LIMIT 1');
+  assert.equal(rows[0].tender_no, 'RPO000ETQ26000129');
+});
+
 test('client identity comes from the credential, never a caller-selected client_id', async () => {
   const c = await setup();
   const result = await c.agentA.invoke('get_client_context', {});

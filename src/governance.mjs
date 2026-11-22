@@ -24,6 +24,8 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
   const workflows = agentWorkflows(dataset, connector ? { connector } : {});
   const tenderNumbers = new Set(dataset.contracts.map((contract) => contract.tender_no));
   const backtest = precomputed ?? buildBacktest(dataset);
+  // Dataset tenders, live GeBIZ numbers and PASTED-<hash> ids are kept in the audit log; anything else is dropped.
+  const keepTender = (value) => typeof value === 'string' && (tenderNumbers.has(value) || /^[A-Za-z0-9][A-Za-z0-9-]{2,99}$/.test(value));
   const revealSchema = z.union([z.strictObject({ tender_no: z.string().max(100) }), z.strictObject({ all: z.literal(true) })]);
   async function revealedTenders(tx) {
     const { rows } = await tx.query(`SELECT tender_no, summary->>'scope' AS scope FROM tender_desk.audit_log
@@ -34,12 +36,12 @@ export function createTenderDesk({ database, dataset, founderToken, backtest: pr
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
-    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason', 'project_reference', 'check_result', 'note']) {
+    for (const key of ['brief_id', 'conflict_id', 'project_id', 'credential_id', 'stat_id', 'attempts', 'scope', 'revealed_count', 'client_reference', 'brief_reference', 'decline_reason', 'project_reference', 'check_result', 'note', 'request_id', 'request_reference', 'payment_status']) {
       if (result[key]) summary[key] = result[key];
     }
     await tx.query(`INSERT INTO tender_desk.audit_log (actor,action,client_id,tender_no,outcome,rule_id,reason,summary)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`, [actor.name, action, actor.client_id ?? result.client_id ?? null,
-      tenderNumbers.has(tender_no) ? tender_no : null, result.outcome, result.rule_id ?? null,
+      keepTender(tender_no) ? tender_no : null, result.outcome, result.rule_id ?? null,
       result.reason ?? 'Operation completed.', JSON.stringify(summary)]);
     return result;
   }

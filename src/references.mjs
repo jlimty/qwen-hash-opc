@@ -1,7 +1,7 @@
 // Every record carries a short reference the admin can read out loud:
-// CLI00003 (client), PRJ00007 (project), BRF00012 (brief), CON00002 (conflict), AUD00042 (audit entry).
-export const referencePrefixes = Object.freeze(['CLI', 'PRJ', 'BRF', 'CON', 'AUD']);
-const pattern = /^(CLI|PRJ|BRF|CON|AUD)(\d{5,})$/;
+// CLI00003 (client), PRJ00007 (project), BRF00012 (brief), CON00002 (conflict), AUD00042 (audit entry), REQ00004 (brief request).
+export const referencePrefixes = Object.freeze(['CLI', 'PRJ', 'BRF', 'CON', 'AUD', 'REQ']);
+const pattern = /^(CLI|PRJ|BRF|CON|AUD|REQ)(\d{5,})$/;
 
 export function referenceCode(prefix, n) {
   return `${prefix}${String(n).padStart(5, '0')}`;

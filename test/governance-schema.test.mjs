@@ -37,7 +37,21 @@ test('initializer does not execute DDL when every migration is already applied',
     async query() { queries++; return { rows: [{ present: true }] }; },
     async exec() { assert.fail('Existing databases must not rerun a migration'); },
   });
-  assert.equal(queries, 2);
+  assert.equal(queries, 3);
+});
+
+test('003 adds the assistant tables and keeps 001-002 data', async () => {
+  const database = new PGlite();
+  try {
+    await database.exec(await readFile(migrationUrl, 'utf8'));
+    await database.exec(await readFile(new URL('../db/002-journey.sql', import.meta.url), 'utf8'));
+    await insert(database, 'clients', clientValues('Early Events'));
+    await initializeGovernance(database);
+    const { rows } = await database.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='tender_desk'
+      AND table_name = ANY($1::text[]) ORDER BY table_name`, [['brief_requests', 'customers', 'feed_state', 'open_tenders', 'payments']]);
+    assert.deepEqual(rows.map((row) => row.table_name), ['brief_requests', 'customers', 'feed_state', 'open_tenders', 'payments']);
+    assert.equal((await database.query('SELECT count(*)::int AS n FROM tender_desk.clients')).rows[0].n, 1);
+  } finally { await database.close(); }
 });
 
 test('002 backfills reference numbers on rows created before it', async () => {
@@ -75,7 +89,7 @@ describe('PostgreSQL governance schema', () => {
   });
 
   test('initializes twice without rerunning DDL or losing data', async () => {
-    assert.equal(migrationExecutions, 2);
+    assert.equal(migrationExecutions, 3);
     await initializeGovernance({
       query: (...args) => database.query(...args),
       exec: () => assert.fail('Second initialization must not execute DDL'),
@@ -98,6 +112,11 @@ describe('PostgreSQL governance schema', () => {
       briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text',
       conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz reference_number:int8',
       audit_log: 'id:int8 ts:timestamptz actor:text action:text client_id:uuid tender_no:text outcome:text rule_id:text reason:text summary:jsonb',
+      open_tenders: 'tender_no:text title:text agency:text published_on:date closes_at:timestamptz gebiz_url:text source_feed:text category:text terms:_text first_seen:timestamptz last_seen:timestamptz',
+      feed_state: 'id:int4 refreshed_at:timestamptz',
+      customers: 'user_id:text client_id:uuid created_at:timestamptz',
+      brief_requests: 'id:uuid reference_number:int8 client_id:uuid tender_no:text source:text title:text agency:text pasted_text:text terms:_text stat_id:text status:text brief_id:uuid last_error:text created_at:timestamptz updated_at:timestamptz',
+      payments: 'id:uuid request_id:uuid amount_cents:int8 currency:text status:text created_at:timestamptz',
     };
     const { rows } = await database.query(`
       SELECT table_name, column_name, udt_name FROM information_schema.columns
@@ -127,7 +146,16 @@ describe('PostgreSQL governance schema', () => {
       clients: 'id', projects: 'id', agent_credentials: 'id', pricing_holds: 'tender_no',
       stats_snapshots: 'client_id,tender_no,stat_id', shortlists: 'client_id,tender_no',
       briefs: 'id', conflicts: 'id', audit_log: 'id',
+      open_tenders: 'tender_no', feed_state: 'id', customers: 'user_id', brief_requests: 'id', payments: 'id',
     });
+  });
+
+  test('one active brief request per client and tender', async () => {
+    const values = { client_id: clientA.id, tender_no: 'RPO000ETQ26000129', source: 'feed', title: 'Audit services',
+      terms: ['audit'], stat_id: `stat_${'a'.repeat(64)}`, status: 'requested' };
+    await insert(database, 'brief_requests', values);
+    await rejectsCode(insert(database, 'brief_requests', values), '23505');
+    await insert(database, 'brief_requests', { ...values, status: 'declined' });
   });
 
   test('revokes PUBLIC access to its schema, tables, functions, and sequences', async () => {
