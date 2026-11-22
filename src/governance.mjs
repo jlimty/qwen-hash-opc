@@ -33,10 +33,13 @@ export async function creditSettings(tx) {
   const packs = String(rows.credit_packs ?? '').split(',').map((pack) => pack.split(':').map(Number))
     .filter(([credits, cents]) => Number.isInteger(credits) && credits >= 1 && credits <= 1000 && Number.isInteger(cents) && cents >= 1 && cents <= 100000000)
     .map(([credits, cents]) => ({ credits, cents }));
-  return { priceCents: whole(rows.credit_price_cents, 1, 100000000, 2900), perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
-    welcome: whole(rows.welcome_credits, 0, 1000, 1), packs };
+  const priceCents = whole(rows.credit_price_cents, 1, 100000000, 2900);
+  // One credit at the list price is always on sale, so the advertised price is one a customer can actually pay.
+  return { priceCents, perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
+    welcome: whole(rows.welcome_credits, 0, 1000, 1), packs: [{ credits: 1, cents: priceCents }, ...packs.filter((pack) => pack.credits !== 1)] };
 }
 export const holdDaysWithoutClosing = 45;
+export const tooClose = "This tender closes too soon for a reviewed brief: we need at least two days to review it.";
 const creditBalance = async (tx, client_id) => Number((await tx.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
 // Give back whatever a request spent (credits, never cash): used when a request is declined or cancelled.
 async function refundRequest(tx, request) {
@@ -262,6 +265,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     if (approved) return { ok: false, reason: 'approved', request_reference: referenceCode('REQ', approved.reference_number) };
     const open = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [tender_no])).rows[0];
     if (open?.closes_at && new Date(open.closes_at) <= now) return { ok: false, reason: 'closed' };
+    // Review takes up to a business day, and an ask-for-more round needs more: under two days left is too late.
+    if (open?.closes_at && new Date(open.closes_at).getTime() - now.getTime() < 2 * 86400000) return { ok: false, reason: 'too_close' };
     const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1 AND (expires_at IS NULL OR expires_at > $2)', [tender_no, now])).rows[0];
     if (hold && (hold.state !== 'held' || hold.client_id !== client_id)) return { ok: false, reason: 'held', message: refusal };
     return { ok: true };
@@ -287,6 +292,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       credits_spent: 0, tender_no: tender.tender_no, reason: 'This request already exists; no second credit was spent.' };
     const allowed = await requestable(tx, client_id, tender.tender_no, now);
     if (allowed.reason === 'closed') return { ...blocked('VALIDATION', 'This tender has closed.'), tender_no: tender.tender_no };
+    if (allowed.reason === 'too_close') return { ...blocked('VALIDATION', tooClose), tender_no: tender.tender_no };
     if (allowed.reason === 'approved') return { ...blocked('G5', 'You already have an approved brief on this tender.'), tender_no: tender.tender_no, request_reference: allowed.request_reference };
     if (!allowed.ok) return { ...blocked('G2', refusal), tender_no: tender.tender_no };
     const check = priceCheck(dataset, { terms: input.terms, category: input.category ?? tender.category });

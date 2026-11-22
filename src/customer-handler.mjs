@@ -9,6 +9,7 @@ import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.
 import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { uenPattern } from './governance-agent.mjs';
+import { tooClose } from './governance.mjs';
 import { esc, plural } from './console-view.mjs';
 import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile } from './profile-help.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
@@ -165,6 +166,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         const allowed = await customer.canRequest(tender.pasted ? pastedTenderNo(tender) : tender.tender_no, { now: now() });
         if (allowed.reason === 'held') refusal = allowed.message;
         if (allowed.reason === 'closed') refusal = 'This tender has closed.';
+        if (allowed.reason === 'too_close') refusal = tooClose;
       }
       return html(200, renderCheck({ tender, reading, check, csrf, company, notice, refusal }));
     }
@@ -266,7 +268,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const allowed = await customer.canRequest(tender.pasted ? pastedTenderNo(tender) : tender.tender_no, { now: now() });
       if (allowed.reason === 'active' || allowed.reason === 'approved') return redirect(`/requests/${allowed.request_reference}`);
       const thin = priceCheck(dataset, { terms, category }).status !== 'ready';
-      const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.'
+      const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.' : allowed.reason === 'too_close' ? tooClose
         : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
       const profile = await customer.context();
       const gaps = profileGaps({ client: profile.client, projects: profile.projects, terms });

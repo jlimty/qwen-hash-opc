@@ -105,7 +105,7 @@ test('decline needs a reason and frees the tender', async () => {
 });
 
 test('a closed tender shows the closed badge', async () => {
-  const request = await paidRequest({ closes: '2026-11-21T13:00:00+08:00' });
+  const request = await paidRequest({ closes: '2026-11-22T01:00:00Z' });
   const page = await consoleWith({ llm, models: { draft: 'd' } }).login();
   const row = page.text.slice(page.text.indexOf(request.request_reference));
   assert.match(row.slice(0, 1500), /Closed/);

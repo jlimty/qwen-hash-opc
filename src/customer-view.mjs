@@ -271,7 +271,7 @@ ${gaps.length ? `<section class="panel"><header><h2>Before you spend a credit</h
 <ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
 <div><a class="btn outline" href="/profile">Improve your profile</a> <span class="muted small">or go ahead below.</span></div></div></section>` : ''}
 <section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range when there are enough comparable awards, who usually wins, a requirements check and questions to ask</dd></div>
-<div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
+${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
 <div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div>
 <div><dt>Example</dt><dd><a href="/sample">See a sample brief</a></dd></div></dl>
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
@@ -287,7 +287,10 @@ ${outside ? `<p class="banner">This tender is outside the categories in your pro
 const reasonText = { welcome: 'Welcome credit', purchase: 'Bought credits', brief: 'Reviewed brief', refund: 'Credit returned', adjustment: 'Adjustment' };
 export function renderCredits({ company, csrf, credits, notice, noticeKind = 'bad' }) {
   const sgd = formatSgd;
-  const packs = credits.packs.map((pack) => `<li><div><strong>${creditWord(pack.credits)}</strong><span class="meta">${sgd(pack.cents)} · ${sgd(Math.round(pack.cents / pack.credits))} a credit</span></div>
+  const list = credits.packs.find((p) => p.credits === 1)?.cents;
+  const saving = (pack) => (list && pack.credits > 1 ? Math.round((1 - pack.cents / (pack.credits * list)) * 100) : 0);
+  const packs = credits.packs.map((pack) => `<li><div><strong>${creditWord(pack.credits)}</strong><span class="meta">${pack.credits === 1 ? sgd(pack.cents)
+    : `${sgd(pack.cents)} · ${sgd(Math.round(pack.cents / pack.credits))} a credit${saving(pack) > 0 ? ` · save ${saving(pack)}%` : ''}`}</span></div>
 <div class="row-actions"><form method="post" action="/credits/buy">${hidden('csrf', csrf)}${hidden('credits', pack.credits)}<button class="primary" type="submit">Buy ${pack.credits}</button></form></div></li>`).join('');
   const history = credits.history.length ? `<ul class="feed">${credits.history.map((h) => `<li><div class="line"><strong>${esc(h.reason === 'purchase' ? `Bought ${creditWord(h.delta)}` : reasonText[h.reason] ?? h.reason)}</strong>
 <span class="num ${h.delta > 0 ? 'plus' : 'minus'}">${h.delta > 0 ? '+' : ''}${h.delta}</span></div><span class="meta">${esc(day(h.created_at))}${h.reference ? ` · ${esc(h.reference)} · ${esc(h.title ?? '')}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No credit activity yet.</p>';

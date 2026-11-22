@@ -667,3 +667,20 @@ test('thin evidence shows customers no quartile figures: home, free check and re
   assert.doesNotMatch(report.replace(/<style[\s\S]*?<\/style>/g, ''), /Median award|Lower quartile|S\$400,000/);
   assert.match(report, /6 comparable awards, from about S\$100k to S\$700k/);
 });
+
+test('the credits page sells one credit at S$29 and shows what each pack saves', async () => {
+  const b = await signedUpCustomer('Saver');
+  const page = await b.get('/credits');
+  assert.match(page.text, /<strong>1 credit<\/strong><span class="meta">S\$29<\/span>/);
+  assert.match(page.text, /5 credits[\s\S]*?S\$119 · S\$23\.80 a credit · save 18%/);
+  assert.match(page.text, /20 credits[\s\S]*?S\$399 · S\$19\.95 a credit · save 31%/);
+});
+
+test('checkout shows when the tender closes', async () => {
+  const b = await signedUpCustomer('Clock');
+  const tender = { tender_no: `CLOCK${randomBytes(3).toString('hex').toUpperCase()}` };
+  await db.query(`INSERT INTO tender_desk.open_tenders (tender_no,title,agency,closes_at,gebiz_url,source_feed,category,terms)
+    VALUES ($1,'Audit services for a council','Agency A','2026-12-04T05:00:00Z','https://www.gebiz.gov.sg/x','Professional Services','other',$2)`, [tender.tender_no, ['audit']]);
+  const page = await b.get(`/checkout?tender=${tender.tender_no}`);
+  assert.match(page.text, /<dt>Closes<\/dt><dd>\d{1,2} [A-Z][a-z]{2} 20\d\d/);
+});

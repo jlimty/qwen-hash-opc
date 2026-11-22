@@ -243,7 +243,7 @@ test('a new customer starts with one free credit, and a request without credits 
 test('buying a pack adds its credits in test mode, and only listed packs can be bought', async () => {
   const a = await customer('Peach');
   const credits = await a.ops.credits();
-  assert.deepEqual(credits.packs, [{ credits: 5, cents: 11900 }, { credits: 20, cents: 39900 }]);
+  assert.deepEqual(credits.packs, [{ credits: 1, cents: 2900 }, { credits: 5, cents: 11900 }, { credits: 20, cents: 39900 }]);
   assert.equal(credits.perBrief, 1);
   const bought = await a.ops.buyCredits({ credits: 5 });
   assert.equal(bought.outcome, 'allowed');
@@ -302,7 +302,7 @@ test('bad credit settings fall back to safe values instead of minting credits or
   assert.equal(bad.perBrief, 1);
   assert.equal(bad.welcome, 1);
   assert.equal(bad.priceCents, 2900);
-  assert.deepEqual(bad.packs, [{ credits: 5, cents: 4950 }]);
+  assert.deepEqual(bad.packs, [{ credits: 1, cents: 2900 }, { credits: 5, cents: 4950 }]);
 });
 
 test('a customer company needs a valid UEN, and one UEN gets one company and one welcome credit', async () => {
@@ -430,9 +430,29 @@ test('the reply deadline is two days before closing when that comes first, and a
   const due = (await db.query('SELECT info_due_at FROM tender_desk.brief_requests WHERE id=$1', [r1.request_id])).rows[0].info_due_at;
   assert.equal(new Date(due).toISOString(), new Date(now.getTime() + 2 * 86400000).toISOString());
   await a.ops.buyCredits({ credits: 5 });
-  const tooSoon = await openTender({ closes: new Date(now.getTime() + 36 * 3600000).toISOString() });
-  const r2 = await ask(a, tooSoon);
-  const refused = await admin.askForInfo({ request_id: r2.request_id, message: 'More please.' }, { now });
+  const closes = new Date(now.getTime() + 3 * 86400000);
+  const r2 = await ask(a, await openTender({ closes: closes.toISOString() }));
+  // A day and a half before closing, there is no room left for the client to reply.
+  const refused = await admin.askForInfo({ request_id: r2.request_id, message: 'More please.' }, { now: new Date(closes.getTime() - 36 * 3600000) });
   assert.equal(refused.outcome, 'blocked');
   assert.match(refused.reason, /closes too soon/);
+});
+
+test('a single credit is on sale at the list price, alongside the packs', async () => {
+  const a = await customer('Single');
+  const credits = await a.ops.credits();
+  assert.deepEqual(credits.packs[0], { credits: 1, cents: 2900 });
+  const bought = await a.ops.buyCredits({ credits: 1 });
+  assert.equal(bought.outcome, 'allowed');
+  assert.equal(bought.amount_cents, 2900);
+});
+
+test('a tender closing within two days cannot be requested: there is no time to review it', async () => {
+  const a = await customer('Late');
+  const tender_no = await openTender({ closes: new Date(now.getTime() + 40 * 3600000).toISOString() });
+  const allowed = await a.ops.canRequest(tender_no, { now });
+  assert.equal(allowed.reason, 'too_close');
+  const result = await ask(a, tender_no);
+  assert.equal(result.outcome, 'blocked');
+  assert.match(result.reason, /closes too soon/);
 });
