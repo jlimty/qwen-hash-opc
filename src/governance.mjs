@@ -15,12 +15,13 @@ const short = (max) => z.string().trim().min(1).max(max).refine((value) => !valu
 const requestSchema = z.strictObject({
   tender_no: short(100).optional(),
   pasted: z.strictObject({ title: short(300), agency: short(250).optional(), text: z.string().max(4000).optional() }).optional(),
+  requirements: z.string().max(4000).optional(),
   terms: z.array(z.string().max(80)).max(3).default([]),
   category: z.enum(tenderCategories).optional(),
 }).refine((value) => Boolean(value.tender_no) !== Boolean(value.pasted), 'Give either an open tender or a pasted tender.');
 const requestIdSchema = z.strictObject({ request_id: z.uuid() });
 const draftInputSchema = z.strictObject({ request_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), content: short(20000),
-  credentials_cited: z.array(z.uuid()).max(30).default([]) });
+  credentials_cited: z.array(z.uuid()).max(30).default([]), parts: z.record(z.string(), z.unknown()).optional(), risk_text: z.string().max(20000).optional() });
 // Credit settings live in tender_desk.settings so the admin can reprice without a deploy.
 export async function creditSettings(tx) {
   const rows = Object.fromEntries((await tx.query("SELECT key,value FROM tender_desk.settings WHERE key IN ('credit_price_cents','credits_per_brief','welcome_credits','credit_packs')")).rows.map((r) => [r.key, r.value]));
@@ -156,9 +157,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [tender.tender_no])).rows[0];
     if (hold.client_id !== client_id || hold.state !== 'held') return { ...blocked('G2', refusal), tender_no: tender.tender_no };
     const terms = check.query_used ? check.query_used.split(' ') : [];
-    const { rows } = await tx.query(`INSERT INTO tender_desk.brief_requests (client_id,tender_no,source,title,agency,pasted_text,terms,stat_id,status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'requested') RETURNING id, reference_number`,
-    [client_id, tender.tender_no, tender.source, tender.title, tender.agency, tender.pasted_text, terms, check.snapshot.stat_id]);
+    const { rows } = await tx.query(`INSERT INTO tender_desk.brief_requests (client_id,tender_no,source,title,agency,pasted_text,terms,stat_id,status,requirements_text)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'requested',$9) RETURNING id, reference_number`,
+    [client_id, tender.tender_no, tender.source, tender.title, tender.agency, tender.pasted_text, terms, check.snapshot.stat_id, input.requirements?.trim() || null]);
     await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason,request_id) VALUES ($1,$2,'brief',$3)", [client_id, -perBrief, rows[0].id]);
     return { outcome: 'allowed', request_id: rows[0].id, request_reference: referenceCode('REQ', rows[0].reference_number), credits_spent: perBrief,
       tender_no: tender.tender_no, reason: `Brief requested; ${perBrief} credit${perBrief === 1 ? '' : 's'} spent.` };
@@ -168,7 +169,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const projects = (await tx.query(`SELECT id,reference_number,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects
       WHERE client_id=$1 ORDER BY reference_number`, [client_id])).rows;
     const requests = (await tx.query(`SELECT r.id,r.reference_number,r.tender_no,r.source,r.title,r.agency,r.status,r.created_at,r.decline_reason,
-        b.recommendation,b.content,b.decline_reason AS brief_decline_reason, o.closes_at, o.gebiz_url,
+        b.recommendation,b.content,b.parts,b.decline_reason AS brief_decline_reason, o.closes_at, o.gebiz_url, s.snapshot->'comparables' AS comparables,
         s.snapshot->'price_band' AS price_band, (s.snapshot->>'n')::int AS n, (s.snapshot->>'wide_band')::boolean AS wide_band, s.snapshot->'filters'->>'query' AS query_used
       FROM tender_desk.brief_requests r LEFT JOIN tender_desk.briefs b ON b.id=r.brief_id
       LEFT JOIN tender_desk.stats_snapshots s ON s.client_id=r.client_id AND s.tender_no=r.tender_no AND s.stat_id=r.stat_id
@@ -179,7 +180,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       projects: projects.map((p) => ({ ...p, reference: referenceCode('PRJ', p.reference_number), value_cents: p.value_cents === null ? null : Number(p.value_cents) })),
       requests: requests.map((r) => ({ id: r.id, reference: referenceCode('REQ', r.reference_number), tender_no: r.tender_no, source: r.source, title: r.title,
         agency: r.agency, status: r.status, created_at: r.created_at, closes_at: r.closes_at, gebiz_url: r.gebiz_url,
-        ...(r.status === 'approved' && { content: r.content, recommendation: r.recommendation, price_band: r.price_band, n: r.n, wide_band: r.wide_band, query_used: r.query_used }),
+        ...(r.status === 'approved' && { content: r.content, parts: r.parts, comparables: r.comparables ?? [], recommendation: r.recommendation, price_band: r.price_band, n: r.n, wide_band: r.wide_band, query_used: r.query_used }),
         ...(r.status === 'declined' && { decline_reason: r.decline_reason ?? r.brief_decline_reason }) })),
     };
   }
@@ -377,7 +378,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const tender = { tender_no: request.tender_no, title: request.title, agency: request.agency, closes_at: open?.closes_at ?? null,
             category: snapshot?.filters?.category ?? open?.category ?? null, pasted_text: request.pasted_text };
           const clientFacts = { ...client, max_contract_cents: Number(client.max_contract_cents) };
-          return { request, tender, snapshot, query_used, client: clientFacts, verifiedProjects,
+          return { request, tender, snapshot, query_used, client: clientFacts, verifiedProjects, requirements_text: request.requirements_text ?? null,
             fit: fitFacts({ client: clientFacts, verifiedProjects, tender, check: { status: snapshot?.status, snapshot, query_used } }) };
         }),
         saveDraft: adminOperation('save_draft', draftInputSchema, async (tx, input) => {
@@ -386,7 +387,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
             [request.client_id, request.tender_no, request.stat_id])).rows[0]?.snapshot;
           const result = await submitBrief(tx, { client_id: request.client_id }, { tender_no: request.tender_no, stat_id: request.stat_id,
-            price_band: snapshot?.price_band ?? {}, recommendation: input.recommendation, content: input.content, credentials_cited: input.credentials_cited });
+            price_band: snapshot?.price_band ?? {}, recommendation: input.recommendation, content: input.content, credentials_cited: input.credentials_cited,
+            ...(input.risk_text && { risk_text: input.risk_text }) });
+          if (result.outcome === 'allowed' && input.parts) await tx.query('UPDATE tender_desk.briefs SET parts=$1 WHERE id=$2', [JSON.stringify(input.parts), result.brief_id]);
           const ids = { request_id: request.id, request_reference: referenceCode('REQ', request.reference_number), client_id: request.client_id, tender_no: request.tender_no };
           if (result.outcome !== 'allowed') {
             await tx.query('UPDATE tender_desk.brief_requests SET last_error=$1, updated_at=now() WHERE id=$2', [String(result.reason).slice(0, 1000), request.id]);

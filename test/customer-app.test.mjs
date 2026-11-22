@@ -397,3 +397,37 @@ test('with no credits left, checkout offers to buy credits instead of spending',
   assert.doesNotMatch(second.text, /Use 1 credit/);
   assert.match(second.text, /href="[^"]*\/credits"[^>]*>Buy credits/);
 });
+
+test('an approved brief with parts reads as a visual report: range callout, charts, scorecard, questions', async () => {
+  const b = await signedUpCustomer('Quince3');
+  const pasted = { title: 'Audit certification for a sports council', agency: 'Agency A', text: '', terms: 'audit',
+    requirements: 'Bidder must have audited a public body. Must have an accredited auditor on the team.' };
+  const start = await b.post('/checkout/start', pasted);
+  assert.match(start.text, /name="requirements"/);
+  const paid = await b.post('/checkout', pasted);
+  const ref = paid.location.split('/').pop();
+  const request = (await db.query('SELECT * FROM tender_desk.brief_requests WHERE reference_number=$1', [Number(ref.slice(3))])).rows[0];
+  assert.match(request.requirements_text, /accredited auditor/);
+  const admin = desk.admin(adminToken);
+  const facts = await admin.prepareDraft(request.id);
+  assert.match(facts.requirements_text, /accredited auditor/);
+  const { checkDraft } = await import('../src/brief-drafting.mjs');
+  const checked = checkDraft({ recommendation: 'bid', reasons: ['Your audit work for a polytechnic is the same kind of job.'],
+    price_position: { band: 'lower_quartile_to_median', why: 'The scope is ordinary and the buyer is cost-conscious, so stay near the middle.' },
+    requirements: [{ requirement: 'Audited a public body', status: 'met', evidence: 'Audit for a polytechnic' }, { requirement: 'Accredited auditor on the team', status: 'gap', evidence: 'Not shown in your profile' }],
+    questions: ['Does the board accept a joint bid with an accredited firm?'], risks: ['The board may prefer a past auditor.'], credentials_cited: [] }, facts);
+  assert.equal(checked.ok, true, checked.reason);
+  const saved = await admin.saveDraft({ request_id: request.id, ...checked.draft });
+  assert.equal(saved.outcome, 'allowed', saved.reason);
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  const page = (await b.get(paid.location.slice(base.length))).text;
+  assert.match(page, /Suggested price range[\s\S]{0,200}S\$\d/);
+  assert.match(page, /<svg class="chart"[^>]*aria-label="\d+ comparable awards/);
+  assert.match(page, /Who usually wins/);
+  assert.match(page, /Awards per year/);
+  assert.match(page, /class="scorecard"[\s\S]*1 met[\s\S]*1 gap/);
+  assert.match(page, /Accredited auditor on the team/);
+  assert.match(page, /Questions to ask the agency[\s\S]*joint bid/);
+  assert.match(page, /<details[\s\S]*Show the \d+ comparable awards/);
+  assert.doesNotMatch(page, /##/);
+});

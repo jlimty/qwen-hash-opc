@@ -201,7 +201,7 @@ export async function submitBrief(tx, actor, input) {
       (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
       (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1) AS prior`, [actor.client_id])).rows[0];
     const risk = computeRiskFacts({ n: Number(saved.snapshot.n), band: input.price_band, maxContractCents: Number(counts.max_contract_cents),
-      content: input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
+      content: input.risk_text ?? input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
     const { rows } = await tx.query(`INSERT INTO tender_desk.briefs
       (client_id,tender_no,stat_id,recommendation,content,credentials_cited,price_band,flags,status,risk_facts,risk_level)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending_approval',$9,$10) RETURNING id, reference_number`,

@@ -14,7 +14,8 @@ const facts = {
   fit: { category_match: true, within_capacity: true, related_projects: 1 },
 };
 const clean = { recommendation: 'bid', reasons: ['The scope matches your past ministry event.', 'The agency buys this often.'],
-  price_position: 'Price between the lower quartile and the median: the scope is standard and the team is small.', credentials_cited: [verified] };
+  price_position: { band: 'lower_quartile_to_median', why: 'The scope is standard and the team is small, so there is no case for a premium.' },
+  requirements: [], questions: [], risks: [], credentials_cited: [verified] };
 const llmReturning = (value) => async () => value;
 
 test('a clean draft is composed with code-written figures and passes the figure check', async () => {
@@ -23,11 +24,11 @@ test('a clean draft is composed with code-written figures and passes the figure 
   assert.equal(result.draft.recommendation, 'bid');
   assert.deepEqual(result.draft.credentials_cited, [verified]);
   const content = result.draft.content;
-  for (const heading of ['Recommendation', 'Why', 'Price position', 'Your verified projects cited', 'Comparable awards', 'Limits']) assert.match(content, new RegExp(`## ${heading}`));
+  for (const heading of ['Recommendation', 'Why', 'Suggested price range', 'Who usually wins', 'Your verified projects cited', 'Comparable awards', 'Limits']) assert.match(content, new RegExp(`## ${heading}`));
   assert.ok(content.includes(formatSgd(band.median_cents)));
   assert.ok(content.includes('Annual ministry event'));
   assert.ok(content.includes(briefLimits));
-  const risk = computeRiskFacts({ n: 23, band, maxContractCents: 50000000, content, citedCount: 1, verifiedProjectCount: 2, priorBriefCount: 1 });
+  const risk = computeRiskFacts({ n: 23, band, maxContractCents: 50000000, content: result.draft.risk_text, citedCount: 1, verifiedProjectCount: 2, priorBriefCount: 1 });
   assert.ok(!risk.facts.some((fact) => fact.code === 'unmatched_numbers'), JSON.stringify(risk.facts));
 });
 
@@ -66,12 +67,12 @@ test('the prompt carries only this client and asks for no digits', async () => {
 });
 
 test('the brief carries no agency list, so agency names with digits never trip the figure check', () => {
-  const content = composeBrief(clean, { ...facts, snapshot: { ...facts.snapshot, top_agencies: [{ name: 'Ministry Headquarter 1', contracts: 4 }] } });
+  const { content } = composeBrief(clean, { ...facts, snapshot: { ...facts.snapshot, top_agencies: [{ name: 'Ministry Headquarter 1', contracts: 4 }] } });
   assert.doesNotMatch(content, /Headquarter 1/);
 });
 
 test('composeBrief writes no-bid as Do not bid', () => {
-  assert.match(composeBrief({ ...clean, recommendation: 'no-bid', credentials_cited: [] }, facts), /## Recommendation\n\nDo not bid/);
+  assert.match(composeBrief({ ...clean, recommendation: 'no-bid', credentials_cited: [] }, facts).content, /## Recommendation\n\nDo not bid/);
 });
 
 test('a model failure keeps its reason for the admin', async () => {
@@ -96,13 +97,13 @@ test('the instructions keep price out of the reasons, ask for the reason behind 
   const sent = JSON.parse(request.user);
   assert.equal(sent.fit.related_projects, undefined, 'the narrow keyword count no longer steers citations');
   assert.deepEqual(sent.fit, { in_your_categories: true, median_compared_with_your_largest_contract: 'within' });
-  assert.match(request.jsonSchema.properties.price_position.description, /why/i);
+  assert.match(request.jsonSchema.properties.price_position.properties.why.description, /why/i);
 });
 
 test('a bare price position with no reason is refused as unusable', async () => {
-  const result = await draftBrief(facts, { llm: async () => ({ ...clean, price_position: 'between the lower quartile and the median' }), model: 'm' });
+  const result = await draftBrief(facts, { llm: async () => ({ ...clean, price_position: { band: 'lower_quartile_to_median', why: 'Standard.' } }), model: 'm' });
   assert.equal(result.ok, false);
-  assert.match(result.reason, /unusable draft \(price_position: .*too short/i);
+  assert.match(result.reason, /unusable draft \(price_position\.why: .*too short/i);
 });
 
 test('a reason that talks about price is refused, so price lives in one place', async () => {
@@ -178,4 +179,58 @@ test('a draft that writes an internal ID is refused, and the prompt says to name
   let request;
   await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
   assert.match(request.system, /by its title, never by an ID/);
+});
+
+test('code turns the chosen band position into a suggested range in dollars', async () => {
+  const { suggestedRange } = await import('../src/brief-drafting.mjs');
+  assert.deepEqual(suggestedRange(band, 'lower_quartile_to_median'), { from_cents: 20000000, to_cents: 30000000, text: 'S$200,000 to S$300,000' });
+  assert.deepEqual(suggestedRange(band, 'below_lower_quartile'), { to_cents: 20000000, text: 'Below S$200,000' });
+  assert.deepEqual(suggestedRange(band, 'above_upper_quartile'), { from_cents: 50000000, text: 'Above S$500,000' });
+  const result = await draftBrief(facts, { llm: llmReturning(clean), model: 'm' });
+  assert.match(result.draft.content, /## Suggested price range\n\nS\$200,000 to S\$300,000\n\nThe scope is standard/);
+  assert.deepEqual(result.draft.parts.suggested_range, { from_cents: 20000000, to_cents: 30000000, text: 'S$200,000 to S$300,000' });
+});
+
+test('the brief lists who usually wins, from the comparables, and carries structured parts', async () => {
+  const result = await draftBrief({ ...facts, snapshot: { ...facts.snapshot, top_suppliers: [{ name: 'Supplier X', wins: 3 }, { name: 'Supplier Y', wins: 2 }] } },
+    { llm: llmReturning(clean), model: 'm' });
+  assert.match(result.draft.content, /## Who usually wins\n\n- Supplier X\n- Supplier Y/);
+  assert.deepEqual(result.draft.parts.winners, [{ name: 'Supplier X', wins: 3 }, { name: 'Supplier Y', wins: 2 }]);
+  assert.equal(result.draft.parts.n, 23);
+  assert.equal(result.draft.parts.recommendation, 'bid');
+  assert.deepEqual(result.draft.parts.cited, [{ title: 'Annual ministry event', agency: 'Agency A' }]);
+});
+
+test('a requirements check, questions and risks come through when the customer pasted requirements', async () => {
+  const withReq = { ...facts, requirements_text: 'Bidder must have run an event for a ministry. Must hold public liability insurance.' };
+  let request;
+  const draft = { ...clean, requirements: [{ requirement: 'Ran an event for a ministry', status: 'met', evidence: 'Annual ministry event' },
+    { requirement: 'Public liability insurance', status: 'gap', evidence: 'No policy on record' }],
+  questions: ['Can the event date move if there is bad weather?'], risks: ['The agency may expect an in-house safety officer.'] };
+  const result = await draftBrief(withReq, { llm: async (r) => { request = r; return draft; }, model: 'm' });
+  assert.equal(result.ok, true, result.reason);
+  assert.match(JSON.parse(request.user).requirements_text, /public liability/);
+  assert.match(result.draft.content, /## Requirements check\n\n- Met: Ran an event for a ministry \(Annual ministry event\)\n- Gap: Public liability insurance \(No policy on record\)/);
+  assert.match(result.draft.content, /## Questions to ask the agency\n\n- Can the event date move/);
+  assert.match(result.draft.content, /## Risks\n\n- The agency may expect/);
+  assert.equal(result.draft.parts.requirements.length, 2);
+});
+
+test('without pasted requirements, a requirements list from the model is dropped', async () => {
+  const result = await draftBrief(facts, { llm: llmReturning({ ...clean, requirements: [{ requirement: 'Invented', status: 'met', evidence: 'x' }] }), model: 'm' });
+  assert.equal(result.ok, true);
+  assert.doesNotMatch(result.draft.content, /Requirements check/);
+  assert.deepEqual(result.draft.parts.requirements, []);
+});
+
+test('a question that invents a price is refused', async () => {
+  const result = await draftBrief(facts, { llm: llmReturning({ ...clean, questions: ['Would the agency accept S$123,456?'] }), model: 'm' });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /figures not in the comparables/);
+});
+
+test("an admin's redraft note reaches the model", async () => {
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm', note: 'Mention their school programmes.' });
+  assert.equal(JSON.parse(request.user).admin_note, 'Mention their school programmes.');
 });

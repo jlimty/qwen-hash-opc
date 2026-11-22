@@ -4,9 +4,10 @@ import { formatSgd } from './brief-risk.mjs';
 import { esc, plural } from './console-view.mjs';
 import { priceLimits } from './price-check.mjs';
 import { renderBriefHtml } from './brief-render.mjs';
+import { chartCss, priceChart, winnersChart, yearsChart } from './brief-charts.mjs';
 import { tenderCategories } from './tender-data.mjs';
 
-export const assistantCss = `
+export const assistantCss = chartCss + `
 .top{display:flex;align-items:center;gap:1rem;justify-content:space-between;padding:.75rem 1.5rem;border-bottom:1px solid var(--line);background:var(--side)}
 .top nav{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
 .top nav a{color:#2A364A;font-weight:500}
@@ -36,6 +37,19 @@ export const assistantCss = `
 .tenders .meta{display:block;font-size:.8125rem;color:var(--muted);overflow-wrap:anywhere}
 .testmode{border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:.6rem .9rem;font-weight:600}
 .narrow{max-width:30rem}
+.report{display:grid;gap:1.25rem}
+.report-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem}
+.callout{padding:1rem 1.25rem;display:grid;gap:.35rem}
+.callout .range{font-size:1.75rem;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.callout .label{font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.chart-wrap{padding:.75rem 1rem 1rem}
+.scorecard{display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 1rem 0}
+.reqs li{display:grid;grid-template-columns:7.5rem minmax(0,1fr);gap:.75rem;padding:.65rem 1rem;border-bottom:1px solid var(--line)}
+.reqs li:last-child{border-bottom:0}
+.reqs .evidence{display:block;font-size:.8125rem;color:var(--muted)}
+.bullets{list-style:disc;padding:.75rem 1rem .75rem 2.25rem;display:grid;gap:.4rem;max-width:72ch}
+details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:var(--accent-dark)}
+@media (max-width:760px){.report-row{grid-template-columns:1fr}.reqs li{grid-template-columns:1fr}}
 .plus{color:var(--ok);font-weight:650}.minus{color:var(--muted);font-weight:650}
 .credit-pill{font-weight:600;color:var(--accent-dark)}
 .steps{display:flex;gap:.5rem;list-style:none;padding:0;margin:0;flex-wrap:wrap}
@@ -214,7 +228,7 @@ function greeting() {
 
 export const creditWord = (n) => `${n} credit${Number(n) === 1 ? '' : 's'}`;
 
-export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice, credits }) {
+export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice, credits, requirements }) {
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   const perBrief = credits?.perBrief ?? 1;
   const short = credits && credits.balance < perBrief;
@@ -227,6 +241,8 @@ ${noChecked ? '<p class="banner">None of your projects has been checked yet, so 
 <div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div></dl>
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
     : `<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
+<label for="requirements">Key requirements from the tender <span class="hint">(optional, up to 4000 characters: we check each one against your projects)</span></label>
+<textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(requirements ?? '')}</textarea>
 ${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the credit is not returned for that.</p>
 <label class="tick"><input type="checkbox" name="confirm_outside" value="yes" required> I understand and still want a brief on this tender</label>` : ''}
 <div><button class="primary" type="submit">Use ${creditWord(perBrief)}</button></div></form>`}</section>`}
@@ -247,7 +263,45 @@ export function renderCredits({ company, csrf, credits, notice }) {
 <section class="panel"><header><h2>History</h2></header>${history}</section></div>` });
 }
 
-export function renderRequest({ request, company, csrf, justPaid }) {
+const statusChipFor = { met: ['done', '✓ Met'], partly_met: ['warning', '◐ Partly met'], gap: ['danger', '✕ Gap'] };
+
+// The paid brief as a visual report: verdict, the suggested range (computed by code) on a chart of the past awards,
+// reasons, who usually wins, awards per year, the requirements scorecard, questions and risks, and the awards themselves.
+function renderReport(request, awards) {
+  const parts = request.parts;
+  const band = request.price_band;
+  const bid = parts.recommendation === 'bid';
+  const range = parts.suggested_range ?? {};
+  const list = (items) => (items?.length ? `<ul class="bullets">${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : '<p class="empty">None.</p>');
+  const counts = Object.fromEntries(['met', 'partly_met', 'gap'].map((k) => [k, (parts.requirements ?? []).filter((r) => r.status === k).length]));
+  const requirements = parts.requirements?.length ? `<section class="panel"><header><h2>Requirements check</h2><span class="muted small">From the requirements you pasted</span></header>
+<p class="scorecard"><span class="chip done">${counts.met} met</span><span class="chip warning">${counts.partly_met} partly met</span><span class="chip danger">${counts.gap} gap</span></p>
+<ul class="reqs">${parts.requirements.map((r) => `<li><span><span class="chip ${statusChipFor[r.status][0]}">${statusChipFor[r.status][1]}</span></span><div>${esc(r.requirement)}<span class="evidence">${esc(r.evidence)}</span></div></li>`).join('')}</ul></section>` : '';
+  const awardRows = awards.map((a) => `<tr><td data-label="Tender" class="num nowrap">${esc(a.tender_no)}</td><td data-label="Description">${esc(a.description)}<span class="sub-line">${esc(a.agency)}</span></td>
+<td data-label="Winner">${esc(a.winner)}</td><td data-label="Awarded" class="r num nowrap">${formatSgd(a.cents)}</td><td data-label="Date" class="num nowrap">${esc(day(a.date))}</td></tr>`).join('');
+  return `<div class="report">
+<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
+<div class="callout"><span class="label">Suggested price range</span><span class="range">${esc(range.text ?? '')}</span><p>${esc(parts.price_position?.why ?? '')}</p></div>
+<div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: range })}</div>
+${band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
+<div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
+<div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>
+<div class="stat"><span class="big">${parts.n}</span><span class="label">Comparable awards${parts.query_used ? ` for "${esc(parts.query_used)}"` : ''}</span></div></div>` : ''}
+${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}</section>
+<section class="panel"><header><h2>Why</h2></header>${list(parts.reasons)}</section>
+<div class="report-row"><section class="panel"><header><h2>Who usually wins</h2><span class="muted small">Most frequent winners of these awards</span></header><div class="chart-wrap">${winnersChart(parts.winners, parts.n) || '<p class="empty">No repeat winners.</p>'}</div></section>
+<section class="panel"><header><h2>Awards per year</h2><span class="muted small">How steadily this work is bought</span></header><div class="chart-wrap">${yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) }))) || '<p class="empty">No dates.</p>'}</div></section></div>
+${requirements}
+<div class="report-row"><section class="panel"><header><h2>Questions to ask the agency</h2></header>${list(parts.questions)}</section>
+<section class="panel"><header><h2>Risks</h2></header>${list(parts.risks)}</section></div>
+<section class="panel"><header><h2>Your verified projects cited</h2></header>${list((parts.cited ?? []).map((p) => `${p.title}${p.agency ? ` (${p.agency})` : ''}`))}</section>
+${awards.length ? `<section class="panel"><details class="awards"><summary>Show the ${awards.length} comparable awards</summary>
+<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${awardRows}</tbody></table></div></details>
+<p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>` : ''}
+</div>`;
+}
+
+export function renderRequest({ request, company, csrf, justPaid, awards = [] }) {
   const band = request.price_band;
   const priceRow = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award</span></div>
 <div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
@@ -255,9 +309,9 @@ export function renderRequest({ request, company, csrf, justPaid }) {
 <div class="stat"><span class="big">${request.n ?? ''}</span><span class="label">Comparable awards${request.query_used ? ` for "${esc(request.query_used)}"` : ''}</span></div></div>
 ${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}` : '';
   const bid = request.recommendation === 'bid';
-  const body = request.status === 'approved' ? `<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
+  const body = request.status === 'approved' ? (request.parts ? renderReport(request, awards) : `<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
 ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recommendation', 'Comparable awards', 'Limits'] })}</div>
-<p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`
+<p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`)
     : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><p class="form">${esc(request.decline_reason ?? '')}</p></section>`
       : `<p class="banner">${esc(statusText[request.status])}. Your brief will appear on this page and on your home page.</p>`;
   const stage = { requested: 1, drafted: 1, approved: 2 }[request.status];

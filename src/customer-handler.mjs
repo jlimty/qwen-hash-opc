@@ -233,16 +233,19 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
       const noChecked = !(await customer.context()).projects.some((project) => project.verified);
       const outside = !(await customer.context()).client.categories.includes(category);
-      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, credits: await customer.credits() }));
+      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, credits: await customer.credits(),
+        requirements: post ? String(form.get('requirements') ?? '').slice(0, 4000) : '' }));
     }
     if (path === '/checkout' && post) {
       const tenderNo = String(form.get('tender_no') ?? '').trim();
       const terms = cleanTerms(String(form.get('terms') ?? ''));
       const requested = String(form.get('category') ?? '');
       const category = tenderCategories.includes(requested) ? { category: requested } : {};
-      const input = tenderNo ? { tender_no: tenderNo, terms, ...category }
+      const requirementsText = String(form.get('requirements') ?? '').trim().slice(0, 4000);
+      const extra = { ...category, ...(requirementsText && { requirements: requirementsText }) };
+      const input = tenderNo ? { tender_no: tenderNo, terms, ...extra }
         : { pasted: { title: String(form.get('title') ?? '').trim().slice(0, 300), ...(String(form.get('agency') ?? '').trim() && { agency: String(form.get('agency')).trim().slice(0, 250) }),
-          ...(String(form.get('text') ?? '').trim() && { text: String(form.get('text')).slice(0, maxTenderText) }) }, terms, ...category };
+          ...(String(form.get('text') ?? '').trim() && { text: String(form.get('text')).slice(0, maxTenderText) }) }, terms, ...extra };
       const tenderCategory = category.category ?? (tenderNo ? (await getOpenTender(database, tenderNo))?.category : categorize(`${input.pasted.title} ${input.pasted.text ?? ''}`));
       if (!(await customer.context()).client.categories.includes(tenderCategory) && form.get('confirm_outside') !== 'yes') {
         const shown = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
@@ -271,7 +274,12 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const mine = ref?.prefix === 'REQ' ? (await customer.context()).requests.find((r) => r.reference === requestRoute[1]) : undefined;
       if (!mine) return html(404, layout({ title: 'Not found', csrf, company, body: '<p class="banner bad">That request was not found.</p><p><a href="/home">Back to home</a></p>' }));
       const justPaid = cookieValue(cookieHeader, 'td_paid') === mine.reference;
-      return html(200, renderRequest({ request: mine, company, csrf, justPaid }), { cookies: justPaid ? [`td_paid=; Max-Age=0; ${cookieFlags}`] : [] });
+      const byNumber = mine.comparables?.length ? new Map(dataset.contracts.map((c) => [c.tender_no, c])) : new Map();
+      const awards = (mine.comparables ?? []).map((c) => ({ c, contract: byNumber.get(c.tender_no) })).filter(({ contract }) => contract)
+        .map(({ c, contract }) => ({ tender_no: c.tender_no, cents: Number(c.total_awarded_cents), description: contract.description, agency: contract.agency,
+          date: contract.last_award_date, winner: contract.suppliers.filter((x) => x.awarded_cents > 0).map((x) => x.name).join(', ') }))
+        .sort((a, b) => (a.date < b.date ? 1 : -1));
+      return html(200, renderRequest({ request: mine, company, csrf, justPaid, awards }), { cookies: justPaid ? [`td_paid=; Max-Age=0; ${cookieFlags}`] : [] });
     }
     return html(404, layout({ title: 'Not found', csrf, company, body: '<p class="banner bad">That page was not found.</p><p><a href="/">Open tenders</a></p>' }));
   };

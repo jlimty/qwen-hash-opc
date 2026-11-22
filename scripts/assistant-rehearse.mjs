@@ -72,7 +72,8 @@ try {
   const llm = values['fake-llm'] ? async ({ name }) => {
     if (name === 'tender_reading') throw new Error('fake: use keywords');
     return { recommendation: 'bid', reasons: ['The scope matches a checked project of yours.', 'The buying agency issues this kind of work regularly.'],
-      price_position: 'Between the lower quartile and the median: the scope is standard for this kind of work.', credentials_cited: [verifiedId] };
+      price_position: { band: 'lower_quartile_to_median', why: 'The scope is standard for this kind of work, so there is no case for a premium.' },
+      requirements: [], questions: ['Is there a preferred start date?'], risks: ['The agency may favour a past supplier.'], credentials_cited: [verifiedId] };
   } : createOpenRouterLlm({ apiKey: key });
   const models = { read: process.env.TD_MODEL_READ ?? 'qwen/qwen3.8-flash', draft: process.env.TD_MODEL_DRAFT ?? 'qwen/qwen3.8-max-0902' };
   if (!values['fake-llm']) {
