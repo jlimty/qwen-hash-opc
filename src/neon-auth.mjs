@@ -1,13 +1,4 @@
-const sessionCookie = /(?:^|,\s*)((?:__Secure-)?[A-Za-z0-9._-]*session_token)=([^;,\s]+)/;
-
-function sessionFrom(response) {
-  const cookies = response.headers.getSetCookie?.() ?? [];
-  for (const cookie of cookies) {
-    const match = sessionCookie.exec(cookie);
-    if (match) return { name: match[1], value: match[2] };
-  }
-  return undefined;
-}
+import { packSession as pack, sessionFrom, unpackSession as unpack } from './neon-session.mjs';
 
 export function createNeonAuth({ baseUrl, adminUserId, origin, fetchImpl = fetch }) {
   if (!/^https:\/\//.test(baseUrl ?? '') && !/^http:\/\/127\.0\.0\.1/.test(baseUrl ?? '')) throw new Error('A Neon Auth base URL is required.');
@@ -15,12 +6,6 @@ export function createNeonAuth({ baseUrl, adminUserId, origin, fetchImpl = fetch
   const root = baseUrl.replace(/\/+$/, '');
   const headers = (extra = {}) => ({ Origin: origin, 'Content-Type': 'application/json', ...extra });
   const call = (path, init) => fetchImpl(`${root}${path}`, { signal: AbortSignal.timeout(8000), redirect: 'manual', ...init });
-  const pack = ({ name, value }) => `${encodeURIComponent(name)}~${encodeURIComponent(value)}`;
-  const unpack = (packed) => {
-    const [name, value] = String(packed).split('~');
-    try { return { name: decodeURIComponent(name), value: decodeURIComponent(value ?? '') }; } catch { return undefined; }
-  };
-
   return {
     mode: 'email',
     origin,
