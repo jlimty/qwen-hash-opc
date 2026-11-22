@@ -53,6 +53,10 @@ try {
     const secret = password();
     const account = await auth.signUp({ email, password: secret, name: profile.name });
     if (!account.ok) throw new Error(`Sign-up for ${label} was refused: ${account.message}`);
+    // A .invalid address can never receive the verification email, so mark the test account verified directly
+    // (Neon Auth keeps its users in this database). If that table isn't there, say so and carry on.
+    await database.query('UPDATE neon_auth."user" SET "emailVerified"=true WHERE id=$1', [account.userId])
+      .catch(() => console.log(`Could not mark ${email} as verified; mark it in Neon Auth before signing in.`));
     const created = await desk.registerCustomer(account.userId, profile);
     if (created.outcome !== 'allowed') throw new Error(`Profile for ${label} was refused: ${created.reason}`);
     const toCheck = check === 'all' ? created.projects : check === 'first' ? created.projects.slice(0, 1) : [];

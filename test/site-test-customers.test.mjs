@@ -19,6 +19,8 @@ let pglite; let socket; let auth; let dir; let dbFile; let authFile; const signu
 before(async () => {
   pglite = await PGlite.create();
   await initializeGovernance(pglite);
+  // Neon Auth keeps its users in the same database, in neon_auth."user".
+  await pglite.exec('CREATE SCHEMA neon_auth; CREATE TABLE neon_auth."user" (id text PRIMARY KEY, email text NOT NULL, "emailVerified" boolean NOT NULL DEFAULT false);');
   socket = new PGLiteSocketServer({ db: pglite, port: 0, host: '127.0.0.1' });
   await socket.start();
   auth = createServer(async (req, res) => {
@@ -26,8 +28,10 @@ before(async () => {
     const body = JSON.parse(Buffer.concat(chunks).toString() || '{}');
     if (req.url !== '/sign-up/email') return res.writeHead(404).end('{}');
     signups.push(body);
-    res.writeHead(200, { 'Content-Type': 'application/json', 'Set-Cookie': `__Secure-neon-auth.session_token=t${randomBytes(4).toString('hex')}; Path=/` })
-      .end(JSON.stringify({ user: { id: `user-${randomBytes(6).toString('hex')}` } }));
+    // Email verification is on: the account is created unverified and no session is opened.
+    const id = `user-${randomBytes(6).toString('hex')}`;
+    await pglite.query('INSERT INTO neon_auth."user" (id,email) VALUES ($1,$2)', [id, body.email]);
+    res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ token: null, user: { id, emailVerified: false } }));
   });
   auth.listen(0, '127.0.0.1'); await once(auth, 'listening');
   dir = await mkdtemp(join(tmpdir(), 'td-test-customers-'));
@@ -57,6 +61,10 @@ test('seeds three labelled test customers with mixed verification and a private 
     assert.ok(!result.stdout.includes(entry.password));
   }
   assert.deepEqual(signups.map((s) => s.email), saved.map((s) => s.email));
+  // The .invalid addresses can never receive a verification email, so the script marks its own accounts verified.
+  const verified = (await pglite.query('SELECT email, "emailVerified" FROM neon_auth."user" ORDER BY email')).rows;
+  assert.equal(verified.length, 3);
+  assert.ok(verified.every((u) => u.emailVerified === true));
 });
 
 test('refuses to run twice', async () => {
