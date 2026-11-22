@@ -379,7 +379,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             holds: (await tx.query('SELECT * FROM tender_desk.pricing_holds ORDER BY tender_no')).rows,
             briefs: (await tx.query('SELECT * FROM tender_desk.briefs ORDER BY created_at,id')).rows,
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
-            requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
+            requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no,title,agency,created_at FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
+            openTenders: (await tx.query(`SELECT tender_no,title,agency FROM tender_desk.open_tenders WHERE tender_no IN
+              (SELECT tender_no FROM tender_desk.briefs UNION SELECT tender_no FROM tender_desk.brief_requests)`)).rows,
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,
             audit: (await tx.query('SELECT * FROM tender_desk.audit_log ORDER BY id DESC LIMIT 200')).rows,
             credentials: (await tx.query('SELECT id,role,client_id,created_at FROM tender_desk.agent_credentials ORDER BY created_at,id')).rows,
@@ -408,6 +410,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           return (await tx.query(`SELECT * FROM tender_desk.audit_log ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
             ORDER BY id DESC LIMIT ${cap}`, params)).rows;
         }),
+        // The saved snapshot behind a brief, so the admin can see which awards made the band.
+        readSnapshot: ({ client_id, tender_no, stat_id }) => database.transaction(async (tx) => (await tx.query(
+          'SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3', [client_id, tender_no, stat_id])).rows[0]?.snapshot),
         readAuditEntry: (id) => database.transaction(async (tx) => (Number.isSafeInteger(id)
           ? (await tx.query('SELECT * FROM tender_desk.audit_log WHERE id=$1', [id])).rows[0] : undefined)),
       });

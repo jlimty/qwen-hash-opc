@@ -120,3 +120,41 @@ test('without a model the Draft button explains the missing key', async () => {
 test('the console refuses to start without an admin function, in plain English', () => {
   assert.throws(() => createConsoleHandler({ adminToken, dataset }), { message: 'An admin function is required.' });
 });
+
+test('the overview lists paid requests waiting for a draft, with their age', async () => {
+  const request = await paidRequest();
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  const overview = await c.get('/');
+  assert.match(overview.text, /Paid request/);
+  assert.match(overview.text, new RegExp(`${request.request_reference}[\\s\\S]{0,400}Event management for a festival`));
+  assert.match(overview.text, /paid .*ago|paid just now/);
+});
+
+test('the audit log names who acted: the admin for drafts and decisions, the customer for requests', async () => {
+  const request = await paidRequest();
+  modelReply = clean(request.project_id);
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const audit = await c.get('/audit');
+  const row = (label) => { const at = audit.text.indexOf(label); assert.ok(at > 0, label); return audit.text.slice(audit.text.lastIndexOf('<tr', at), audit.text.indexOf('</tr>', at)); };
+  assert.match(row('Saved an AI draft'), /You/);
+  assert.match(row('Asked for a brief'), /Quill Events/);
+  assert.doesNotMatch(audit.text, />save_draft<|>request_brief<|>register_customer</);
+});
+
+test('the brief review page shows the live agency and the comparable awards behind the band', async () => {
+  const request = await paidRequest();
+  modelReply = clean(request.project_id);
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const briefRef = (await db.query('SELECT b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0].reference_number;
+  const page = await c.get(`/briefs/BRF${String(briefRef).padStart(5, '0')}`);
+  assert.match(page.text, /<dt>Agency<\/dt><dd>Agency A<\/dd>/);
+  assert.match(page.text, /Comparable awards/);
+  assert.match(page.text, /OLD-6/);
+  assert.match(page.text, /Lower quartile/);
+  assert.doesNotMatch(page.text, /##/);
+});

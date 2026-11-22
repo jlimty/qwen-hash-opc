@@ -190,7 +190,8 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
           : state[stateKey[kind]].find((r) => Number(r.reference_number) === parsed.number);
         if (!row) return notFound();
         const back = briefBackPattern.test(url.searchParams.get('back') ?? '') ? url.searchParams.get('back') : undefined;
-        return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row, back }));
+        const snapshot = kind === 'brief' ? await ops.readSnapshot({ client_id: row.client_id, tender_no: row.tender_no, stat_id: row.stat_id }) : undefined;
+        return render((context) => detailRenderers[kind]({ ...context, [kind === 'audit' ? 'entry' : kind]: row, back, snapshot }));
       }
       if (path === '/requests') {
         const rows = await ops.listBriefRequests({ now: now() });

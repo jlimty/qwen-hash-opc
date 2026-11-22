@@ -93,7 +93,7 @@ tbody tr:last-child td{border-bottom:0}
 tbody tr:hover{background:#FAFBFD}
 td.r,th.r{text-align:right}
 td.end{text-align:right;white-space:nowrap}
-td .sub-line{display:block;font-size:.8125rem;color:var(--muted)}
+td .sub-line,.checks .sub-line,dd .sub-line{display:block;font-size:.8125rem;color:var(--muted)}
 .tender{font-weight:600;font-variant-numeric:tabular-nums}
 .table-wrap{overflow-x:auto}
 

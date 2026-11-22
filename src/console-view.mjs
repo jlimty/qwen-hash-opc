@@ -5,6 +5,7 @@ const clock = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Singapore', yea
   hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
 const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' });
 
+import { referenceCode } from './references.mjs';
 import { isAdminActor, recordCode, recordHref, recordLink, riskChip } from './console-records.mjs';
 
 export function money(cents) {
@@ -44,6 +45,8 @@ export const actionLabels = {
   resolve_conflict: 'Resolved a conflict', reveal_backtest: 'Revealed backtest results', get_policies: 'Read the rules', get_client_context: 'Read a client profile',
   get_incoming_tenders: 'Listed incoming tenders', search_tenders: 'Searched past awards', save_shortlist: 'Saved a shortlist',
   request_pricing: 'Requested pricing', submit_brief: 'Submitted a brief', unknown_tool: 'Called an unavailable tool',
+  register_customer: 'Signed up', request_brief: 'Asked for a brief', cancel_request: 'Cancelled a request', save_draft: 'Saved an AI draft',
+  draft_failed: 'AI draft failed', decline_request: 'Declined a request',
 };
 const ruleLabels = { ERROR: 'error', VALIDATION: 'invalid input' };
 const outcomeLabel = (row) => {
@@ -106,6 +109,15 @@ ${banner(message)}
 
 const groupOf = { requests: 'Decisions', briefs: 'Decisions', conflicts: 'Decisions', clients: 'Clients', projects: 'Clients', backtest: 'Records', audit: 'Records' };
 
+// Who acted, from the stored actor: the admin, a customer, a customer's AI agent, or a rejected caller.
+function actorName(row, clientName) {
+  const actor = String(row.actor ?? '');
+  if (actor === 'unauthenticated') return 'Unknown caller';
+  if (actor.startsWith('agent:')) return row.client_id ? `${clientName(row.client_id)} (AI agent)` : 'AI agent';
+  if (actor.startsWith('customer:')) return row.client_id ? clientName(row.client_id) : 'New customer';
+  return isAdminActor(actor) ? 'You' : esc(actor);
+}
+
 export function renderShell({ state, csrf, active, title, sub, crumbs = '', actions = '', flash, body }) {
   const pending = state.briefs.filter((b) => b.status === 'pending_approval').length;
   const waiting = (state.requests ?? []).filter((r) => r.status === 'requested').length;
@@ -148,7 +160,12 @@ export function renderOverview({ state, dataset, csrf, flash }) {
     .sort((a, b) => (riskOrder[a.risk_level] ?? 3) - (riskOrder[b.risk_level] ?? 3) || new Date(a.created_at) - new Date(b.created_at));
   const openConflicts = state.conflicts.filter((c) => c.status === 'open');
   const unverified = state.projects.filter((p) => !p.verified);
+  const waitingRequests = (state.requests ?? []).filter((r) => r.status === 'requested');
   const queue = [
+    ...waitingRequests.map((r) => ({ pill: '<span class="pill info">Paid request</span>',
+      title: `${referenceCode('REQ', r.reference_number)} · ${esc(r.title)}`,
+      sub: `${name(r.client_id)} · ${esc(r.agency ?? '')} · <span class="num">${esc(r.tender_no)}</span> · paid ${ago(r.created_at)}`,
+      action: '<a class="btn primary" href="/requests">Draft</a>' })),
     ...pendingBriefs.map((b) => ({ pill: '<span class="pill info">Brief</span>',
       title: `${recordCode('brief', b)} · ${b.recommendation === 'bid' ? 'Bid' : 'No-bid'} recommendation for <span class="num">${esc(b.tender_no)}</span> ${riskChip(b.risk_level)}`,
       sub: `${name(b.client_id)} · ${esc(contracts.get(b.tender_no)?.agency ?? 'Agency unknown')} · submitted ${ago(b.created_at)}`,
@@ -162,10 +179,10 @@ export function renderOverview({ state, dataset, csrf, flash }) {
       sub: `${name(p.client_id)}${p.agency ? ` · ${esc(p.agency)}` : ''} · ${p.value_cents === null ? 'no value given' : `<span class="num">${money(p.value_cents)}</span>`} · not yet verified`,
       action: `<a class="btn outline" href="${recordHref('project', p)}">Check</a>` })),
   ];
-  const waiting = pendingBriefs.length + openConflicts.length + unverified.length;
+  const waiting = waitingRequests.length + pendingBriefs.length + openConflicts.length + unverified.length;
 
   const feed = state.audit.slice(0, 10).map((row) => {
-    const who = row.client_id ? name(row.client_id) : isAdminActor(row.actor) ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
+    const who = actorName(row, (id) => name(id));
     return `<li><div class="line"><span>${esc(actionLabels[row.action] ?? row.action)}</span>${outcomePill(row)}</div>
 <p class="meta">${who}${row.tender_no ? ` · <span class="num">${esc(row.tender_no)}</span>` : ''} · ${ago(row.ts)}</p></li>`;
   });
@@ -355,7 +372,7 @@ ${select('outcome', 'Outcome', opt(auditFilters.outcome, filters.outcome, 'Any o
 <section class="panel"><div class="table-wrap"><table class="stack">
 <thead><tr><th>Ref</th><th>Time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Tender</th></tr></thead>
 <tbody>${rows.length ? rows.map((row) => {
-      const who = row.client_id ? esc(clients.get(row.client_id) ?? 'Client') : isAdminActor(row.actor) ? 'You' : row.actor === 'unauthenticated' ? 'Unknown caller' : esc(row.actor);
+      const who = actorName(row, (id) => esc(clients.get(id) ?? 'Client'));
       return `<tr><td class="num nowrap">${recordLink('audit', row)}</td><td class="num nowrap">${stamp(row.ts)}</td><td>${who}</td><td>${esc(actionLabels[row.action] ?? row.action)}</td><td>${outcomePill(row)}</td><td class="num">${esc(row.tender_no ?? '')}</td></tr>`;
     }).join('') : '<tr><td colspan="6"><div class="empty">No activity yet.</div></td></tr>'}</tbody>
 </table></div><div class="panel-foot"><span class="muted">Showing the latest ${plural(rows.length, 'entry')}.</span></div></section>` });

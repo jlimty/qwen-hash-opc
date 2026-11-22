@@ -53,10 +53,25 @@ export function renderNotFound({ state, csrf, kind }) {
     body: `<section class="panel"><div class="empty"><strong>No record with that reference.</strong><a href="${k.listPath ?? k.path}">Back to ${esc(k.list)}</a></div></section>` });
 }
 
-export function renderBriefDetail({ state, dataset, csrf, flash, brief, back }) {
+// The awards behind a brief's band. An award more than five times off the median is flagged so an odd match stands out.
+function comparablesPanel(snapshot, dataset, band) {
+  if (!snapshot?.comparables?.length) return '';
+  const byNumber = new Map(dataset.contracts.map((c) => [c.tender_no, c]));
+  const median = Number(band?.median_cents ?? 0);
+  const rows = snapshot.comparables.map((c) => ({ ...byNumber.get(c.tender_no), cents: Number(c.total_awarded_cents) }))
+    .sort((a, b) => b.cents - a.cents).slice(0, 30).map((c) => {
+      const odd = median && (c.cents > 5 * median || c.cents * 5 < median);
+      return `<tr><td class="num nowrap">${esc(c.tender_no)}</td><td>${esc(c.description ?? '')}<span class="sub-line muted">${esc(c.agency ?? '')}</span></td>
+<td class="r num nowrap">${money(c.cents)}${odd ? ' <span class="chip warning">Far from median</span>' : ''}</td><td class="num nowrap">${esc(c.last_award_date ?? '')}</td></tr>`;
+    }).join('');
+  return `<section class="panel"><header><h2>Comparable awards</h2><span class="muted small">${snapshot.comparables.length} awards, largest first${snapshot.comparables.length > 30 ? ' (first 30)' : ''}</span></header>
+<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+}
+
+export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, snapshot }) {
   const { client, project, clientLink, projectLink } = lookups(state);
   const code = recordCode('brief', brief);
-  const tender = dataset.contracts.find((c) => c.tender_no === brief.tender_no);
+  const tender = dataset.contracts.find((c) => c.tender_no === brief.tender_no) ?? state.openTenders?.find((t) => t.tender_no === brief.tender_no);
   const cited = brief.credentials_cited.map(project).filter(Boolean);
   const badCites = cited.filter((p) => !p.verified);
   const hold = state.holds.find((h) => h.tender_no === brief.tender_no);
@@ -91,14 +106,15 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
     '<span class="muted small">Computed by code, not by an agent. The level is a sort key, not a verdict.</span>')}
 <section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${clientLink(brief.client_id)}</span></header>
 <div class="prose brief-prose">${renderBriefHtml(brief.content)}</div>
-<p class="note">Prose is not semantically checked; you are the check.</p></section></div>
+<p class="note">Prose is not semantically checked; you are the check.</p></section>
+${comparablesPanel(snapshot, dataset, brief.price_band)}</div>
 <aside class="stack-gap">
 ${panel('Details', props([
     ['Client', clientLink(brief.client_id)],
     ['Tender', tenderLink(brief.tender_no)],
     ['Agency', esc(tender?.agency ?? 'Unknown')],
     ['Recommendation', brief.recommendation === 'bid' ? chip('Bid', 'progress') : chip('No-bid')],
-    ['Historical band', `<span class="num">${money(brief.price_band.low_cents)} – ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">median ${money(brief.price_band.median_cents)}${n ? ` · ${n} comparables` : ''}</span>`],
+    ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>`],
     ['Conflicts', conflicts.length ? conflicts.map((c) => recordLink('conflict', c, c.tender_no)).join('<br>') : '<span class="muted">None</span>'],
     ['Submitted', stamp(brief.created_at)],
     ...(brief.decided_at ? [['Decided', stamp(brief.decided_at)]] : []),
