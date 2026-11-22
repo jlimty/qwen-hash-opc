@@ -168,3 +168,14 @@ test('the instructions ask for one or two sentences per reason', async () => {
   await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
   assert.match(request.system, /one or two sentences each/);
 });
+
+test('a draft that writes an internal ID is refused, and the prompt says to name projects by title', async () => {
+  for (const reason of [`Your verified project (id: ${verified}) is relevant.`, 'Project PRJ00004 fits well.']) {
+    const result = await draftBrief(facts, { llm: async () => ({ ...clean, reasons: [reason] }), model: 'm' });
+    assert.equal(result.ok, false, reason);
+    assert.match(result.reason, /internal ID/);
+  }
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
+  assert.match(request.system, /by its title, never by an ID/);
+});

@@ -331,3 +331,22 @@ test('checkout outside the customer\'s categories needs an explicit tick', async
   const paid = await b.post('/checkout', { ...pasted, confirm_outside: 'yes' });
   assert.equal(paid.status, 303);
 });
+
+test('an approved brief reads as a document: verdict block, price row, no Markdown marks or IDs', async () => {
+  const b = await signedUpCustomer('Mango');
+  const pasted = { title: 'Audit certification for a hospital board', agency: 'Agency A', text: '', terms: 'audit' };
+  await b.post('/checkout/start', pasted);
+  const paid = await b.post('/checkout', pasted);
+  const ref = paid.location.split('/').pop();
+  const request = (await db.query('SELECT * FROM tender_desk.brief_requests WHERE reference_number=$1', [Number(ref.slice(3))])).rows[0];
+  const admin = desk.admin(adminToken);
+  const content = ['## Recommendation', '', 'Do not bid', '', '## Why', '', '- The scope is outside your work.', '', '## Price position', '', 'Below the lower quartile, because the scope is small.', '', '## Your verified projects cited', '', 'None cited.', '', '## Comparable awards', '', '6 awards.', '', '## Limits', '', 'Past awards only.'].join('\n');
+  const saved = await admin.saveDraft({ request_id: request.id, recommendation: 'no-bid', content, credentials_cited: [] });
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  const page = await b.get(paid.location.slice(base.length));
+  assert.doesNotMatch(page.text, /##/);
+  assert.match(page.text, /class="verdict nobid"[^>]*>[\s\S]*Do not bid/);
+  assert.match(page.text, /Median award/);
+  assert.match(page.text, /<h3>Why<\/h3>/);
+  assert.doesNotMatch(page.text, /<h3>Comparable awards<\/h3>/);
+});

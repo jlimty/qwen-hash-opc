@@ -104,6 +104,11 @@ td .sub-line{display:block;font-size:.8125rem;color:var(--muted)}
 .props dt{color:var(--muted)}
 .props dd{overflow-wrap:anywhere}
 .prose{padding:1rem;white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch}
+.brief-prose{white-space:normal}
+.brief-prose h3{font-size:.875rem;font-weight:650;margin:.9rem 0 .3rem}
+.brief-prose h3:first-child{margin-top:0}
+.brief-prose p{margin:0 0 .45rem}
+.brief-prose ul{list-style:disc;padding-left:1.25rem;display:grid;gap:.3rem}
 .note{padding:.65rem 1rem;border-top:1px solid var(--line);font-size:.8125rem;color:var(--muted);background:var(--side);border-radius:0 0 10px 10px}
 .checks li{display:grid;grid-template-columns:1.25rem minmax(0,1fr);gap:.6rem;padding:.65rem 1rem;border-bottom:1px solid var(--line);font-size:.9rem}
 .checks li:last-child{border-bottom:0}

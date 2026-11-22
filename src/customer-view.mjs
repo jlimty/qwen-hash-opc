@@ -3,6 +3,7 @@
 import { formatSgd } from './brief-risk.mjs';
 import { esc, plural } from './console-view.mjs';
 import { priceLimits } from './price-check.mjs';
+import { renderBriefHtml } from './brief-render.mjs';
 import { tenderCategories } from './tender-data.mjs';
 
 export const assistantCss = `
@@ -38,7 +39,15 @@ export const assistantCss = `
 .inset-banner{margin:.75rem 1rem 0}
 .tick{display:flex;gap:.5rem;align-items:flex-start;font-weight:500}
 .inset{padding:.75rem 1rem 0}
-.brief{padding:1rem;white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch}
+.brief{padding:.5rem 1rem 1rem;max-width:72ch}
+.brief h3{font-size:.9375rem;font-weight:650;margin:1rem 0 .35rem}
+.brief p{margin:0 0 .5rem}
+.brief ul{list-style:disc;padding-left:1.25rem;display:grid;gap:.35rem}
+.verdict{display:flex;flex-direction:column;gap:.1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--line);border-radius:10px 10px 0 0}
+.verdict .label{font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.verdict strong{font-size:1.5rem;font-weight:650}
+.verdict.bid{background:var(--ok-bg);color:var(--ok)}
+.verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 @media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0}.proj{grid-template-columns:1fr}.tenders li{grid-template-columns:1fr}.wrap{padding:1rem 1rem 3rem}.top{padding:.6rem 1rem}}
 `;
 
@@ -212,9 +221,17 @@ ${outside ? `<p class="banner">This tender is outside the categories in your pro
 <p><a href="/home">Back to home</a></p>` });
 }
 
-export function renderRequest({ request, company, csrf }) {
-  const body = request.status === 'approved' ? `<section class="panel"><header><h2>Your brief</h2><span class="chip done">${request.recommendation === 'bid' ? 'Bid' : 'Do not bid'}</span></header>
-<div class="brief">${esc(request.content)}</div><p class="limits">${esc(priceLimits)}</p></section>`
+export function renderRequest({ request, company, csrf, notice }) {
+  const band = request.price_band;
+  const priceRow = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award</span></div>
+<div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
+<div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile</span></div>
+<div class="stat"><span class="big">${request.n ?? ''}</span><span class="label">Comparable awards${request.query_used ? ` for "${esc(request.query_used)}"` : ''}</span></div></div>
+${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}` : '';
+  const bid = request.recommendation === 'bid';
+  const body = request.status === 'approved' ? `<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
+${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recommendation', 'Comparable awards', 'Limits'] })}</div>
+<p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`
     : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><p class="form">${esc(request.decline_reason ?? '')}</p></section>`
       : `<p class="banner">${esc(statusText[request.status])}</p>`;
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>

@@ -29,6 +29,7 @@ Rules:
 - Do not write any digits or numbers at all, and no quantities in words either ("a third", "half", "twice", "four", "percent").
   Code adds every figure to the brief. Describe size and share in plain terms instead ("the most active buyer", "bigger than your past work").
 - Judge each verified project by its title and agency, cite every one that is relevant to this tender, and say how it is relevant.
+  Refer to a project by its title, never by an ID. If you mention a verified project in your text, cite it.
   Cite only ids from verifiedProjects. Never mention any other company.
 - Never use internal labels or field names (such as "fit", "scored", "category match" or "related projects") in what you write.`;
 
@@ -85,6 +86,9 @@ export async function draftBrief(facts, { llm, model }) {
     }
     const spelled = [...new Set([...draft.reasons, draft.price_position].join('\n').match(quantityWords) ?? [])].map((word) => word.toLowerCase());
     if (spelled.length) return { ok: false, reason: `Draft stated quantities in words: ${spelled.slice(0, 5).join(', ')}. Try Redraft.` };
+    if (/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|\b(PRJ|CLI|BRF|REQ|CON|AUD)\d{5,}\b/i.test([...draft.reasons, draft.price_position].join('\n'))) {
+      return { ok: false, reason: 'Draft wrote an internal ID. Name projects by their title. Try Redraft.' };
+    }
     const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
     if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
     const figures = unmatchedFigures([...draft.reasons, draft.price_position].join('\n'), facts.snapshot.price_band, facts.snapshot.n);

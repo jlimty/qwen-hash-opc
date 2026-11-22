@@ -1,5 +1,6 @@
 // One page per record, each at a stable URL keyed by its readable reference (BRF00012, CLI00003 …).
 // Every mention of another record links to that record's page.
+import { renderBriefHtml } from './brief-render.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
 import { referenceCode, referenceLabel } from './references.mjs';
 import { actionLabels, ago, esc, form, icon, money, outcomePill, plural, renderShell, stamp } from './console-view.mjs';
@@ -89,7 +90,7 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back }) 
 ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => check('warn', 'alert', esc(f.message), '')).join('')}</ul>` : '<div class="empty">No risk facts fired.</div>',
     '<span class="muted small">Computed by code, not by an agent. The level is a sort key, not a verdict.</span>')}
 <section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${clientLink(brief.client_id)}</span></header>
-<blockquote class="prose">${esc(brief.content)}</blockquote>
+<div class="prose brief-prose">${renderBriefHtml(brief.content)}</div>
 <p class="note">Prose is not semantically checked; you are the check.</p></section></div>
 <aside class="stack-gap">
 ${panel('Details', props([
