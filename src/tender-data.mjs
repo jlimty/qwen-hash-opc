@@ -4,7 +4,7 @@ import { parse } from 'csv-parse/sync';
 const columns = ['tender_no', 'tender_description', 'agency', 'award_date', 'tender_detail_status', 'supplier_name', 'awarded_amt'];
 const statuses = new Set(['Awarded to Suppliers', 'Awarded by Items', 'Award by interface record', 'Awarded to No Suppliers']);
 const holdoutFrom = '2026-01-01';
-const categoryRules = [
+export const categoryRules = [
   ['cleaning-facilities', /\b(cleaning|janitorial|housekeeping|landscaping|pest control|grass cutting|waste collection)\b/i],
   ['security', /\b(security (guard|services)|guarding|patrol|surveillance)\b/i],
   ['ict-services', /\b(ict|it services|software|hardware|cybersecurity|computers?|laptops?|network|data analytics|cloud|hosting)\b/i],
@@ -13,6 +13,9 @@ const categoryRules = [
   ['training-consultancy', /\b(training|consultancy|consulting|workshops?|courses?|coaching)\b/i],
   ['catering', /\b(catering|meals?|food services)\b/i],
 ];
+export function categorize(text) {
+  return categoryRules.find(([, pattern]) => pattern.test(String(text ?? '')))?.[0] ?? 'other';
+}
 export const tenderCategories = Object.freeze([...categoryRules.map(([category]) => category), 'other']);
 
 function parseDate(value, record) {
