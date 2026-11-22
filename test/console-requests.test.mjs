@@ -276,3 +276,24 @@ test('the briefs list and review page show the tender title, agency, closing dat
   assert.match(page.text, /<details class="decline"/);
   assert.match(page.text, /<dt>Profile gaps<\/dt><dd>[\s\S]*what your company does/);
 });
+
+test('the admin can ask the client for more from the queue or the brief page; the queue shows who is waiting on whom', async () => {
+  const request = await paidRequest();
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  const queue = await c.login();
+  assert.match(queue.text, new RegExp(`formaction="/actions/request/${request.request_id}/ask"[^>]*>Ask for more`));
+  const asked = await c.post(`/actions/request/${request.request_id}/ask`, { reason: 'Add your festival work with GeBIZ numbers.' });
+  assert.equal(asked.status, 303);
+  const after = await c.get('/requests');
+  assert.match(after.text, /Asked the client for more/);
+  assert.match(after.text, /Waiting for the client/);
+  assert.match(after.text, /Add your festival work with GeBIZ numbers\./);
+  const customer = (await db.query('SELECT user_id FROM tender_desk.customers c JOIN tender_desk.brief_requests r ON r.client_id=c.client_id WHERE r.id=$1', [request.request_id])).rows[0];
+  await (await desk.customer(customer.user_id)).resubmit({ request_id: request.request_id });
+  assert.match((await c.get('/requests')).text, /Resubmitted/);
+  modelReply = clean(request.project_id);
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const briefRef = (await db.query('SELECT b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0].reference_number;
+  const page = await c.get(`/briefs/BRF${String(briefRef).padStart(5, '0')}`);
+  assert.match(page.text, new RegExp(`formaction="/actions/request/${request.request_id}/ask"`));
+});

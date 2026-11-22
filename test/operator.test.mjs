@@ -147,3 +147,9 @@ test('the review pack lists the client\'s profile gaps, so a thin profile is cau
   assert.ok(Array.isArray(pack.profile_gaps));
   assert.ok(pack.profile_gaps.some((g) => g.code === 'thin_description'), JSON.stringify(pack.profile_gaps));
 });
+
+test('the operator can suggest asking the client for more, with what to ask', async () => {
+  const brief = await pendingBrief();
+  const noted = await operator.invoke('add_review_note', { subject: 'brief', id: brief.brief_id, note: 'No checked project is like this work.', suggested_action: 'ask_for_more' });
+  assert.equal(noted.outcome, 'allowed', noted.reason);
+});

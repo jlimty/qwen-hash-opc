@@ -50,7 +50,7 @@ export const actionLabels = {
   register_customer: 'Signed up', request_brief: 'Asked for a brief', cancel_request: 'Cancelled a request', save_draft: 'Saved an AI draft',
   draft_failed: 'AI draft failed', decline_request: 'Declined a request', buy_credits: 'Bought credits', update_profile: 'Updated the company profile',
   list_queue: 'Listed the queue', get_review_pack: 'Read a review pack', add_review_note: 'Left a review note', propose_revision: 'Proposed a revision',
-  prepare_project_check: 'Checked a project against GeBIZ',
+  prepare_project_check: 'Checked a project against GeBIZ', ask_for_info: 'Asked the client for more', resubmit_request: 'Resubmitted a request',
 };
 const ruleLabels = { ERROR: 'error', VALIDATION: 'invalid input' };
 const outcomeLabel = (row) => {
@@ -398,7 +398,7 @@ export function renderRevealConfirm({ state, csrf, flash }) {
 </div></div></section>` : '<section class="panel"><div class="empty"><strong>Everything is already revealed.</strong><a href="/backtest">Back to the backtest</a></div></section>' });
 }
 
-const requestStatus = { requested: ['Waiting for a draft', 'progress'], drafted: ['Draft in review', 'progress'], approved: ['Approved', 'done'],
+const requestStatus = { requested: ['Waiting for a draft', 'progress'], drafted: ['Draft in review', 'progress'], needs_info: ['Waiting for the client', 'warning'], approved: ['Approved', 'done'],
   declined: ['Declined', 'danger'], cancelled: ['Cancelled', ''] };
 
 // Paid brief requests from customers: draft (or redraft) with AI, or decline with a reason the customer reads.
@@ -411,20 +411,23 @@ export function renderRequests({ state, csrf, flash, rows, aiReady }) {
     const draftAction = !waiting ? '' : aiReady
       ? form(csrf, `/actions/request/${r.id}/draft`, r.last_error ? 'Redraft' : 'Draft', 'primary', '/requests')
       : '<span class="muted small">AI drafting is not configured (TD_OPENROUTER_KEY).</span>';
-    const decline = waiting ? `<form class="decline" method="post" action="/actions/request/${esc(r.id)}/decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
-<label for="reason-${esc(r.id)}">Reason the customer will read</label><textarea id="reason-${esc(r.id)}" name="reason" rows="2" maxlength="500"></textarea>
-<div><button type="submit">Decline</button></div></form>` : '';
+    // One message box, two outcomes: ask for more (keeps the tender and credit) or decline (frees the tender, returns the credit).
+    const decline = waiting || r.status === 'needs_info' ? `<form class="decline" method="post" action="/actions/request/${esc(r.id)}/decline"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<label for="reason-${esc(r.id)}">Message the customer will read</label><textarea id="reason-${esc(r.id)}" name="reason" rows="2" maxlength="500"></textarea>
+<div class="row-actions">${waiting ? `<button type="submit" formaction="/actions/request/${esc(r.id)}/ask">Ask for more</button>` : ''}<button type="submit" class="outline">Decline</button></div></form>` : '';
+    const asked = r.status === 'needs_info' ? `<span class="muted">Asked the client for more ${esc(ago(r.updated_at))}: “${esc(r.info_request ?? '')}”</span>` : '';
+    const resubmitted = r.resubmitted_at && waiting ? '<span class="chip warning">Resubmitted</span>' : '';
     return `<li><div><span class="num">${esc(r.reference)}</span><br>${r.closed ? '<span class="chip danger">Closed</span>' : ''}</div>
 <div><strong>${esc(r.title)}</strong><span class="muted">${esc(r.client_name)} · ${esc(r.agency ?? '')} · <span class="num">${esc(r.tender_no)}</span></span>
 <span class="muted">${r.credits_spent ? `${r.credits_spent} credit${r.credits_spent === 1 ? '' : 's'}` : r.payment_status === 'test' ? `Test payment · ${money(r.amount_cents ?? 0)}` : 'No charge'} · requested ${esc(ago(r.created_at))}</span>
 ${r.last_error ? `<span class="muted">Last draft failed: ${esc(r.last_error)}</span>` : ''}
-${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
-<div class="row-actions"><span class="chip ${chip}">${esc(label)}</span>${draftAction}</div></li>`;
+${asked}${brief ? `<span>${recordLink('brief', brief)}</span>` : ''}${decline}</div>
+<div class="row-actions">${resubmitted}<span class="chip ${chip}">${esc(label)}</span>${draftAction}</div></li>`;
   });
   const body = `<section class="panel"><header><h2>Requests</h2><span class="muted small">${plural(rows.filter((r) => r.status === 'requested').length, 'waiting request')}</span></header>
 ${items.length ? `<ul class="queue">${items.join('')}</ul>` : '<p class="empty"><strong>No brief requests yet.</strong>Paid requests from customers appear here.</p>'}</section>`;
   return renderShell({ state, csrf, active: 'requests', title: 'Brief requests', flash,
-    sub: 'Customers spent a credit on a reviewed brief. Draft it with AI, edit or approve it, or decline it: a decline frees the tender and returns the credit.', body });
+    sub: 'Customers spent a credit on a reviewed brief. Draft it with AI, edit or approve it, ask the client for more (they keep the tender and resubmit for free), or decline it: a decline frees the tender and returns the credit.', body });
 }
 
 // Notes the admin's AI reviewer left: shown as suggestions, never as decisions.

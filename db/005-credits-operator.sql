@@ -37,7 +37,7 @@ CREATE TABLE tender_desk.review_notes (
   subject_id uuid NOT NULL,
   author text NOT NULL CHECK (length(author) BETWEEN 1 AND 100),
   note text NOT NULL CHECK (length(btrim(note)) BETWEEN 1 AND 2000),
-  suggested_action text CHECK (suggested_action IN ('approve', 'redraft', 'decline', 'verify', 'do_not_verify')),
+  suggested_action text CHECK (suggested_action IN ('approve', 'redraft', 'ask_for_more', 'decline', 'verify', 'do_not_verify')),
   redraft_note text CHECK (redraft_note IS NULL OR length(redraft_note) <= 1000),
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -50,6 +50,14 @@ ALTER TABLE tender_desk.clients ADD COLUMN uen text CHECK (uen IS NULL OR uen ~ 
 CREATE UNIQUE INDEX clients_uen ON tender_desk.clients (uen) WHERE uen IS NOT NULL;
 -- A hold ends when the tender closes (or after a fixed time for a pasted tender with no closing date).
 ALTER TABLE tender_desk.pricing_holds ADD COLUMN expires_at timestamptz;
+-- "Ask for more": the admin asks the client for missing information instead of declining. The tender stays held and
+-- the credit stays spent; the client resubmits for free, or cancels for a refund.
+ALTER TABLE tender_desk.brief_requests DROP CONSTRAINT brief_requests_status_check,
+  ADD CONSTRAINT brief_requests_status_check CHECK (status IN ('requested', 'drafted', 'needs_info', 'approved', 'declined', 'cancelled')),
+  ADD COLUMN info_request text CHECK (info_request IS NULL OR length(info_request) <= 500),
+  ADD COLUMN resubmitted_at timestamptz;
+DROP INDEX tender_desk.brief_requests_one_active;
+CREATE UNIQUE INDEX brief_requests_one_active ON tender_desk.brief_requests (client_id, tender_no) WHERE status IN ('requested', 'drafted', 'needs_info');
 ALTER TABLE tender_desk.brief_requests ADD COLUMN requirements_text text CHECK (requirements_text IS NULL OR length(requirements_text) <= 4000);
 
 INSERT INTO tender_desk.settings (key, value) VALUES ('credit_price_cents', '2900'), ('credits_per_brief', '1'),

@@ -345,3 +345,61 @@ test('a pasted tender with no closing date holds for forty-five days', async () 
   const hold = (await db.query('SELECT expires_at FROM tender_desk.pricing_holds WHERE tender_no=$1', [result.tender_no])).rows[0];
   assert.equal(new Date(hold.expires_at).toISOString(), new Date(now.getTime() + 45 * 86400000).toISOString());
 });
+
+test('asking for more keeps the tender and the credit; the customer resubmits for free and the request goes back to the queue', async () => {
+  const a = await customer('Asker');
+  const b = await customer('Waiter');
+  await b.ops.buyCredits({ credits: 5 });
+  const tender_no = await openTender();
+  const requested = await ask(a, tender_no);
+  const before = await balance(a.client_id);
+  const missing = await admin.askForInfo({ request_id: requested.request_id });
+  assert.equal(missing.outcome, 'blocked');
+  const asked = await admin.askForInfo({ request_id: requested.request_id, message: 'Add your festival contracts with their GeBIZ numbers.' });
+  assert.equal(asked.outcome, 'allowed');
+  const row = (await db.query('SELECT status,info_request FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0];
+  assert.deepEqual(row, { status: 'needs_info', info_request: 'Add your festival contracts with their GeBIZ numbers.' });
+  assert.equal(await balance(a.client_id), before, 'the credit stays spent');
+  assert.equal((await ask(b, tender_no)).outcome, 'blocked', 'the tender stays held');
+  const again = await ask(a, tender_no);
+  assert.equal(again.request_id, requested.request_id, 'asking again points at the same request, no second credit');
+  const back = await a.ops.resubmit({ request_id: requested.request_id, requirements: 'Must have run three public events.' });
+  assert.equal(back.outcome, 'allowed');
+  const after = (await db.query('SELECT status,requirements_text,resubmitted_at FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0];
+  assert.equal(after.status, 'requested');
+  assert.equal(after.requirements_text, 'Must have run three public events.');
+  assert.ok(after.resubmitted_at);
+  assert.equal(await balance(a.client_id), before);
+  assert.equal((await a.ops.resubmit({ request_id: requested.request_id })).outcome, 'blocked', 'only a request that needs info can be resubmitted');
+});
+
+test('asking for more on a drafted request sets the draft aside, so the next draft starts fresh', async () => {
+  const a = await customer('Redo');
+  const tender_no = await openTender();
+  const requested = await ask(a, tender_no);
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const saved = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
+  assert.equal(saved.outcome, 'allowed');
+  assert.equal((await admin.askForInfo({ request_id: requested.request_id, message: 'Paste the tender requirements.' })).outcome, 'allowed');
+  const brief = (await db.query('SELECT status FROM tender_desk.briefs WHERE id=$1', [saved.brief_id])).rows[0];
+  assert.equal(brief.status, 'declined');
+  const row = (await db.query('SELECT status,brief_id FROM tender_desk.brief_requests WHERE id=$1', [requested.request_id])).rows[0];
+  assert.deepEqual(row, { status: 'needs_info', brief_id: null });
+  assert.equal((await db.query('SELECT client_id FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0].client_id, a.client_id);
+  await a.ops.resubmit({ request_id: requested.request_id });
+  const redone = await admin.saveDraft({ request_id: requested.request_id, ...draft(await admin.prepareDraft(requested.request_id)) });
+  assert.equal(redone.outcome, 'allowed', redone.reason);
+});
+
+test('a request that needs info can be cancelled for a refund, or declined by the admin', async () => {
+  const a = await customer('Leaver');
+  const one = await ask(a, await openTender());
+  await admin.askForInfo({ request_id: one.request_id, message: 'More please.' });
+  const before = await balance(a.client_id);
+  assert.equal((await a.ops.cancelRequest({ request_id: one.request_id })).outcome, 'allowed');
+  assert.equal(await balance(a.client_id), before + 1);
+  await a.ops.buyCredits({ credits: 5 });
+  const two = await ask(a, await openTender());
+  await admin.askForInfo({ request_id: two.request_id, message: 'More please.' });
+  assert.equal((await admin.declineRequest({ request_id: two.request_id, reason: 'No reply before the tender closed.' })).outcome, 'declined');
+});

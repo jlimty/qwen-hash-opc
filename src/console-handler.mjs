@@ -287,13 +287,16 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
       }
       return redirect(recordHref('brief', brief), { cookies: [flashCookie(flash)] });
     }
-    const requestAction = /^\/actions\/request\/([^/]+)\/(draft|decline)$/.exec(path);
+    const requestAction = /^\/actions\/request\/([^/]+)\/(draft|decline|ask)$/.exec(path);
     if (requestAction) {
       const [, id, verb] = requestAction;
       if (!idPattern.test(id)) return text(404, 'Not found');
       let flash;
       try {
-        if (verb === 'decline') {
+        if (verb === 'ask') {
+          const result = await ops.askForInfo({ request_id: id, message: String(form.get('reason') ?? '').slice(0, 500) });
+          flash = result.outcome === 'blocked' ? { ok: false, text: result.reason } : { ok: true, text: 'Asked the client for more. The tender stays theirs and the credit stays spent until they resubmit or cancel.' };
+        } else if (verb === 'decline') {
           const result = await ops.declineRequest({ request_id: id, reason: String(form.get('reason') ?? '').slice(0, 500) });
           flash = result.outcome === 'blocked' ? { ok: false, text: result.reason } : { ok: true, text: 'Request declined. The customer can see your reason, and the tender is free again.' };
         } else if (typeof llm !== 'function') {

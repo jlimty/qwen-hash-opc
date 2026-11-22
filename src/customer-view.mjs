@@ -223,10 +223,10 @@ ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></head
 <div><button class="primary" type="submit">Save profile</button></div></form></section>` });
 }
 
-const statusText = { requested: 'In review: usually within one business day', drafted: 'In review: usually within one business day', approved: 'Brief ready',
+const statusText = { requested: 'In review: usually within one business day', drafted: 'In review: usually within one business day', needs_info: 'Needs your reply', approved: 'Brief ready',
   declined: 'Declined', cancelled: 'Cancelled' };
-const chipText = { requested: 'In review', drafted: 'In review', approved: 'Brief ready', declined: 'Declined', cancelled: 'Cancelled' };
-const statusChip = { requested: 'progress', drafted: 'progress', approved: 'done', declined: 'danger', cancelled: '' };
+const chipText = { requested: 'In review', drafted: 'In review', needs_info: 'Needs your reply', approved: 'Brief ready', declined: 'Declined', cancelled: 'Cancelled' };
+const statusChip = { requested: 'progress', drafted: 'progress', needs_info: 'warning', approved: 'done', declined: 'danger', cancelled: '' };
 
 export function renderHome({ context, matches, refreshedAt, csrf, flash }) {
   const { client, projects, requests } = context;
@@ -344,11 +344,22 @@ ${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards fo
   const body = request.status === 'approved' ? (request.parts ? renderReport(request, awards) : `<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
 ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recommendation', 'Comparable awards', 'Limits'] })}</div>
 <p class="limits">${esc(priceLimits)} Contract scope and length differ between awards.</p></section>`)
-    : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><p class="form">${esc(request.decline_reason ?? '')}</p></section>`
-      : `<p class="banner">${esc(statusText[request.status])}. Your brief will appear on this page and on your home page.</p>`;
+    : request.status === 'declined' ? `<section class="panel"><header><h2>We could not advise on this tender</h2></header><div class="form"><p>${esc(request.decline_reason ?? '')}</p>
+<p class="muted">Your credit has been returned.</p>
+<div class="row-actions">${request.source === 'feed' && request.closes_at && new Date(request.closes_at) > new Date() ? `<a class="btn outline" href="/checkout?tender=${encodeURIComponent(request.tender_no)}">Ask for a brief again</a>` : ''}<a class="btn outline" href="/">Browse open tenders</a></div></div></section>`
+      : request.status === 'needs_info' ? `<section class="panel"><header><h2>We need a bit more before we can advise</h2></header><div class="form">
+<p class="banner">${esc(request.info_request ?? '')}</p>
+<p>Update your <a href="/profile">company profile</a> if that is what's missing, or add the tender's requirements below. Then resubmit: it costs no credit, and the tender stays yours meanwhile.</p>
+<form class="form" method="post" action="/requests/${esc(request.reference)}/resubmit">${hidden('csrf', csrf)}
+<label for="requirements">Key requirements from the tender <span class="hint">(optional, up to 4000 characters)</span></label>
+<textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(request.requirements_text ?? '')}</textarea>
+<div><button class="primary" type="submit">Resubmit</button></div></form>
+<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="link" type="submit">Cancel and get your credit back</button></form></div></section>`
+        : `<p class="banner">${esc(statusText[request.status])}. Your brief will appear on this page and on your home page.</p>
+${request.status === 'requested' ? `<form method="post" action="/requests/${esc(request.reference)}/cancel">${hidden('csrf', csrf)}<button class="link" type="submit">Cancel and get your credit back</button></form>` : ''}`;
   // An approved brief is finished: every step is done, none is current. The sample shows no steps at all.
-  const stage = request.reference === 'SAMPLE' ? undefined : { requested: 1, drafted: 1, approved: 3 }[request.status];
-  const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', 'In review', 'Brief ready'].map((label, at) =>
+  const stage = request.reference === 'SAMPLE' ? undefined : { requested: 1, drafted: 1, needs_info: 1, approved: 3 }[request.status];
+  const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', request.status === 'needs_info' ? 'Needs your reply' : 'In review', 'Brief ready'].map((label, at) =>
     `<li class="${at < stage ? 'done' : at === stage ? 'current' : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
   const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
   return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>

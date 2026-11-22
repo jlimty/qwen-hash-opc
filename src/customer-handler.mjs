@@ -9,7 +9,7 @@ import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.
 import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { uenPattern } from './governance-agent.mjs';
-import { plural } from './console-view.mjs';
+import { esc, plural } from './console-view.mjs';
 import { maxProfileText, ownAwards, prefillValues, profileGaps, readProfile } from './profile-help.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
 
@@ -306,6 +306,17 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       return redirect('/credits');
     }
 
+    // Resubmit after the admin asked for more (free), or cancel a waiting request (credit returned).
+    const requestStep = post && /^\/requests\/([^/]+)\/(resubmit|cancel)$/.exec(path);
+    if (requestStep) {
+      const mine = (await customer.context()).requests.find((r) => r.reference === requestStep[1]);
+      if (!mine) return html(404, layout({ title: 'Not found', csrf, company, body: '<p class="banner bad">That request was not found.</p><p><a href="/home">Back to home</a></p>' }));
+      const result = requestStep[2] === 'resubmit'
+        ? await customer.resubmit({ request_id: mine.id, ...(String(form.get('requirements') ?? '').trim() && { requirements: String(form.get('requirements')).trim().slice(0, 4000) }) })
+        : await customer.cancelRequest({ request_id: mine.id });
+      if (result.outcome !== 'allowed') return html(409, layout({ title: 'Not possible', csrf, company, body: `<p class="banner bad">${esc(result.reason)}</p><p><a href="/requests/${esc(mine.reference)}">Back to the request</a></p>` }));
+      return redirect(`/requests/${mine.reference}`);
+    }
     const requestRoute = /^\/requests\/([^/]+)$/.exec(path);
     if (requestRoute && !post) {
       const ref = parseReference(requestRoute[1]);

@@ -590,3 +590,62 @@ test('checkout lists what would make the brief weak before a credit is spent', a
   assert.match(start.text, /None of your projects has been checked yet/);
   assert.match(start.text, /href="[^"]*\/profile"[^>]*>Improve your profile/);
 });
+
+async function requestAs(label) {
+  const b = await signedUpCustomer(label);
+  const pasted = { title: `Audit certification for a council ${randomBytes(3).toString('hex')}`, agency: 'Agency A', text: '', terms: 'audit' };
+  await b.post('/checkout/start', pasted);
+  const paid = await b.post('/checkout', pasted);
+  const ref = paid.location.split('/').pop();
+  const request = (await db.query('SELECT * FROM tender_desk.brief_requests WHERE reference_number=$1', [Number(ref.slice(3))])).rows[0];
+  return { b, ref, request };
+}
+
+test('when the admin asks for more, the customer sees what to add, resubmits for free, and the request goes back into review', async () => {
+  const { b, ref, request } = await requestAs('Needy');
+  await desk.admin(adminToken).askForInfo({ request_id: request.id, message: 'Add your council audit work with its GeBIZ number.' });
+  const home = await b.get('/home');
+  assert.match(home.text, /Needs your reply/);
+  const page = await b.get(`/requests/${ref}`);
+  assert.match(page.text, /We need a bit more before we can advise/);
+  assert.match(page.text, /aria-current="step">Needs your reply/);
+  assert.match(page.text, /Add your council audit work with its GeBIZ number\./);
+  assert.match(page.text, /href="[^"]*\/profile"/);
+  assert.match(page.text, /action="[^"]*\/requests\/REQ\d+\/resubmit"/);
+  assert.match(page.text, /Cancel and get your credit back/);
+  const credits = (await b.get('/credits')).text.match(/You have (\d+) credit/)[1];
+  const sent = await b.post(`/requests/${ref}/resubmit`, { requirements: 'Must have audited a council.' });
+  assert.equal(sent.status, 303);
+  assert.equal(sent.location, `${base}/requests/${ref}`);
+  const after = await b.get(`/requests/${ref}`);
+  assert.match(after.text, /In review/);
+  assert.equal((await b.get('/credits')).text.match(/You have (\d+) credit/)[1], credits, 'no credit spent');
+  assert.equal((await db.query('SELECT requirements_text FROM tender_desk.brief_requests WHERE id=$1', [request.id])).rows[0].requirements_text, 'Must have audited a council.');
+});
+
+test('a waiting request can be cancelled for its credit back', async () => {
+  const { b, ref } = await requestAs('Quitter');
+  const page = await b.get(`/requests/${ref}`);
+  assert.match(page.text, /Cancel and get your credit back/);
+  const before = Number((await b.get('/credits')).text.match(/You have (\d+) credit/)[1]);
+  const done = await b.post(`/requests/${ref}/cancel`, {});
+  assert.equal(done.status, 303);
+  assert.equal(Number((await b.get('/credits')).text.match(/You have (\d+) credit/)[1]), before + 1);
+  assert.match((await b.get(`/requests/${ref}`)).text, /Cancelled/);
+});
+
+test('a declined request says what to do next', async () => {
+  const { b, ref, request } = await requestAs('Declined');
+  await desk.admin(adminToken).declineRequest({ request_id: request.id, reason: 'The comparable awards are a different trade.' });
+  const page = await b.get(`/requests/${ref}`);
+  assert.match(page.text, /We could not advise on this tender/);
+  assert.match(page.text, /Your credit has been returned/);
+  assert.match(page.text, /href="[^"]*\/"[^>]*>Browse open tenders/);
+});
+
+test('resubmitting a request that is not waiting on the customer explains why, without crashing', async () => {
+  const { b, ref } = await requestAs('Eager');
+  const early = await b.post(`/requests/${ref}/resubmit`, {});
+  assert.equal(early.status, 409);
+  assert.match(early.text, /Only a request we asked you about can be resubmitted/);
+});
