@@ -8,6 +8,7 @@ import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mj
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
+import { uenPattern } from './governance-agent.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
 
 const maxBodyBytes = 256 * 1024;
@@ -44,11 +45,13 @@ export function profileFromForm(form) {
       ...(gebiz && { gebiz_tender_no: gebiz.slice(0, 100) }) });
   }
   if (!String(form.get('name') ?? '').trim()) return { error: 'Enter your company name.' };
+  const uen = String(form.get('uen') ?? '').trim().toUpperCase();
+  if (uen && !uenPattern.test(uen)) return { error: 'Enter a valid UEN, for example 201912345K.' };
   if (!String(form.get('capabilities') ?? '').trim()) return { error: 'Describe what your company does.' };
   if (!categories.length) return { error: 'Choose at least one category.' };
   if (!Number.isInteger(team) || team < 1) return { error: 'Enter your team size as a whole number.' };
   if (max === undefined) return { error: 'Enter the largest contract you could deliver, in dollars.' };
-  return { profile: { name: String(form.get('name')).trim().slice(0, 150), capabilities: String(form.get('capabilities')).trim().slice(0, 4000),
+  return { profile: { name: String(form.get('name')).trim().slice(0, 150), ...(uen && { uen }), capabilities: String(form.get('capabilities')).trim().slice(0, 4000),
     categories, team_size: team, max_contract_cents: max, past_projects } };
 }
 
@@ -190,7 +193,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     if (!userId) return redirect(path === '/checkout' || path === '/checkout/start' ? '/signup' : '/signin');
     if (path === '/profile') {
       const context = customer ? await customer.context() : undefined;
-      const current = context ? { name: context.client.name, capabilities: context.client.capabilities, categories: context.client.categories,
+      const current = context ? { name: context.client.name, uen: context.client.uen ?? '', capabilities: context.client.capabilities, categories: context.client.categories,
         team_size: String(context.client.team_size), max_contract: String(context.client.max_contract_cents / 100) } : {};
       if (!post) return html(200, renderProfile({ csrf, values: current, existing: context?.projects, company }));
       const values = Object.fromEntries([...form.keys()].filter((k) => k !== 'csrf' && k !== 'categories').map((k) => [k, form.get(k)]));
@@ -199,7 +202,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const parsed = profileFromForm(form);
       if (parsed.error) return html(400, renderProfile({ csrf, message: parsed.error, values: { ...current, ...values }, existing: context?.projects, company }));
       if (context) {
-        const { name, ...changes } = parsed.profile;
+        const { name, uen, ...changes } = parsed.profile;
         const updated = await customer.updateProfile(changes);
         if (updated.outcome !== 'allowed') return html(400, renderProfile({ csrf, message: updated.reason, values, existing: context.projects, company }));
         return redirect('/home', { cookies: [`td_cflash=saved; ${cookieFlags}; Max-Age=30`] });

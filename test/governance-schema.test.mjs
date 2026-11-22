@@ -123,11 +123,11 @@ describe('PostgreSQL governance schema', () => {
 
   test('creates exactly the service tables and column types in tender_desk, not public', async () => {
     const expected = {
-      clients: 'id:uuid name:text capabilities:text categories:_text team_size:int4 max_contract_cents:int8 created_at:timestamptz reference_number:int8',
+      clients: 'id:uuid name:text capabilities:text categories:_text team_size:int4 max_contract_cents:int8 created_at:timestamptz reference_number:int8 uen:text',
       projects: 'id:uuid client_id:uuid title:text agency:text value_cents:int8 verified:bool reference_number:int8 gebiz_tender_no:text verification_note:text verified_at:timestamptz',
       settings: 'key:text value:text updated_at:timestamptz',
       agent_credentials: 'id:uuid token_hash:text role:text client_id:uuid created_at:timestamptz',
-      pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz',
+      pricing_holds: 'tender_no:text client_id:uuid state:text created_at:timestamptz expires_at:timestamptz',
       stats_snapshots: 'client_id:uuid tender_no:text stat_id:text snapshot:jsonb',
       shortlists: 'client_id:uuid tender_no:text fit_score:int4 reasons:_text',
       briefs: 'id:uuid client_id:uuid tender_no:text stat_id:text recommendation:text content:text credentials_cited:_uuid price_band:jsonb flags:_text status:text created_at:timestamptz reference_number:int8 risk_facts:jsonb risk_level:text decided_at:timestamptz decline_reason:text parts:jsonb revision:int4',

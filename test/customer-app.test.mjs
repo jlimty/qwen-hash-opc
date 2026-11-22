@@ -10,6 +10,7 @@ import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
 import { fakeNeonAuth } from './support/fake-neon-auth.mjs';
+import { testUen } from './support/uen.mjs';
 
 const xml = await readFile(new URL('./fixtures/gebiz-professional.xml', import.meta.url), 'utf8');
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
@@ -75,7 +76,7 @@ async function signedUpCustomer(label) {
   assert.equal(signup.status, 303);
   assert.equal(signup.location, `${base}/profile`);
   await b.get('/profile');
-  const saved = await b.post('/profile', { name: `${label} Audit ${randomBytes(3).toString('hex')}`, capabilities: 'Audit and certification work.',
+  const saved = await b.post('/profile', { name: `${label} Audit ${randomBytes(3).toString('hex')}`, uen: testUen(), capabilities: 'Audit and certification work.',
     categories: 'other', team_size: '6', max_contract: '500,000', project_title_0: 'Audit for a polytechnic', project_agency_0: 'Agency A',
     project_value_0: '120000', project_gebiz_0: '', project_title_1: 'Unchecked gala' });
   assert.equal(saved.status, 303, saved.text.slice(0, 400));
@@ -251,7 +252,7 @@ test('checkout tells a customer with no checked projects what a brief can cite',
   await b.get('/signup');
   await b.post('/signup', { email: `nocheck-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
   await b.get('/profile');
-  await b.post('/profile', { name: `Nocheck ${randomBytes(3).toString('hex')}`, capabilities: 'Audit.', categories: 'other', team_size: '2', max_contract: '100000', project_title_0: 'Unchecked audit' });
+  await b.post('/profile', { name: `Nocheck ${randomBytes(3).toString('hex')}`, uen: testUen(), capabilities: 'Audit.', categories: 'other', team_size: '2', max_contract: '100000', project_title_0: 'Unchecked audit' });
   const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
   assert.match(start.text, /None of your projects has been checked yet/);
   assert.match(start.text, /Use 1 credit/);

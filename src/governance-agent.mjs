@@ -14,18 +14,24 @@ const pagination = { limit: z.number().int().min(1).max(100).default(20), offset
 const bandSchema = z.strictObject({ low_cents: cents, median_cents: cents, high_cents: cents });
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
 
+// Singapore UEN formats: businesses (8 digits + letter), local companies (9 digits + letter), others (T/S/R, year, type, 4 digits, letter).
+export const uenPattern = /^(\d{8}[A-Z]|\d{9}[A-Z]|[TSR]\d{2}[A-Z]{2}\d{4}[A-Z])$/;
 export const clientProfileSchema = z.strictObject({
-  name: text(150), capabilities: text(4000), categories: z.array(z.enum(tenderCategories)).min(1).max(8),
+  name: text(150),
+  uen: z.string().trim().toUpperCase().regex(uenPattern, 'Enter a valid UEN, for example 201912345K.').optional(), capabilities: text(4000), categories: z.array(z.enum(tenderCategories)).min(1).max(8),
   team_size: z.number().int().min(1).max(100000), max_contract_cents: cents,
   past_projects: z.array(z.strictObject({ title: text(250), agency: text(250).optional(), value_cents: cents.optional(),
     gebiz_tender_no: text(100).optional() })).max(30).default([]),
 });
 
 export async function createClient(tx, input) {
-  const { rows } = await tx.query(`INSERT INTO tender_desk.clients (name, capabilities, categories, team_size, max_contract_cents)
-    VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id, reference_number`,
-  [input.name, input.capabilities, input.categories, input.team_size, input.max_contract_cents]);
-  if (!rows.length) return blocked('G1', 'That company name is not available. If this is your company, contact Tender Desk.');
+  const { rows } = await tx.query(`INSERT INTO tender_desk.clients (name, capabilities, categories, team_size, max_contract_cents, uen)
+    VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING id, reference_number`,
+  [input.name, input.capabilities, input.categories, input.team_size, input.max_contract_cents, input.uen ?? null]);
+  if (!rows.length) {
+    return blocked('G1', input.uen ? 'That company name or UEN is already registered. If this is your company, contact Tender Desk.'
+      : 'That company name is not available. If this is your company, contact Tender Desk.');
+  }
   const client_id = rows[0].id;
   const projects = [];
   for (const item of input.past_projects) {

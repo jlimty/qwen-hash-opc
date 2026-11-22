@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { createConsoleHandler } from '../src/console-handler.mjs';
 import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
+import { testUen } from './support/uen.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
 
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
@@ -43,7 +44,7 @@ function consoleWith(options = {}) {
 
 async function paidRequest({ closes = '2026-12-04T13:00:00+08:00' } = {}) {
   const userId = `user-${randomUUID().slice(0, 12)}`;
-  const created = await desk.registerCustomer(userId, { name: `Quill Events ${randomUUID().slice(0, 6)}`, capabilities: 'Events', categories: ['events-community'],
+  const created = await desk.registerCustomer(userId, { uen: testUen(), name: `Quill Events ${randomUUID().slice(0, 6)}`, capabilities: 'Events', categories: ['events-community'],
     team_size: 5, max_contract_cents: 90000000, past_projects: [{ title: 'Event for a ministry', agency: 'Agency A' }] });
   await admin.verifyProject({ project_id: created.projects[0].id, verified: true, note: 'Checked.' });
   const tender_no = `LIVE${randomUUID().slice(0, 8).toUpperCase()}`;

@@ -18,13 +18,13 @@ import { parseTenderCsv } from '../src/tender-data.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const customers = [
-  { label: 'aster', check: 'all', profile: { name: 'Aster Events (test)', capabilities: 'Corporate events, community festivals and exhibitions.',
+  { label: 'aster', check: 'all', profile: { name: 'Aster Events (test)', uen: 'T99TD0001A', capabilities: 'Corporate events, community festivals and exhibitions.',
     categories: ['events-community'], team_size: 8, max_contract_cents: 60000000,
     past_projects: [{ title: 'Community festival for a town council', agency: 'Town council', value_cents: 18000000 }, { title: 'Exhibition production for a museum', value_cents: 9500000 }] } },
-  { label: 'bramble', check: 'first', profile: { name: 'Bramble Cleaning (test)', capabilities: 'Office and school cleaning, housekeeping and pest control.',
+  { label: 'bramble', check: 'first', profile: { name: 'Bramble Cleaning (test)', uen: 'T99TD0002B', capabilities: 'Office and school cleaning, housekeeping and pest control.',
     categories: ['cleaning-facilities'], team_size: 40, max_contract_cents: 150000000,
     past_projects: [{ title: 'School cleaning services', agency: 'Ministry of Education - Schools', value_cents: 42000000 }, { title: 'Office housekeeping for a statutory board' }] } },
-  { label: 'clover', check: 'none', profile: { name: 'Clover IT (test)', capabilities: 'Software development and IT support for public agencies.',
+  { label: 'clover', check: 'none', profile: { name: 'Clover IT (test)', uen: 'T99TD0003C', capabilities: 'Software development and IT support for public agencies.',
     categories: ['ict-services'], team_size: 12, max_contract_cents: 80000000, past_projects: [{ title: 'Booking system for a community club' }] } },
 ];
 const password = () => randomBytes(15).toString('base64url').slice(0, 20);

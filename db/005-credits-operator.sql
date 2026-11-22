@@ -45,6 +45,11 @@ CREATE INDEX review_notes_subject ON tender_desk.review_notes (subject, subject_
 
 -- revision counts edits to a pending brief, so an approval can name the exact version the admin read.
 ALTER TABLE tender_desk.briefs ADD COLUMN parts jsonb, ADD COLUMN revision integer NOT NULL DEFAULT 1 CHECK (revision > 0);
+-- One company per UEN, so the welcome credit can't be farmed with new accounts. Older companies may have none.
+ALTER TABLE tender_desk.clients ADD COLUMN uen text CHECK (uen IS NULL OR uen ~ '^[0-9A-Z]{9,10}$');
+CREATE UNIQUE INDEX clients_uen ON tender_desk.clients (uen) WHERE uen IS NOT NULL;
+-- A hold ends when the tender closes (or after a fixed time for a pasted tender with no closing date).
+ALTER TABLE tender_desk.pricing_holds ADD COLUMN expires_at timestamptz;
 ALTER TABLE tender_desk.brief_requests ADD COLUMN requirements_text text CHECK (requirements_text IS NULL OR length(requirements_text) <= 4000);
 
 INSERT INTO tender_desk.settings (key, value) VALUES ('credit_price_cents', '2900'), ('credits_per_brief', '1'),

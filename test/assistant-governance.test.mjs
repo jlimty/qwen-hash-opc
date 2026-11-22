@@ -5,6 +5,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { initializeGovernance } from '../src/governance-db.mjs';
 import { createTenderDesk } from '../src/governance.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
+import { testUen } from './support/uen.mjs';
 
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = parseTenderCsv(header + [1, 2, 3, 4, 5, 6].map((i) =>
@@ -22,7 +23,7 @@ before(async () => {
 });
 after(async () => { await db?.close(); });
 
-const profile = (name) => ({ name, capabilities: 'Event production', categories: ['events-community'], team_size: 8, max_contract_cents: 50000000,
+const profile = (name, uen = testUen()) => ({ name, uen, capabilities: 'Event production', categories: ['events-community'], team_size: 8, max_contract_cents: 50000000,
   past_projects: [{ title: 'Annual event for a ministry', agency: 'Agency A', value_cents: 200000 }, { title: 'Unchecked gala' }] });
 
 async function customer(label) {
@@ -302,4 +303,45 @@ test('bad credit settings fall back to safe values instead of minting credits or
   assert.equal(bad.welcome, 1);
   assert.equal(bad.priceCents, 2900);
   assert.deepEqual(bad.packs, [{ credits: 5, cents: 4950 }]);
+});
+
+test('a customer company needs a valid UEN, and one UEN gets one company and one welcome credit', async () => {
+  const userId = () => `user-${randomUUID().slice(0, 12)}`;
+  const { uen: _omit, ...noUen } = profile(`NoUen ${randomUUID().slice(0, 6)}`);
+  const missing = await desk.registerCustomer(userId(), noUen);
+  assert.equal(missing.outcome, 'blocked');
+  assert.match(missing.reason, /UEN/);
+  const bad = await desk.registerCustomer(userId(), profile(`BadUen ${randomUUID().slice(0, 6)}`, '12345'));
+  assert.equal(bad.outcome, 'blocked');
+  const uen = testUen();
+  const first = await desk.registerCustomer(userId(), profile(`First ${randomUUID().slice(0, 6)}`, uen.toLowerCase()));
+  assert.equal(first.outcome, 'allowed');
+  assert.equal((await db.query('SELECT uen FROM tender_desk.clients WHERE id=$1', [first.client_id])).rows[0].uen, uen);
+  const second = await desk.registerCustomer(userId(), profile(`Second ${randomUUID().slice(0, 6)}`, uen));
+  assert.equal(second.outcome, 'blocked');
+  assert.match(second.reason, /already registered/);
+  assert.equal((await db.query("SELECT count(*)::int AS n FROM tender_desk.credit_ledger WHERE reason='welcome' AND client_id IN (SELECT id FROM tender_desk.clients WHERE uen=$1)", [uen])).rows[0].n, 1);
+});
+
+test('a hold lasts until the tender closes; an expired hold no longer blocks anyone', async () => {
+  const a = await customer('Holdfast');
+  const b = await customer('Latecomer');
+  await b.ops.buyCredits({ credits: 5 });
+  const tender_no = await openTender();
+  assert.equal((await ask(a, tender_no)).outcome, 'allowed');
+  const hold = (await db.query('SELECT expires_at FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0];
+  assert.equal(new Date(hold.expires_at).toISOString(), new Date('2026-12-04T13:00:00+08:00').toISOString());
+  assert.equal((await ask(b, tender_no)).outcome, 'blocked');
+  await db.query("UPDATE tender_desk.pricing_holds SET expires_at=$2 WHERE tender_no=$1", [tender_no, new Date(now.getTime() - 1000)]);
+  assert.equal((await b.ops.canRequest(tender_no, { now })).ok, true);
+  assert.equal((await ask(b, tender_no)).outcome, 'allowed');
+  assert.equal((await db.query('SELECT client_id FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0].client_id, b.client_id);
+});
+
+test('a pasted tender with no closing date holds for forty-five days', async () => {
+  const a = await customer('Paster');
+  const result = await a.ops.requestBrief({ pasted: { title: `Event management for a fair ${randomUUID().slice(0, 6)}`, agency: 'Agency A' }, terms: ['event management'] }, { now });
+  assert.equal(result.outcome, 'allowed');
+  const hold = (await db.query('SELECT expires_at FROM tender_desk.pricing_holds WHERE tender_no=$1', [result.tender_no])).rows[0];
+  assert.equal(new Date(hold.expires_at).toISOString(), new Date(now.getTime() + 45 * 86400000).toISOString());
 });

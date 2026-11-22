@@ -35,6 +35,7 @@ export async function creditSettings(tx) {
   return { priceCents: whole(rows.credit_price_cents, 1, 100000000, 2900), perBrief: whole(rows.credits_per_brief, 1, 1000, 1),
     welcome: whole(rows.welcome_credits, 0, 1000, 1), packs };
 }
+export const holdDaysWithoutClosing = 45;
 const creditBalance = async (tx, client_id) => Number((await tx.query('SELECT COALESCE(sum(delta),0) AS n FROM tender_desk.credit_ledger WHERE client_id=$1', [client_id])).rows[0].n);
 // Give back whatever a request spent (credits, never cash): used when a request is declined or cancelled.
 async function refundRequest(tx, request) {
@@ -245,7 +246,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     if (approved) return { ok: false, reason: 'approved', request_reference: referenceCode('REQ', approved.reference_number) };
     const open = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [tender_no])).rows[0];
     if (open?.closes_at && new Date(open.closes_at) <= now) return { ok: false, reason: 'closed' };
-    const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0];
+    const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1 AND (expires_at IS NULL OR expires_at > $2)', [tender_no, now])).rows[0];
     if (hold && (hold.state !== 'held' || hold.client_id !== client_id)) return { ok: false, reason: 'held', message: refusal };
     return { ok: true };
   }
@@ -280,7 +281,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     if (await creditBalance(tx, client_id) < perBrief) return { ...blocked('CREDITS', `Not enough credits: a reviewed brief needs ${perBrief}. Buy credits to continue.`), tender_no: tender.tender_no };
     await tx.query(`INSERT INTO tender_desk.stats_snapshots (client_id,tender_no,stat_id,snapshot) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
       [client_id, tender.tender_no, check.snapshot.stat_id, JSON.stringify(check.snapshot)]);
-    await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [tender.tender_no, client_id]);
+    // An expired hold (its tender closed, or a pasted tender's fixed term ran out) is cleared before a new one is taken.
+    await tx.query('DELETE FROM tender_desk.pricing_holds WHERE tender_no=$1 AND expires_at <= $2', [tender.tender_no, now]);
+    const closes = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [tender.tender_no])).rows[0]?.closes_at;
+    const expires = closes ? new Date(closes) : new Date(now.getTime() + holdDaysWithoutClosing * 86400000);
+    await tx.query('INSERT INTO tender_desk.pricing_holds (tender_no,client_id,expires_at) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [tender.tender_no, client_id, expires]);
     const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [tender.tender_no])).rows[0];
     if (hold.client_id !== client_id || hold.state !== 'held') return { ...blocked('G2', refusal), tender_no: tender.tender_no };
     const terms = check.query_used ? check.query_used.split(' ') : [];
@@ -292,7 +297,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       tender_no: tender.tender_no, reason: `Brief requested; ${perBrief} credit${perBrief === 1 ? '' : 's'} spent.` };
   }
   async function customerContext(tx, client_id) {
-    const client = (await tx.query('SELECT id,name,capabilities,categories,team_size,max_contract_cents,reference_number FROM tender_desk.clients WHERE id=$1', [client_id])).rows[0];
+    const client = (await tx.query('SELECT id,name,uen,capabilities,categories,team_size,max_contract_cents,reference_number FROM tender_desk.clients WHERE id=$1', [client_id])).rows[0];
     const projects = (await tx.query(`SELECT id,reference_number,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects
       WHERE client_id=$1 ORDER BY reference_number`, [client_id])).rows;
     const requests = (await tx.query(`SELECT r.id,r.reference_number,r.tender_no,r.source,r.title,r.agency,r.status,r.created_at,r.decline_reason,
@@ -319,6 +324,8 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         const actor = { name: 'customer:signup' };
         if (checked.denial) return record(tx, actor, 'register_customer', checked.denial);
         if (typeof userId !== 'string' || !/^[A-Za-z0-9_-]{8,64}$/.test(userId)) return record(tx, actor, 'register_customer', blocked('G1', 'Sign in again to continue.'));
+        // A UEN is required for customers: one company per UEN, so one welcome credit per real business.
+        if (!checked.input.uen) return record(tx, actor, 'register_customer', blocked('VALIDATION', "Enter your company's UEN."));
         if (await customerClient(tx, userId)) return record(tx, actor, 'register_customer', blocked('G1', 'This account already has a company profile.'));
         const created = await createClient(tx, checked.input);
         if (created.outcome === 'allowed') {
@@ -344,7 +351,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         context: () => database.transaction((tx) => customerContext(tx, client_id)),
         canRequest: (tender_no, { now = new Date() } = {}) => database.transaction((tx) => requestable(tx, client_id, String(tender_no ?? ''), now)),
         requestBrief: operation('request_brief', requestSchema, (tx, input, now) => requestBrief(tx, client_id, input, now)),
-        updateProfile: operation('update_profile', clientProfileSchema.omit({ name: true }), async (tx, input) => {
+        updateProfile: operation('update_profile', clientProfileSchema.omit({ name: true, uen: true }), async (tx, input) => {
           await tx.query('UPDATE tender_desk.clients SET capabilities=$1, categories=$2, team_size=$3, max_contract_cents=$4 WHERE id=$5',
             [input.capabilities, input.categories, input.team_size, input.max_contract_cents, client_id]);
           for (const item of input.past_projects) {
