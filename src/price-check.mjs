@@ -18,14 +18,18 @@ export function cleanTerms(terms) {
 // without it, so a misfiled category can't hide real comparables; 'other' is a catch-all and never a filter.
 export function priceCheck(dataset, { terms, category, agency } = {}) {
   const cleaned = cleanTerms(terms);
-  const queries = [...new Set([cleaned.join(' '), cleaned[0]].filter(Boolean))];
+  // All terms together first, then each term on its own.
+  const queries = [...new Set([cleaned.join(' '), ...cleaned].filter(Boolean))];
   const narrow = category && category !== 'other' ? category : undefined;
   const attempts = queries.flatMap((query) => [...(narrow ? [narrow] : []), undefined].map((filter) => ({ query, snapshot: buildStatsSnapshot(dataset,
     { query, ...(filter && { category: filter }), ...(agency && { agency: String(agency).toLowerCase() }) }, { includeHoldout: true }) })));
   if (!attempts.length) {
     return { status: 'insufficient_comparables', query_used: null, snapshot: { n: 0, status: 'insufficient_comparables' }, comparables: [], limits: priceLimits };
   }
-  const chosen = attempts.find((attempt) => attempt.snapshot.status === 'ready') ?? attempts[0];
+  // The narrowest match that still has five awards is the most comparable work: a broad term ("architectural
+  // consultancy") can match far bigger contracts than a specific one ("registered inspector"). Ties keep the given order.
+  const ready = attempts.filter((attempt) => attempt.snapshot.status === 'ready');
+  const chosen = ready.reduce((best, attempt) => (!best || attempt.snapshot.n < best.snapshot.n ? attempt : best), undefined) ?? attempts[0];
   const byNumber = new Map(dataset.contracts.map((contract) => [contract.tender_no, contract]));
   const comparables = chosen.snapshot.comparables.map(({ tender_no }) => byNumber.get(tender_no)).filter(Boolean)
     .sort((a, b) => (a.last_award_date === b.last_award_date ? (a.tender_no < b.tender_no ? -1 : 1) : a.last_award_date > b.last_award_date ? -1 : 1))

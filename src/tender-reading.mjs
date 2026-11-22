@@ -23,7 +23,8 @@ export function keywordTerms(text) {
 
 const system = `You read Singapore government tender notices for Tender Desk, which finds comparable past contract awards.
 Return 1 to 3 short search terms (1-2 lowercase words each) naming the kind of work, as it would appear in an award description,
-for example "event management", "cleaning", "video production". Avoid procurement words such as provision, services, tender, quotation.
+for example "event management", "cleaning", "video production". Put the most specific kind of work first (the role or service actually
+bought, such as "registered inspector"), and avoid umbrella terms such as "consultancy" or "professional services" on their own. Avoid procurement words such as provision, services, tender, quotation.
 Pick the category from the allowed list. Return the calling agency if the text names it, otherwise null.`;
 
 export async function readTender({ title, text = '', agency } = {}, { llm, model } = {}) {
@@ -31,7 +32,8 @@ export async function readTender({ title, text = '', agency } = {}, { llm, model
   const fallback = () => ({ ...keywordTerms(input), agency: agency || null, source: 'keywords' });
   if (typeof llm !== 'function') return fallback();
   try {
-    const raw = await llm({ model, system, name: 'tender_reading', jsonSchema: readingJsonSchema,
+    // A quick answer for the free check: no reasoning step, and the keyword fallback after 20 seconds.
+    const raw = await llm({ model, system, name: 'tender_reading', jsonSchema: readingJsonSchema, reasoning: { enabled: false }, timeoutMs: 20000,
       user: JSON.stringify({ title: String(title ?? '').slice(0, 300), agency: agency || null, text: input }) });
     const parsed = readingSchema.safeParse(raw);
     if (!parsed.success) return fallback();

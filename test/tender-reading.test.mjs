@@ -43,3 +43,17 @@ test('model input is capped at 4000 characters', async () => {
   await readTender({ title: 'Event', text: 'x'.repeat(10000) }, { llm: async (request) => { user = request.user; throw new Error('x'); }, model: 'm' });
   assert.ok(user.length <= 4300);
 });
+
+test('reading asks for a quick answer: reasoning off and a 20-second limit', async () => {
+  let request;
+  await readTender({ title: 'Event management' }, { llm: async (r) => { request = r; return { terms: ['event management'], category: 'events-community', agency: null }; }, model: 'm' });
+  assert.deepEqual(request.reasoning, { enabled: false });
+  assert.equal(request.timeoutMs, 20000);
+});
+
+test('the reader is told to name the specific kind of work first and avoid umbrella terms', async () => {
+  let request;
+  await readTender({ title: 'Registered inspector services' }, { llm: async (r) => { request = r; return { terms: ['registered inspector'], category: 'other', agency: null }; }, model: 'm' });
+  assert.match(request.system, /most specific kind of work first/);
+  assert.match(request.system, /umbrella/);
+});

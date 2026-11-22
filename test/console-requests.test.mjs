@@ -54,7 +54,7 @@ async function paidRequest({ closes = '2026-12-04T13:00:00+08:00' } = {}) {
   assert.equal(requested.outcome, 'allowed');
   return { ...requested, project_id: created.projects[0].id, tender_no };
 }
-const clean = (projectId) => ({ recommendation: 'bid', reasons: ['The work matches your ministry event.'], price_position: 'Between the lower quartile and the median.', credentials_cited: [projectId] });
+const clean = (projectId) => ({ recommendation: 'bid', reasons: ['The work matches your ministry event.'], price_position: 'Between the lower quartile and the median, because the scope is standard and the team is small.', credentials_cited: [projectId] });
 
 test('the requests queue lists a paid request with its test payment', async () => {
   const request = await paidRequest();

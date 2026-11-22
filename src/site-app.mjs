@@ -43,7 +43,7 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
     stage = 'ai';
     const openRouterKey = clean(env('TD_OPENROUTER_KEY'));
     const llm = openRouterKey ? createOpenRouterLlm({ apiKey: openRouterKey, referer: origin }) : undefined;
-    const models = { read: clean(env('TD_MODEL_READ')) ?? 'qwen/qwen3.7-flash', draft: clean(env('TD_MODEL_DRAFT')) ?? 'qwen/qwen3.7-plus' };
+    const models = { read: clean(env('TD_MODEL_READ')) ?? 'qwen/qwen3.8-flash', draft: clean(env('TD_MODEL_DRAFT')) ?? 'qwen/qwen3.8-max-0902' };
     return {
       console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true, llm, models }),
       assistant: createCustomerHandler({ desk, dataset, llm, models, database, basePath: `${publicBase}/assistant`, secureCookies: true, waitUntil,

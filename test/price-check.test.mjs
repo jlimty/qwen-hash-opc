@@ -64,3 +64,16 @@ test('a category narrows the comparables only when it keeps five, and other is n
   assert.equal(other.status, 'ready');
   assert.equal(other.snapshot.filters.category, undefined);
 });
+
+test('each search term is tried on its own, so a specific first term cannot hide a later one that matches', () => {
+  const check = priceCheck(dataset, { terms: ['heritage pageant production', 'event management'], category: 'events-community' });
+  assert.equal(check.status, 'ready');
+  assert.equal(check.query_used, 'event management');
+});
+
+test('among terms that reach five matches, the most specific one is used, not simply the first', () => {
+  const check = priceCheck(dataset, { terms: ['services', 'event management', 'cleaning'] });
+  assert.equal(check.status, 'ready');
+  assert.equal(check.query_used, 'event management');
+  assert.equal(check.snapshot.n, 5);
+});

@@ -18,7 +18,9 @@ import { createTenderDesk } from '../src/governance.mjs';
 import { createOpenRouterLlm } from '../src/openrouter.mjs';
 import { priceCheck } from '../src/price-check.mjs';
 import { parseTenderCsv } from '../src/tender-data.mjs';
-import { keywordTerms } from '../src/tender-reading.mjs';
+import { keywordTerms, readingSchema } from '../src/tender-reading.mjs';
+import { draftSchema } from '../src/brief-drafting.mjs';
+import { z } from 'zod';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const { values } = parseArgs({ options: { 'fake-llm': { type: 'boolean' } }, allowPositionals: false, strict: true });
@@ -72,7 +74,18 @@ try {
     return { recommendation: 'bid', reasons: ['The scope matches a checked project of yours.', 'The buying agency issues this kind of work regularly.'],
       price_position: 'Between the lower quartile and the median: the scope is standard for this kind of work.', credentials_cited: [verifiedId] };
   } : createOpenRouterLlm({ apiKey: key });
-  const models = { read: process.env.TD_MODEL_READ ?? 'qwen/qwen3.7-flash', draft: process.env.TD_MODEL_DRAFT ?? 'qwen/qwen3.7-plus' };
+  const models = { read: process.env.TD_MODEL_READ ?? 'qwen/qwen3.8-flash', draft: process.env.TD_MODEL_DRAFT ?? 'qwen/qwen3.8-max-0902' };
+  if (!values['fake-llm']) {
+    // Model check: one direct call per model, so a failure shows its real reason instead of a silent keyword fallback.
+    const schemaOf = (schema) => { const { $schema, ...rest } = z.toJSONSchema(schema, { io: 'input' }); return rest; };
+    const probe = async (label, model, name, schema, user, options) => {
+      const started = Date.now();
+      try { await llm({ model, name, jsonSchema: schemaOf(schema), system: 'Reply with JSON that matches the schema.', user, ...options }); console.log(`MODEL ${label} ${model}: OK in ${((Date.now() - started) / 1000).toFixed(1)}s`); }
+      catch (error) { console.log(`MODEL ${label} ${model}: ${error.message} (after ${((Date.now() - started) / 1000).toFixed(1)}s)`); }
+    };
+    await probe('reading', models.read, 'tender_reading', readingSchema, 'Tender: Provision of event management services for a community festival.', { reasoning: { enabled: false }, timeoutMs: 20000 });
+    await probe('drafting', models.draft, 'tender_brief', draftSchema, 'Recommend bid with one reason, a price position between the lower quartile and the median, and no citations.', { timeoutMs: 90000, reasoning: { effort: 'low' } });
+  }
   const auth = createCustomerAuth({ baseUrl: 'https://auth.rehearsal', origin: 'https://rehearsal.local', adminUserId: 'admin-user-0001', fetchImpl: fakeAuth() });
   const app = createCustomerHandler({ desk, dataset, auth, llm, models, database: db, basePath: '/a', refresh: () => refreshOpenTenders(db) });
   const consoleApp = createConsoleHandler({ admin: desk.admin, adminToken, dataset, llm, models });
@@ -84,9 +97,14 @@ try {
     const open = await listOpenTenders(db);
     must(open.length > 0, 'no open tenders came back from the GeBIZ feeds');
     must(landing.text.includes(open[0].tender_no) && /closes /.test(landing.text), 'landing page does not list the tenders with closing dates');
-    target = open.find((t) => priceCheck(dataset, { terms: keywordTerms(t.title).terms, category: t.category === 'other' ? undefined : t.category }).status === 'ready') ?? open[0];
-    const check = await visitor.post('/check', { tender_no: target.tender_no });
-    must(/Not a quote, and not a winning price/.test(check.text), 'price check has no limits line');
+    // Pick the tender through the product itself: the first whose free check (with the real reader) offers a brief.
+    let check;
+    for (const tender of open.slice(0, 12)) {
+      check = await visitor.post('/check', { tender_no: tender.tender_no });
+      must(/Not a quote, and not a winning price/.test(check.text), 'price check has no limits line');
+      if (/Create an account for a reviewed brief/.test(check.text)) { target = tender; break; }
+    }
+    must(target, 'none of the first 12 open tenders had enough comparable awards for a brief');
     return `${open.length} open tenders; checked ${target.tender_no}`;
   });
   await step('2 a pasted tender gets a price check or an honest too-few state', async () => {
@@ -114,9 +132,10 @@ try {
   let requestPath;
   await step('5 ask for a reviewed brief: test-mode checkout, then In review', async () => {
     const checkout = await owner.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
-    must(/Test mode: no card is charged/.test(checkout.text), 'no test-mode banner');
+    must(/Test mode: no card is charged/.test(checkout.text), `no test-mode banner; the page says: ${/<p class="banner[^>]*>([^<]*)/.exec(checkout.text)?.[1] ?? 'nothing'}`);
     const terms = /name="terms" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
-    const paid = await owner.post('/checkout', { tender_no: target.tender_no, terms });
+    const category = /name="category" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
+    const paid = await owner.post('/checkout', { tender_no: target.tender_no, terms, category });
     must(paid.status === 303, `checkout returned ${paid.status}: ${paid.text.slice(0, 300)}`);
     requestPath = paid.location.slice(2);
     must(/In review/.test((await owner.get(requestPath)).text), 'request page is not In review');
@@ -126,13 +145,15 @@ try {
     const c = browser(consoleApp, '');
     await c.post('/login', { token: adminToken });
     await c.get('/requests');
+    const draftStarted = Date.now();
     await c.post(`/actions/request/${request.id}/draft`, {});
+    const draftSeconds = ((Date.now() - draftStarted) / 1000).toFixed(1);
     const after = (await db.query('SELECT status,brief_id,last_error FROM tender_desk.brief_requests WHERE id=$1', [request.id])).rows[0];
-    must(after.status === 'drafted', `draft did not save: ${after.last_error}`);
+    must(after.status === 'drafted', `draft did not save after ${draftSeconds}s: ${after.last_error}`);
     const brief = (await db.query('SELECT content,risk_facts FROM tender_desk.briefs WHERE id=$1', [after.brief_id])).rows[0];
     must((await admin.reviewBrief({ brief_id: after.brief_id, decision: 'approved' })).outcome === 'approved', 'approval refused');
     must(/## Recommendation/.test((await owner.get(requestPath)).text), 'customer cannot see the approved brief');
-    console.log(`\n----- approved brief -----\n${brief.content}\n----- risk facts: ${JSON.stringify(brief.risk_facts)} -----\n`);
+    console.log(`\n----- approved brief (drafted in ${draftSeconds}s) -----\n${brief.content}\n----- risk facts: ${JSON.stringify(brief.risk_facts)} -----\n`);
   });
   await step('7 a second customer is stopped before checkout without learning who holds it', async () => {
     const rival = browser(app, '/a');

@@ -46,8 +46,9 @@ test('a draft inventing a figure is refused', async () => {
 test('model failure or malformed output returns a redraftable reason', async () => {
   assert.deepEqual(await draftBrief(facts, { llm: async () => { throw new Error('model unavailable'); }, model: 'm' }),
     { ok: false, reason: 'The model was unavailable. Try Redraft.' });
-  assert.deepEqual(await draftBrief(facts, { llm: llmReturning({ recommendation: 'maybe' }), model: 'm' }),
-    { ok: false, reason: 'The model returned an unusable draft. Try Redraft.' });
+  const unusable = await draftBrief(facts, { llm: llmReturning({ recommendation: 'maybe' }), model: 'm' });
+  assert.equal(unusable.ok, false);
+  assert.match(unusable.reason, /^The model returned an unusable draft \(recommendation: .+\)\. Try Redraft\.$/);
 });
 
 test('no snapshot band means no draft', async () => {
@@ -71,4 +72,72 @@ test('the brief carries no agency list, so agency names with digits never trip t
 
 test('composeBrief writes no-bid as Do not bid', () => {
   assert.match(composeBrief({ ...clean, recommendation: 'no-bid', credentials_cited: [] }, facts), /## Recommendation\n\nDo not bid/);
+});
+
+test('a model failure keeps its reason for the admin', async () => {
+  const result = await draftBrief(facts, { llm: async () => { throw new Error('model unavailable: HTTP 400: bad schema'); }, model: 'm' });
+  assert.deepEqual(result, { ok: false, reason: 'The model was unavailable (HTTP 400: bad schema). Try Redraft.' });
+});
+
+test('drafting allows the model 90 seconds and asks for low reasoning effort, so the console request finishes', async () => {
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
+  assert.equal(request.timeoutMs, 90000);
+  assert.deepEqual(request.reasoning, { effort: 'low' });
+});
+
+test('the instructions keep price out of the reasons, ask for the reason behind the price position, and ban internal labels', async () => {
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
+  assert.match(request.system, /Keep price out of the reasons/);
+  assert.match(request.system, /say why/i);
+  assert.match(request.system, /Judge each verified project by its title and agency/);
+  assert.match(request.system, /never use internal labels/i);
+  const sent = JSON.parse(request.user);
+  assert.equal(sent.fit.related_projects, undefined, 'the narrow keyword count no longer steers citations');
+  assert.deepEqual(sent.fit, { in_your_categories: true, median_compared_with_your_largest_contract: 'within' });
+  assert.match(request.jsonSchema.properties.price_position.description, /why/i);
+});
+
+test('a bare price position with no reason is refused as unusable', async () => {
+  const result = await draftBrief(facts, { llm: async () => ({ ...clean, price_position: 'between the lower quartile and the median' }), model: 'm' });
+  assert.equal(result.ok, false);
+  assert.match(result.reason, /unusable draft \(price_position: .*too short/i);
+});
+
+test('a reason that talks about price is refused, so price lives in one place', async () => {
+  const result = await draftBrief(facts, { llm: async () => ({ ...clean, reasons: ['Price position: between the lower quartile and the median.'] }), model: 'm' });
+  assert.deepEqual(result, { ok: false, reason: 'Draft repeated the price position in its reasons. Try Redraft.' });
+});
+
+test('quantities written in words are refused like any other figure the code did not compute', async () => {
+  for (const reason of ['The ministry accounts for roughly a third of comparable awards.', 'About half of past winners were small firms.',
+    'This buyer issued twice as many tenders as others.', 'Winners were paid ten percent more in recent years.', 'The scope covers four buildings.']) {
+    const result = await draftBrief(facts, { llm: async () => ({ ...clean, reasons: [reason] }), model: 'm' });
+    assert.equal(result.ok, false, reason);
+    assert.match(result.reason, /^Draft stated quantities in words: .+\. Try Redraft\.$/, reason);
+  }
+  const fine = await draftBrief(facts, { llm: async () => ({ ...clean, reasons: ['One of the most active buyers of this work, and acting on behalf of a ministry.'] }), model: 'm' });
+  assert.equal(fine.ok, true, fine.reason);
+});
+
+test('the instructions say quantities in words count as figures', async () => {
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
+  assert.match(request.system, /quantities in words/);
+});
+
+test('a two-sentence reason of around 400 characters is fine; a rambling one over 600 is not', async () => {
+  const reason = 'You hold a checked project in this exact role for the same agency, which is the clearest evidence a buyer can ask for. '
+    + 'The work is specialist and registration-gated, so a small team is not a disadvantage here, and the buyer issues this kind of work regularly enough that a good result now builds a record for later tenders.';
+  assert.ok(reason.length > 300 && reason.length < 600, `${reason.length}`);
+  assert.equal((await draftBrief(facts, { llm: async () => ({ ...clean, reasons: [reason] }), model: 'm' })).ok, true);
+  const rambling = await draftBrief(facts, { llm: async () => ({ ...clean, reasons: ['word '.repeat(130)] }), model: 'm' });
+  assert.match(rambling.reason, /reasons\.0: too long \(\d+ characters, allows at most 600\)/);
+});
+
+test('the instructions ask for one or two sentences per reason', async () => {
+  let request;
+  await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });
+  assert.match(request.system, /one or two sentences each/);
 });

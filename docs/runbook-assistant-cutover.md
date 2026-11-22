@@ -28,7 +28,7 @@ Branch `tender-assistant`. Every step that changes production waits for the admi
    npm run site:migrate -- --db-file .local/site/db-unpooled.url
    ```
 
-5. **Sites Settings → secrets (the admin).** Set `TD_OPENROUTER_KEY`. `TD_MODEL_READ` (default `qwen/qwen3.7-flash`) and `TD_MODEL_DRAFT` (default `qwen/qwen3.7-plus`) are optional.
+5. **Sites Settings → secrets (the admin).** Set `TD_OPENROUTER_KEY`. `TD_MODEL_READ` (default `qwen/qwen3.8-flash`) and `TD_MODEL_DRAFT` (default `qwen/qwen3.8-max-0902`) are optional.
 6. **Neon Auth (the admin).** Turn on email sign-up, without email verification. The console still admits only the admin's user ID.
 7. **Build and redeploy the Sites function:**
 

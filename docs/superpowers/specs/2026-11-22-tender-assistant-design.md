@@ -270,8 +270,8 @@ If any of steps 1 to 8 doesn't work by the deadline, the admin does not submit.
 ## Left to the builder
 
 - **Which Qwen model on OpenRouter.**
-  - Reading tenders: a cheap fast one, for example `qwen/qwen3.7-flash`.
-  - Drafting: a stronger one, for example `qwen/qwen3.7-plus`.
+  - Reading tenders: a cheap fast one, for example `qwen/qwen3.8-flash`.
+  - Drafting: a stronger one, for example `qwen/qwen3.8-max-0902`.
   - Use structured output, with timeouts and a retry.
 - Exact page layout, following the console's visual system.
 - The final list of feed subcategories and their category mapping.

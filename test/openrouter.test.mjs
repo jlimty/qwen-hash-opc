@@ -42,3 +42,35 @@ test('unparseable content counts as a failure', async () => {
 test('a missing key is refused at creation', () => {
   assert.throws(() => createOpenRouterLlm({ apiKey: '' }), /API key/);
 });
+
+test('the failure says why, without the key', async () => {
+  const body = JSON.stringify({ error: { message: `Invalid schema for response_format 'tender_brief': 'format' is not permitted (key ${key})` } });
+  const llm = createOpenRouterLlm({ apiKey: key, fetchImpl: async () => new Response(body, { status: 400 }) });
+  await assert.rejects(llm(call), (error) => error.message.startsWith('model unavailable: HTTP 400: Invalid schema for response_format')
+    && !error.message.includes(key) && error.message.length <= 260);
+});
+
+test('a timeout is named as a timeout', async () => {
+  const llm = createOpenRouterLlm({ apiKey: key, timeoutMs: 5, fetchImpl: (url, init) => new Promise((_, reject) => {
+    init.signal.addEventListener('abort', () => reject(init.signal.reason));
+  }) });
+  const keepAlive = setInterval(() => {}, 1000);
+  try { await assert.rejects(llm(call), /model unavailable: timed out after 0s/); } finally { clearInterval(keepAlive); }
+});
+
+test('a call can switch reasoning off and set its own timeout', async () => {
+  const requests = [];
+  const llm = createOpenRouterLlm({ apiKey: key, fetchImpl: async (url, init) => { requests.push(JSON.parse(init.body)); return reply({ ok: 3 }); } });
+  await llm({ ...call, reasoning: { enabled: false }, timeoutMs: 20000 });
+  assert.deepEqual(requests[0].reasoning, { enabled: false });
+  await llm(call);
+  assert.equal(requests[1].reasoning, undefined);
+});
+
+test('a timed-out call is not retried, so a slow model cannot double the wait', async () => {
+  let calls = 0;
+  const llm = createOpenRouterLlm({ apiKey: key, fetchImpl: (url, init) => { calls++; return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))); } });
+  const keepAlive = setInterval(() => {}, 1000);
+  try { await assert.rejects(llm({ ...call, timeoutMs: 5 }), /timed out/); } finally { clearInterval(keepAlive); }
+  assert.equal(calls, 1);
+});
