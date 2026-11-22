@@ -121,6 +121,33 @@ test('quantities written in words are refused like any other figure the code did
   assert.equal(fine.ok, true, fine.reason);
 });
 
+test('a refused draft is retried with the refusal fed back to the model', async () => {
+  const requests = [];
+  const llm = async (request) => { requests.push(request); return requests.length === 1
+    ? { ...clean, reasons: ['About half of past winners were small firms.'] } : clean; };
+  const result = await draftBrief(facts, { llm, model: 'm' });
+  assert.equal(result.ok, true, result.reason);
+  assert.equal(requests.length, 2);
+  const sent = JSON.parse(requests[1].user);
+  assert.match(sent.previous_refusal, /quantities in words: half/);
+});
+
+test('after three refused attempts the draft stays refused for the admin', async () => {
+  let calls = 0;
+  const llm = async () => { calls++; return { ...clean, reasons: ['About half of past winners were small firms.'] }; };
+  const result = await draftBrief(facts, { llm, model: 'm' });
+  assert.equal(calls, 3);
+  assert.deepEqual(result, { ok: false, reason: 'Draft stated quantities in words: half. Try Redraft.' });
+});
+
+test('an unavailable model is not retried', async () => {
+  let calls = 0;
+  const llm = async () => { calls++; throw new Error('model unavailable'); };
+  const result = await draftBrief(facts, { llm, model: 'm' });
+  assert.equal(calls, 1);
+  assert.deepEqual(result, { ok: false, reason: 'The model was unavailable. Try Redraft.' });
+});
+
 test('the instructions say quantities in words count as figures', async () => {
   let request;
   await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm' });

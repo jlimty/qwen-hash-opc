@@ -76,24 +76,35 @@ export async function draftBrief(facts, { llm, model }) {
     fit: { in_your_categories: Boolean(facts.fit?.category_match),
       median_compared_with_your_largest_contract: facts.fit?.within_capacity === true ? 'within' : facts.fit?.within_capacity === false ? 'above' : 'unknown' },
   };
-  let raw;
-  try {
-    raw = await llm({ model, system, name: 'tender_brief', jsonSchema: draftJsonSchema, timeoutMs: 90000, reasoning: { effort: 'low' }, user: JSON.stringify(prompt) });
-  } catch (error) {
-    const why = /^model unavailable: (.+)$/.exec(String(error?.message ?? ''))?.[1];
-    return { ok: false, reason: `The model was unavailable${why ? ` (${why})` : ''}. Try Redraft.` };
+  const checkDraft = (raw) => {
+    const parsed = draftSchema.safeParse(raw);
+    if (!parsed.success) return { ok: false, reason: `The model returned an unusable draft (${describeIssues(parsed.error.issues, raw)}). Try Redraft.` };
+    const draft = parsed.data;
+    if (draft.reasons.some((reason) => /\b(price|priced|pricing|quartile|median|band)\b/i.test(reason))) {
+      return { ok: false, reason: 'Draft repeated the price position in its reasons. Try Redraft.' };
+    }
+    const spelled = [...new Set([...draft.reasons, draft.price_position].join('\n').match(quantityWords) ?? [])].map((word) => word.toLowerCase());
+    if (spelled.length) return { ok: false, reason: `Draft stated quantities in words: ${spelled.slice(0, 5).join(', ')}. Try Redraft.` };
+    const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
+    if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
+    const figures = unmatchedFigures([...draft.reasons, draft.price_position].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
+    if (figures.length) return { ok: false, reason: `Draft contained figures not in the comparables: ${figures.slice(0, 5).join(', ')}.` };
+    return { ok: true, draft: { recommendation: draft.recommendation, content: composeBrief(draft, facts), credentials_cited: draft.credentials_cited } };
+  };
+  // A model call now and then breaks a writing rule it was given; feeding the refusal back and redrafting absorbs
+  // that without loosening a rule. Anything still refused after three attempts is left for the admin.
+  let previousRefusal = '';
+  for (let attempt = 1; ; attempt++) {
+    let raw;
+    try {
+      raw = await llm({ model, system, name: 'tender_brief', jsonSchema: draftJsonSchema, timeoutMs: 90000, reasoning: { effort: 'low' },
+        user: JSON.stringify(previousRefusal ? { ...prompt, previous_refusal: previousRefusal } : prompt) });
+    } catch (error) {
+      const why = /^model unavailable: (.+)$/.exec(String(error?.message ?? ''))?.[1];
+      return { ok: false, reason: `The model was unavailable${why ? ` (${why})` : ''}. Try Redraft.` };
+    }
+    const result = checkDraft(raw);
+    if (result.ok || attempt === 3) return result;
+    previousRefusal = result.reason.replace(/ Try Redraft\.$/, '');
   }
-  const parsed = draftSchema.safeParse(raw);
-  if (!parsed.success) return { ok: false, reason: `The model returned an unusable draft (${describeIssues(parsed.error.issues, raw)}). Try Redraft.` };
-  const draft = parsed.data;
-  if (draft.reasons.some((reason) => /\b(price|priced|pricing|quartile|median|band)\b/i.test(reason))) {
-    return { ok: false, reason: 'Draft repeated the price position in its reasons. Try Redraft.' };
-  }
-  const spelled = [...new Set([...draft.reasons, draft.price_position].join('\n').match(quantityWords) ?? [])].map((word) => word.toLowerCase());
-  if (spelled.length) return { ok: false, reason: `Draft stated quantities in words: ${spelled.slice(0, 5).join(', ')}. Try Redraft.` };
-  const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
-  if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
-  const figures = unmatchedFigures([...draft.reasons, draft.price_position].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
-  if (figures.length) return { ok: false, reason: `Draft contained figures not in the comparables: ${figures.slice(0, 5).join(', ')}.` };
-  return { ok: true, draft: { recommendation: draft.recommendation, content: composeBrief(draft, facts), credentials_cited: draft.credentials_cited } };
 }
