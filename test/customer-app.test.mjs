@@ -493,3 +493,12 @@ test("home does not reveal which tenders another customer holds; checkout still 
   const home = await b.get('/home');
   assert.doesNotMatch(home.text, /Not available for a reviewed brief/);
 });
+
+test('a no-bid report shows no suggested range or outlined band', async () => {
+  const { renderRequest } = await import('../src/customer-view.mjs');
+  const html = renderRequest({ csrf: 'c', company: 'C', awards: [{ tender_no: 'A1', cents: 10000000, description: 'd', agency: 'a', date: '2025-01-01', winner: 'w' }],
+    request: { status: 'approved', reference: 'REQ1', title: 'T', agency: 'A', source: 'pasted', recommendation: 'no-bid', price_band: { low_cents: 8000000, median_cents: 10000000, high_cents: 12000000 }, n: 7,
+      parts: { recommendation: 'no-bid', n: 7, reasons: ['Outside your trade.'], price_position: null, suggested_range: null, winners: [], requirements: [], questions: [], risks: [], cited: [] } } });
+  assert.match(html, /Do not bid/);
+  assert.doesNotMatch(html, /Suggested price range|Suggested range/);
+});

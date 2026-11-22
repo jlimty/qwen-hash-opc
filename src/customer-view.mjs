@@ -287,8 +287,8 @@ function renderReport(request, awards) {
 <td data-label="Winner">${esc(a.winner)}</td><td data-label="Awarded" class="r num nowrap">${formatSgd(a.cents)}</td><td data-label="Date" class="num nowrap">${esc(day(a.date))}</td></tr>`).join('');
   return `<div class="report">
 <section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
-<div class="callout"><span class="label">Suggested price range</span><span class="range">${esc(range.text ?? '')}</span><p>${esc(parts.price_position?.why ?? '')}</p></div>
-<div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: range })}</div>
+${parts.suggested_range ? `<div class="callout"><span class="label">Suggested price range</span><span class="range">${esc(range.text ?? '')}</span><p>${esc(parts.price_position?.why ?? '')}</p></div>` : ''}
+<div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined })}</div>
 ${band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
 <div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
 <div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>

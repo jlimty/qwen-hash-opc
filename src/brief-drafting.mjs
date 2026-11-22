@@ -35,7 +35,7 @@ Rules:
 - Keep price out of the reasons. Reasons cover fit with the work, capacity, track record and the buyer; price lives only in price_position.
   Give two to four reasons, one or two sentences each.
 - In price_position, pick where a bid should sit against the comparable awards and say why. Code turns your choice into dollar figures.
-  For a no-bid, say where a bid would have to sit if they bid anyway.
+  For a no-bid, still fill price_position (it is kept for the admin only, never shown to the client).
 - If requirements_text is given, check its key requirements against the client's profile and verified projects (met, partly_met or gap),
   quoting each requirement briefly. If it is not given, return an empty requirements list.
 - Add up to four questions worth asking the agency before the clarification deadline, and up to three risks.
@@ -76,17 +76,19 @@ export function suggestedRange(band, position) {
 // The structured brief (for the customer's visual report) and its Markdown form (for the console, MCP and history).
 export function composeBrief(draft, facts) {
   const band = facts.snapshot.price_band;
-  const range = suggestedRange(band, draft.price_position.band);
+  // A no-bid carries no price advice: the tender is freed once it's approved, so it must not leave a priced position behind.
+  const bid = draft.recommendation === 'bid';
+  const range = bid ? suggestedRange(band, draft.price_position.band) : null;
   const winners = (facts.snapshot.top_suppliers ?? []).slice(0, 5).map(({ name, wins }) => ({ name, wins }));
   const cited = facts.verifiedProjects.filter((project) => draft.credentials_cited.includes(project.id)).map(({ title, agency }) => ({ title, agency: agency ?? null }));
   const requirements = facts.requirements_text ? draft.requirements : [];
-  const parts = { recommendation: draft.recommendation, reasons: draft.reasons, price_position: draft.price_position, suggested_range: range,
+  const parts = { recommendation: draft.recommendation, reasons: draft.reasons, price_position: bid ? draft.price_position : null, suggested_range: range,
     winners, n: facts.snapshot.n, query_used: facts.query_used ?? null, requirements, questions: draft.questions, risks: draft.risks, cited };
   const list = (items) => (items.length ? items.map((item) => `- ${item}`) : ['None.']);
   const content = [
     '## Recommendation', '', draft.recommendation === 'bid' ? 'Bid' : 'Do not bid', '',
     '## Why', '', ...list(draft.reasons), '',
-    '## Suggested price range', '', range.text, '', draft.price_position.why, '',
+    ...(bid ? ['## Suggested price range', '', range.text, '', draft.price_position.why, ''] : []),
     '## Who usually wins', '', ...list(winners.map((w) => w.name)), '',
     ...(requirements.length ? ['## Requirements check', '', ...list(requirements.map((r) => `${requirementStatus[r.status]}: ${r.requirement} (${r.evidence})`)), ''] : []),
     ...(draft.questions.length ? ['## Questions to ask the agency', '', ...list(draft.questions), ''] : []),

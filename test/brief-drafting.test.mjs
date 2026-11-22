@@ -262,3 +262,12 @@ test('numbers in requirements, questions and risks must come from the tender or 
   const money = await draftBrief(withReq, { llm: llmReturning({ ...clean, requirements: [{ requirement: 'Capacity', status: 'gap', evidence: 'Your largest contract, S$2.4M, falls short' }] }), model: 'm' });
   assert.equal(money.ok, false);
 });
+
+test('a no-bid brief carries no price advice: no suggested range and no price reasoning', async () => {
+  const result = await draftBrief(facts, { llm: llmReturning({ ...clean, recommendation: 'no-bid' }), model: 'm' });
+  assert.equal(result.ok, true);
+  assert.equal(result.draft.parts.suggested_range, null);
+  assert.equal(result.draft.parts.price_position, null);
+  assert.doesNotMatch(result.draft.content, /Suggested price range/);
+  assert.doesNotMatch(result.draft.content, /no case for a premium/);
+});
