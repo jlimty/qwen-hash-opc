@@ -42,3 +42,23 @@ test('empty inputs draw nothing', () => {
   assert.equal(winnersChart([], 0), '');
   assert.equal(yearsChart([]), '');
 });
+
+test('the price chart says it is a log scale, keys its marks in a legend row, and stacks equal amounts instead of scattering them', () => {
+  const svg = priceChart({ awards, band, suggested: { from_cents: 2187450, to_cents: 6978000 } });
+  assert.match(svg, />Award amount \(log scale\)</);
+  assert.match(svg, /class="legend"/);
+  assert.match(svg, />Median S\$69,780</);
+  // Dots at different amounts sit on the baseline; equal amounts stack upward.
+  const twins = [{ cents: 5000000, label: 'a' }, { cents: 5000000, label: 'b' }, { cents: 9000000, label: 'c' }];
+  const ys = [...priceChart({ awards: twins, band }).matchAll(/<circle class="dot" cx="[\d.]+" cy="([\d.]+)"/g)].map((m) => Number(m[1]));
+  assert.equal(ys[0], ys[2]);
+  assert.ok(ys[1] < ys[0], 'the second equal award stacks above the first');
+});
+
+test('price chart tick labels never overlap', () => {
+  const spread = [1200, 1800, 2500, 4000, 9000, 15000, 60000, 250000, 900000, 3000000].map((d, i) => ({ cents: d * 100, label: `x${i}` }));
+  const svg = priceChart({ awards: spread, band: { low_cents: 250000, median_cents: 1200000, high_cents: 25000000 } });
+  const xs = [...svg.matchAll(/<text class="tick" x="([\d.]+)"/g)].map((m) => Number(m[1])).sort((a, b) => a - b);
+  assert.ok(xs.length >= 2);
+  for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= 48, `ticks ${xs[i - 1]} and ${xs[i]} are too close`);
+});

@@ -9,6 +9,11 @@ export function formatSgd(cents) {
   return `S$${value.toLocaleString('en-SG', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}`;
 }
 
+// Customer-facing figures are whole dollars: cents on a six-figure award are noise, and mixing both reads as sloppy.
+export function wholeSgd(cents) {
+  return `S$${Math.round(Number(cents) / 100).toLocaleString('en-SG')}`;
+}
+
 // A standalone number (never digits inside a word or code such as a tender number), optionally
 // followed by a k / m / million shorthand or a percent sign.
 const numberToken = /(?<![A-Za-z\d.])(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(million|mil|[kKmM])(?![A-Za-z])|(%)|(?![A-Za-z\d]))/g;

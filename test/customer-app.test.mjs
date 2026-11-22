@@ -14,7 +14,7 @@ import { fakeNeonAuth } from './support/fake-neon-auth.mjs';
 const xml = await readFile(new URL('./fixtures/gebiz-professional.xml', import.meta.url), 'utf8');
 const header = 'tender_no,tender_description,agency,award_date,tender_detail_status,supplier_name,awarded_amt\n';
 const dataset = parseTenderCsv(header + [
-  ...[1, 2, 3, 4, 5, 6].map((i) => `AUD-${i},Audit certification services,Agency A,1/${i}/2025,Awarded to Suppliers,Auditor ${i},${i * 50000}.00`),
+  ...[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => `AUD-${i},Audit certification services,Agency A,1/${i}/2025,Awarded to Suppliers,Auditor ${i},${i * 50000}.00`),
   ...[1, 2, 3, 4, 5, 6].map((i) => `EVT-${i},Event management services,Agency B,2/${i}/2025,Awarded to Suppliers,Events Co,${i * 90000}.00`),
 ].join('\n'));
 const adminToken = randomBytes(32).toString('hex');
@@ -312,11 +312,11 @@ test('the terms note explains the most-specific rule, and a wide band carries a 
   await b.get('/');
   const check = await b.post('/check', { tender_no: 'MOESCHETQ26006510', terms: 'audit, zzzq' });
   assert.match(check.text, /Matched on "audit", the most specific of these terms with at least five past awards/);
-  assert.doesNotMatch(check.text, /Wide range/, 'the audit awards span about 2x');
+  assert.doesNotMatch(check.text, /A rough guide only/, 'ten audit awards spanning about 2x are not thin');
   const { renderCheck } = await import('../src/customer-view.mjs');
   const wide = renderCheck({ tender: { tender_no: 'X1', title: 'T', agency: 'A' }, reading: { terms: ['t'] }, csrf: 'c',
-    check: { status: 'ready', query_used: 't', comparables: [], snapshot: { n: 9, wide_band: true, filters: {}, price_band: { low_cents: 100000, median_cents: 400000, high_cents: 900000 } } } });
-  assert.match(wide, /Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide/);
+    check: { status: 'ready', query_used: 't', comparables: [], snapshot: { n: 9, wide_band: true, thin: true, filters: {}, price_band: { low_cents: 100000, median_cents: 400000, high_cents: 900000 } } } });
+  assert.match(wide, /A rough guide only: past awards for this kind of work vary a lot. A reviewed brief would advise on bidding and where to aim, but give no dollar range/);
 });
 
 test('checkout outside the customer\'s categories needs an explicit tick', async () => {
@@ -359,7 +359,7 @@ test('after paying, the request page confirms the payment once and shows where t
   const ref = paid.location.split('/').pop();
   const first = await b.get(paid.location.slice(base.length));
   assert.match(first.text, new RegExp(`1 credit spent · ${ref}`));
-  assert.match(first.text, /class="steps"[\s\S]*Paid[\s\S]*In review[\s\S]*Brief ready/);
+  assert.match(first.text, /class="steps"[\s\S]*Requested[\s\S]*In review[\s\S]*Brief ready/);
   assert.match(first.text, /aria-current="step"[^>]*>In review/);
   const again = await b.get(paid.location.slice(base.length));
   assert.doesNotMatch(again.text, /Payment received/, 'the confirmation shows once');
@@ -520,4 +520,36 @@ test('with email verification on, sign-up asks the customer to check their email
   assert.match(text, new RegExp(email.replace(/[.+]/g, '\\$&')));
   assert.ok(!done.headers.getSetCookie().some((c) => c.startsWith('td_customer=') && !c.includes('Max-Age=0')));
   assert.equal(fake.calls.find((c) => c.path === '/sign-up/email').body.callbackURL, `${origin}${base}/signin`);
+});
+
+const reportFor = async (parts, extra = {}) => (await import('../src/customer-view.mjs')).renderRequest({ csrf: 'c', company: 'C',
+  awards: [['A1', 10012345, '2021-03-01'], ['A2', 12000000, '2025-06-01'], ['A3', 9000000, '2023-01-01']].map(([tender_no, cents, date]) => ({ tender_no, cents, description: 'd', agency: 'a', date, winner: 'w' })),
+  request: { status: 'approved', reference: 'REQ1', title: 'T', agency: 'A', source: 'pasted', recommendation: parts.recommendation, price_band: { low_cents: 8000050, median_cents: 10000000, high_cents: 12000000 }, n: 7,
+    parts: { n: 7, reasons: ['r'], price_position: null, suggested_range: null, winners: [], requirements: [], questions: [], risks: [], cited: [], ...parts }, ...extra } });
+
+test('a thin bid report gives no dollar range: it says why and keeps a rough position', async () => {
+  const html = await reportFor({ recommendation: 'bid', thin: true, position_text: 'Between the lower quartile and the median',
+    price_position: { band: 'lower_quartile_to_median', why: 'Standard scope.' } });
+  assert.match(html, /No dollar range/);
+  assert.match(html, /Roughly: between the lower quartile and the median/);
+  assert.doesNotMatch(html, /Suggested price range/);
+});
+
+test('a no-bid report labels the price chart as context only', async () => {
+  assert.match(await reportFor({ recommendation: 'no-bid' }), /Past awards, for context only/);
+});
+
+test('the report uses whole dollars, says when the awards date from, and how many panel awards were left out', async () => {
+  const html = await reportFor({ recommendation: 'no-bid', excluded_panels: 3 });
+  assert.doesNotMatch(html.replace(/<style[\s\S]*?<\/style>/g, ''), /S\$[\d,]+\.\d\d/);
+  assert.match(html, /Awarded between 2021 and 2025/);
+  assert.match(html, /3 panel awards \(one award shared by several firms\) were left out/);
+});
+
+test('an approved brief shows every step done, and the sample shows no payment steps', async () => {
+  const html = await reportFor({ recommendation: 'no-bid' });
+  assert.doesNotMatch(html, /class="current"/);
+  assert.match(html, /<li class="done"[^>]*>Brief ready/);
+  const { renderSample } = await import('../src/customer-view.mjs');
+  assert.doesNotMatch(renderSample({ csrf: 'c' }), /<ol class="steps">/);
 });

@@ -141,3 +141,28 @@ test('live snapshots drop nominal awards under S$1,000 and flag a band wider tha
   assert.equal(backtest.stat_id, 'stat_f0382665c4922d9da91b5cdf2eecd218131330868bd6123c8d1d82687205502c');
   assert.equal(backtest.minimum_award_cents, undefined);
 });
+
+test('live checks leave out panel awards: three or more winners, or several winners paid the same amount', () => {
+  const rows = (prefix, amounts) => amounts.map((amt, i) => `${prefix},Event management,Agency A,1/1/2025,Awarded to Suppliers,Firm ${i},${amt}`);
+  const live = buildStatsSnapshot(parseTenderCsv(header + [
+    ...['L1', 'L2', 'L3', 'L4', 'L5'].map((no, i) => `${no},Event management,Agency A,1/${i + 1}/2025,Awarded to Suppliers,Solo ${i},${(i + 2) * 1000}`),
+    ...rows('PANEL3', [5000, 7000, 9000]),
+    ...rows('SAME2', [4000, 4000]),
+    ...rows('SPLIT2', [3000, 4500]),
+  ].join('\n')), { query: 'event' }, { includeHoldout: true });
+  assert.deepEqual(live.comparables.map((c) => c.tender_no).sort(), ['L1', 'L2', 'L3', 'L4', 'L5', 'SPLIT2']);
+  assert.equal(live.excluded_panels, 2);
+  // Backtest snapshots keep every award, so their figures do not move.
+  const backtest = buildStatsSnapshot(parseTenderCsv(header + rows('PANEL3', [5000, 7000, 9000]).join('\n')), { query: 'event' });
+  assert.equal(backtest.n, 1);
+  assert.equal(backtest.excluded_panels, undefined);
+});
+
+test('live snapshots are thin under ten awards or when the band is wide', () => {
+  const awards = (count, growth) => parseTenderCsv(header + Array.from({ length: count }, (_, i) =>
+    `T${i},Event management,Agency A,1/1/2025,Awarded to Suppliers,Firm ${i},${Math.round(10000 * growth ** i)}`).join('\n'));
+  assert.equal(buildStatsSnapshot(awards(9, 1.01), { query: 'event' }, { includeHoldout: true }).thin, true);
+  assert.equal(buildStatsSnapshot(awards(12, 1.01), { query: 'event' }, { includeHoldout: true }).thin, false);
+  assert.equal(buildStatsSnapshot(awards(12, 1.6), { query: 'event' }, { includeHoldout: true }).wide_band, true);
+  assert.equal(buildStatsSnapshot(awards(12, 1.6), { query: 'event' }, { includeHoldout: true }).thin, true);
+});

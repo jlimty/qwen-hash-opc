@@ -3,7 +3,7 @@
 // figure: the suggested range in dollars, who usually wins, the comparables. A draft that cites an unverified project,
 // writes an internal ID or states a figure that is not in the comparables is refused, never saved.
 import { z } from 'zod';
-import { formatSgd, unmatchedFigures } from './brief-risk.mjs';
+import { formatSgd, unmatchedFigures, wholeSgd } from './brief-risk.mjs';
 
 // Worded without years so the brief's own figure check stays quiet; the customer page shows the full limits line too.
 export const briefLimits = 'These are past contract awards, not a quote and not a winning price. GeBIZ publishes winning amounts only, not the bids that lost. Contract scope and length differ between awards.';
@@ -67,35 +67,43 @@ const internalId = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}|\b(PRJ|CLI|BRF|REQ|CON|A
 
 export function suggestedRange(band, position) {
   const low = band.low_cents; const median = band.median_cents; const high = band.high_cents;
-  if (position === 'below_lower_quartile') return { to_cents: low, text: `Below ${formatSgd(low)}` };
-  if (position === 'above_upper_quartile') return { from_cents: high, text: `Above ${formatSgd(high)}` };
+  if (position === 'below_lower_quartile') return { to_cents: low, text: `Below ${wholeSgd(low)}` };
+  if (position === 'above_upper_quartile') return { from_cents: high, text: `Above ${wholeSgd(high)}` };
   const [from, to] = position === 'median_to_upper_quartile' ? [median, high] : [low, median];
-  return { from_cents: from, to_cents: to, text: `${formatSgd(from)} to ${formatSgd(to)}` };
+  return { from_cents: from, to_cents: to, text: `${wholeSgd(from)} to ${wholeSgd(to)}` };
 }
+export const positionText = Object.freeze({ below_lower_quartile: 'Below the lower quartile', lower_quartile_to_median: 'Between the lower quartile and the median',
+  median_to_upper_quartile: 'Between the median and the upper quartile', above_upper_quartile: 'Above the upper quartile' });
+export const thinText = 'No dollar range: too few comparable awards, or awards too varied, to put a figure on. Treat the past awards as context.';
 
 // The structured brief (for the customer's visual report) and its Markdown form (for the console, MCP and history).
 export function composeBrief(draft, facts) {
   const band = facts.snapshot.price_band;
   // A no-bid carries no price advice: the tender is freed once it's approved, so it must not leave a priced position behind.
   const bid = draft.recommendation === 'bid';
-  const range = bid ? suggestedRange(band, draft.price_position.band) : null;
+  // Thin evidence (under ten awards, or a band wider than five times) gets a rough position, never a dollar range.
+  const thin = Boolean(facts.snapshot.thin);
+  const range = bid && !thin ? suggestedRange(band, draft.price_position.band) : null;
+  const position = bid && thin ? positionText[draft.price_position.band] : null;
   const winners = (facts.snapshot.top_suppliers ?? []).slice(0, 5).map(({ name, wins }) => ({ name, wins }));
   const cited = facts.verifiedProjects.filter((project) => draft.credentials_cited.includes(project.id)).map(({ title, agency }) => ({ title, agency: agency ?? null }));
   const requirements = facts.requirements_text ? draft.requirements : [];
   const parts = { recommendation: draft.recommendation, reasons: draft.reasons, price_position: bid ? draft.price_position : null, suggested_range: range,
-    winners, n: facts.snapshot.n, query_used: facts.query_used ?? null, requirements, questions: draft.questions, risks: draft.risks, cited };
+    winners, n: facts.snapshot.n, query_used: facts.query_used ?? null, requirements, questions: draft.questions, risks: draft.risks, cited,
+    thin, position_text: position, excluded_panels: Number(facts.snapshot.excluded_panels ?? 0) };
   const list = (items) => (items.length ? items.map((item) => `- ${item}`) : ['None.']);
   const content = [
     '## Recommendation', '', draft.recommendation === 'bid' ? 'Bid' : 'Do not bid', '',
     '## Why', '', ...list(draft.reasons), '',
-    ...(bid ? ['## Suggested price range', '', range.text, '', draft.price_position.why, ''] : []),
+    ...(range ? ['## Suggested price range', '', range.text, '', draft.price_position.why, ''] : []),
+    ...(position ? ['## Where to price', '', thinText, '', `Roughly: ${position.toLowerCase()}. ${draft.price_position.why}`, ''] : []),
     '## Who usually wins', '', ...list(winners.map((w) => w.name)), '',
     ...(requirements.length ? ['## Requirements check', '', ...list(requirements.map((r) => `${requirementStatus[r.status]}: ${r.requirement} (${r.evidence})`)), ''] : []),
     ...(draft.questions.length ? ['## Questions to ask the agency', '', ...list(draft.questions), ''] : []),
     ...(draft.risks.length ? ['## Risks', '', ...list(draft.risks), ''] : []),
     '## Your verified projects cited', '', ...(cited.length ? cited.map((p) => `- ${p.title}${p.agency ? ` (${p.agency})` : ''}`) : ['None cited.']), '',
     '## Comparable awards', '',
-    `${facts.snapshot.n} comparable past awards${facts.query_used ? ` for "${facts.query_used}"` : ''}: lower quartile ${formatSgd(band.low_cents)}, median ${formatSgd(band.median_cents)}, upper quartile ${formatSgd(band.high_cents)}.`,
+    `${facts.snapshot.n} comparable past awards${facts.query_used ? ` for "${facts.query_used}"` : ''}: lower quartile ${wholeSgd(band.low_cents)}, median ${wholeSgd(band.median_cents)}, upper quartile ${wholeSgd(band.high_cents)}.`,
     '',
     '## Limits', '', briefLimits,
   ].join('\n');

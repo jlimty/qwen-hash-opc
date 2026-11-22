@@ -18,13 +18,22 @@ function percentileCents(sorted, percentile) {
 // collides with a backtest snapshot, whose contents (and stat_id) stay exactly as before.
 export const minimumLiveAwardCents = 100000;
 export const wideBandRatio = 5;
+export const thinBelow = 10;
+
+// A panel or framework appointment is one award shared by many firms (often the same nominal or capped amount each):
+// its total is not the price of one contract. Three or more paid winners, or several winners paid the same amount.
+export function isPanelAward(contract) {
+  const paid = contract.suppliers.filter((supplier) => supplier.awarded_cents > 0);
+  return paid.length >= 3 || (paid.length >= 2 && new Set(paid.map((supplier) => supplier.awarded_cents)).size === 1);
+}
 
 export function buildStatsSnapshot(dataset, options, { includeHoldout = false } = {}) {
   const filters = Object.freeze(statsFilterSchema.parse(options));
   // Live checks drop nominal awards (panel and schedule-of-rates contracts record values like S$5): they are not prices.
   const floor = includeHoldout ? minimumLiveAwardCents : 1;
-  const contracts = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents >= floor)
-    .sort((a, b) => compareName(a.tender_no, b.tender_no));
+  const matched = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents >= floor);
+  // Live checks also leave out panel awards; backtest snapshots keep every award so their figures never move.
+  const contracts = matched.filter((contract) => !includeHoldout || !isPanelAward(contract)).sort((a, b) => compareName(a.tender_no, b.tender_no));
   const n = contracts.length;
   const snapshot = {
     dataset_id: dataset.dataset_id,
@@ -32,7 +41,7 @@ export function buildStatsSnapshot(dataset, options, { includeHoldout = false } 
     taxonomy_version: dataset.taxonomy_version,
     holdout_from: dataset.holdout_from,
     algorithm_version: 'contract-percentiles-v1',
-    ...(includeHoldout && { scope: 'all-awards', minimum_award_cents: minimumLiveAwardCents, wide_band: false }),
+    ...(includeHoldout && { scope: 'all-awards', minimum_award_cents: minimumLiveAwardCents, excluded_panels: matched.length - contracts.length, wide_band: false, thin: true }),
     method: 'All query token prefixes and exact category/agency filters; contract totals; linear quartiles rounded half-up to cents.',
     limitations: 'Historical award totals are not a bid recommendation; contract scope and duration may differ.',
     filters,
@@ -53,7 +62,11 @@ export function buildStatsSnapshot(dataset, options, { includeHoldout = false } 
       median_cents: percentileCents(amounts, 50),
       high_cents: percentileCents(amounts, 75),
     });
-    if (includeHoldout) snapshot.wide_band = snapshot.price_band.high_cents > wideBandRatio * snapshot.price_band.low_cents;
+    if (includeHoldout) {
+      snapshot.wide_band = snapshot.price_band.high_cents > wideBandRatio * snapshot.price_band.low_cents;
+      // Thin evidence: too few awards, or awards too spread out, to put a dollar range on. Shown as context, never priced.
+      snapshot.thin = n < thinBelow || snapshot.wide_band;
+    }
     const suppliers = new Map();
     const agencies = new Map();
     for (const contract of contracts) {

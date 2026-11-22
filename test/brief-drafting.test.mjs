@@ -271,3 +271,24 @@ test('a no-bid brief carries no price advice: no suggested range and no price re
   assert.doesNotMatch(result.draft.content, /Suggested price range/);
   assert.doesNotMatch(result.draft.content, /no case for a premium/);
 });
+
+test('thin evidence means no dollar range: the brief says why and keeps only a rough position', async () => {
+  const thin = { ...facts, snapshot: { ...facts.snapshot, n: 7, thin: true, excluded_panels: 2 } };
+  const result = await draftBrief(thin, { llm: llmReturning(clean), model: 'm' });
+  assert.equal(result.ok, true);
+  const { parts, content } = result.draft;
+  assert.equal(parts.suggested_range, null);
+  assert.equal(parts.thin, true);
+  assert.equal(parts.excluded_panels, 2);
+  assert.equal(parts.position_text, 'Between the lower quartile and the median');
+  assert.match(content, /## Where to price/);
+  assert.match(content, /No dollar range: too few comparable awards, or awards too varied/);
+  assert.doesNotMatch(content, /## Suggested price range/);
+});
+
+test('ranges and quartiles in the brief are whole dollars', () => {
+  const odd = { ...facts, snapshot: { ...facts.snapshot, price_band: { low_cents: 1234567, median_cents: 2345678, high_cents: 3456789 } } };
+  const { content, parts } = composeBrief(clean, odd);
+  assert.equal(parts.suggested_range.text, 'S$12,346 to S$23,457');
+  assert.match(content, /lower quartile S\$12,346, median S\$23,457, upper quartile S\$34,568/);
+});
