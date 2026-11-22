@@ -157,6 +157,7 @@ test('the brief review page shows the live agency and the comparable awards behi
   assert.match(page.text, /Comparable awards/);
   assert.match(page.text, /OLD-6/);
   assert.match(page.text, /Lower quartile/);
+  assert.match(page.text, /Thin evidence: the customer sees no quartiles/);
   assert.doesNotMatch(page.text, /##/);
 });
 

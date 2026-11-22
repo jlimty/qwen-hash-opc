@@ -62,3 +62,10 @@ test('price chart tick labels never overlap', () => {
   assert.ok(xs.length >= 2);
   for (let i = 1; i < xs.length; i++) assert.ok(xs[i] - xs[i - 1] >= 48, `ticks ${xs[i - 1]} and ${xs[i]} are too close`);
 });
+
+test('on thin evidence the price chart shows the awards only: no shaded quartiles, no median line', () => {
+  const svg = priceChart({ awards, band, thin: true });
+  assert.equal((svg.match(/<circle /g) ?? []).length, awards.length);
+  assert.doesNotMatch(svg, /class="band"|class="median"|Middle half|Median/);
+  assert.match(svg, />Each dot is one past award</);
+});

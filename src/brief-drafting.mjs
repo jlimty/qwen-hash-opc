@@ -3,7 +3,7 @@
 // figure: the suggested range in dollars, who usually wins, the comparables. A draft that cites an unverified project,
 // writes an internal ID or states a figure that is not in the comparables is refused, never saved.
 import { z } from 'zod';
-import { formatSgd, unmatchedFigures, wholeSgd } from './brief-risk.mjs';
+import { formatSgd, roughSpread, unmatchedFigures, wholeSgd } from './brief-risk.mjs';
 
 // Worded without years so the brief's own figure check stays quiet; the customer page shows the full limits line too.
 export const briefLimits = 'These are past contract awards, not a quote and not a winning price. GeBIZ publishes winning amounts only, not the bids that lost. Contract scope and length differ between awards.';
@@ -103,7 +103,9 @@ export function composeBrief(draft, facts) {
     ...(draft.risks.length ? ['## Risks', '', ...list(draft.risks), ''] : []),
     '## Your verified projects cited', '', ...(cited.length ? cited.map((p) => `- ${p.title}${p.agency ? ` (${p.agency})` : ''}`) : ['None cited.']), '',
     '## Comparable awards', '',
-    `${facts.snapshot.n} comparable past awards${facts.query_used ? ` for "${facts.query_used}"` : ''}: lower quartile ${wholeSgd(band.low_cents)}, median ${wholeSgd(band.median_cents)}, upper quartile ${wholeSgd(band.high_cents)}.`,
+    `${facts.snapshot.n} comparable past awards${facts.query_used ? ` for "${facts.query_used}"` : ''}: ${thin
+      ? `too few or too varied for quartiles, ${roughSpread((facts.snapshot.comparables ?? []).map((c) => c.total_awarded_cents)) || 'see the chart'}.`
+      : `lower quartile ${wholeSgd(band.low_cents)}, median ${wholeSgd(band.median_cents)}, upper quartile ${wholeSgd(band.high_cents)}.`}`,
     '',
     '## Limits', '', briefLimits,
   ].join('\n');

@@ -157,7 +157,7 @@ ${panel('Details', props([
     ['Tender', tenderLink(brief.tender_no)],
     ['Agency', esc(brief.tender_agency ?? tender?.agency ?? 'Not given')],
     ['Recommendation', brief.recommendation === 'bid' ? chip('Bid', 'progress') : chip('No-bid')],
-    ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>`],
+    ['Historical band', `<span class="num">Lower quartile ${money(brief.price_band.low_cents)} · median ${money(brief.price_band.median_cents)} · upper quartile ${money(brief.price_band.high_cents)}</span><span class="sub-line muted">${n ? `${n} comparable awards` : ''}${snapshot?.filters?.query ? ` for "${esc(snapshot.filters.query)}"` : ''}</span>${snapshot?.thin || (n && n < 10) ? '<span class="sub-line"><span class="chip warning">Thin evidence: the customer sees no quartiles</span></span>' : ''}`],
     ['Conflicts', conflicts.length ? conflicts.map((c) => recordLink('conflict', c, c.tender_no)).join('<br>') : '<span class="muted">None</span>'],
     ['Submitted', stamp(brief.created_at)],
     ...(brief.decided_at ? [['Decided', stamp(brief.decided_at)]] : []),

@@ -1,6 +1,6 @@
 // Server-drawn SVG charts for the paid brief. No client JavaScript (the page CSP allows none) and no inline styles:
 // colours come from classes styled in the app's stylesheet, and every mark carries a native <title> tooltip.
-import { wholeSgd } from './brief-risk.mjs';
+import { roughSpread, wholeSgd } from './brief-risk.mjs';
 import { esc } from './console-view.mjs';
 
 const W = 640;
@@ -21,7 +21,7 @@ const shortSgd = (dollars) => (dollars >= 1e6 ? `S$${+(dollars / 1e6).toFixed(1)
 // at its amount; dots that would overlap stack upward, so height means "more awards here" and nothing else. The middle
 // half of awards is shaded, the median is a line, the suggested range is outlined, and a legend row keys all three
 // above the plot so no label ever sits on the data.
-export function priceChart({ awards, band, suggested }) {
+export function priceChart({ awards, band, suggested, thin = false }) {
   if (!awards?.length || !band) return '';
   const values = awards.map((a) => a.cents / 100).filter((v) => v > 0);
   const lo = Math.min(...values, band.low_cents / 100) * 0.8;
@@ -31,16 +31,18 @@ export function priceChart({ awards, band, suggested }) {
   const q1 = x(band.low_cents / 100); const q3 = x(band.high_cents / 100); const med = x(band.median_cents / 100);
   const hasRange = Boolean(suggested && (suggested.from_cents || suggested.to_cents));
   const parts = [];
-  // Legend row: fixed slots, so its labels never collide with each other or with the marks.
-  parts.push(`<g class="legend"><rect class="band" x="${left}" y="6" width="14" height="10" rx="2"/><text class="label muted" x="${left + 20}" y="15">Middle half of awards</text>`,
+  // Legend row: fixed slots, so its labels never collide with each other or with the marks. Thin evidence draws the
+  // awards only: quartiles and a median from a handful of awards would look more precise than they are.
+  if (thin) parts.push(`<g class="legend"><rect class="dot" x="${left + 1}" y="6" width="10" height="10" rx="5"/><text class="label muted" x="${left + 18}" y="15">Each dot is one past award</text></g>`);
+  else parts.push(`<g class="legend"><rect class="band" x="${left}" y="6" width="14" height="10" rx="2"/><text class="label muted" x="${left + 20}" y="15">Middle half of awards</text>`,
     `<line class="median" x1="${left + 186}" x2="${left + 186}" y1="4" y2="18"/><text class="label" x="${left + 194}" y="15">Median ${esc(wholeSgd(band.median_cents))}</text>`,
     hasRange ? `<rect class="suggested" x="${left + 380}" y="6" width="14" height="10" rx="2"/><text class="label strong" x="${left + 400}" y="15">Suggested range</text>` : '', '</g>');
-  if (hasRange) {
+  if (hasRange && !thin) {
     const a = suggested.from_cents ? x(suggested.from_cents / 100) : left;
     const b = suggested.to_cents ? x(suggested.to_cents / 100) : right;
     parts.push(`<rect class="suggested" x="${a.toFixed(1)}" y="${top - 4}" width="${Math.max(2, b - a).toFixed(1)}" height="${plotH + 4}" rx="4"/>`);
   }
-  parts.push(`<rect class="band" x="${q1.toFixed(1)}" y="${top}" width="${Math.max(2, q3 - q1).toFixed(1)}" height="${plotH}" rx="4"/>`,
+  if (!thin) parts.push(`<rect class="band" x="${q1.toFixed(1)}" y="${top}" width="${Math.max(2, q3 - q1).toFixed(1)}" height="${plotH}" rx="4"/>`,
     `<line class="median" x1="${med.toFixed(1)}" x2="${med.toFixed(1)}" y1="${top}" y2="${axisY}"/>`);
   // Stack, cheapest first: each dot takes the lowest level with no neighbour within a dot's width.
   const levels = [];
@@ -63,7 +65,8 @@ export function priceChart({ awards, band, suggested }) {
     parts.push(`<text class="tick" x="${at.toFixed(1)}" y="${axisY + 16}" text-anchor="middle">${shortSgd(tick)}</text>`);
   }
   parts.push(`<text class="label muted" x="${right}" y="${axisY + 34}" text-anchor="end">Award amount (log scale)</text>`);
-  const summary = `${awards.length} comparable awards from ${wholeSgd(Math.min(...values) * 100)} to ${wholeSgd(Math.max(...values) * 100)}; median ${wholeSgd(band.median_cents)}`;
+  const summary = thin ? `${awards.length} comparable awards ${roughSpread(awards.map((a) => a.cents))}`
+    : `${awards.length} comparable awards from ${wholeSgd(Math.min(...values) * 100)} to ${wholeSgd(Math.max(...values) * 100)}; median ${wholeSgd(band.median_cents)}`;
   return `<svg class="chart" viewBox="0 0 ${W} ${axisY + 42}" role="img" aria-label="${esc(summary)}">${parts.join('')}</svg>`;
 }
 

@@ -284,6 +284,8 @@ test('thin evidence means no dollar range: the brief says why and keeps only a r
   assert.match(content, /## Where to price/);
   assert.match(content, /No dollar range: too few comparable awards, or awards too varied/);
   assert.doesNotMatch(content, /## Suggested price range/);
+  assert.doesNotMatch(content, /lower quartile S\$|upper quartile S\$/, 'thin evidence lists no quartiles');
+  assert.match(content, /7 comparable past awards for "event management": too few or too varied for quartiles/);
 });
 
 test('ranges and quartiles in the brief are whole dollars', () => {

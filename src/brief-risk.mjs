@@ -14,6 +14,18 @@ export function wholeSgd(cents) {
   return `S$${Math.round(Number(cents) / 100).toLocaleString('en-SG')}`;
 }
 
+// Thin evidence gets no quartiles: only the span of awards, rounded to two significant figures, so it can't read as precise.
+export function roughSgd(cents) {
+  const dollars = Number(cents) / 100;
+  const two = (v) => Number(v.toPrecision(2));
+  return dollars >= 1e6 ? `S$${two(dollars / 1e6)}M` : dollars >= 1e3 ? `S$${two(dollars / 1e3)}k` : `S$${two(dollars)}`;
+}
+export function roughSpread(cents) {
+  const values = cents.map(Number).filter((v) => v > 0);
+  if (!values.length) return '';
+  return `from about ${roughSgd(Math.min(...values))} to ${roughSgd(Math.max(...values))}`;
+}
+
 // A standalone number (never digits inside a word or code such as a tender number), optionally
 // followed by a k / m / million shorthand or a percent sign.
 const numberToken = /(?<![A-Za-z\d.])(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(million|mil|[kKmM])(?![A-Za-z])|(%)|(?![A-Za-z\d]))/g;

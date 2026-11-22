@@ -230,14 +230,16 @@ test('edited terms carry into checkout, and the brief is priced on the band the 
   // The payment half uses a pasted tender, so the band can be compared with what the customer saw.
   const pasted = { title: 'Event management for a district fair', agency: 'Agency Z', text: '' };
   const seen = await b.post('/check', { ...pasted, terms: 'event management' });
-  const median = /<span class="big">(S\$[\d,.]+)<\/span><span class="label">Median award/.exec(seen.text)?.[1];
+  // Six event awards are thin evidence, so the customer saw the count and a rounded spread, not quartiles.
+  const spread = /(\d+ comparable awards, from about [^<]+)</.exec(seen.text)?.[1];
+  assert.ok(spread, 'the check page shows the rounded spread');
   const start = await b.post('/checkout/start', { ...pasted, terms: 'event management', category: 'other' });
   assert.match(start.text, /Use 1 credit/);
   const paid = await b.post('/checkout', { ...pasted, terms: 'event management', category: 'other' });
   assert.equal(paid.status, 303);
   const row = (await db.query("SELECT s.snapshot FROM tender_desk.brief_requests r JOIN tender_desk.stats_snapshots s ON s.stat_id=r.stat_id AND s.client_id=r.client_id WHERE r.title=$1", [pasted.title])).rows[0];
-  const { formatSgd } = await import('../src/brief-risk.mjs');
-  assert.equal(formatSgd(row.snapshot.price_band.median_cents), median);
+  const { roughSpread } = await import('../src/brief-risk.mjs');
+  assert.equal(`${row.snapshot.n} comparable awards, ${roughSpread(row.snapshot.comparables.map((c) => c.total_awarded_cents))}`, spread);
 });
 
 test('a 20,000-character paste is read, cut to 4000 with a notice', async () => {
@@ -648,4 +650,18 @@ test('resubmitting a request that is not waiting on the customer explains why, w
   const early = await b.post(`/requests/${ref}/resubmit`, {});
   assert.equal(early.status, 409);
   assert.match(early.text, /Only a request we asked you about can be resubmitted/);
+});
+
+test('thin evidence shows customers no quartile figures: home, free check and report give the count and a rounded spread', async () => {
+  const { renderCheck, renderRequest } = await import('../src/customer-view.mjs');
+  const comparables = [10000000, 12000000, 30000000, 50000000, 61000000, 70000000].map((total_awarded_cents, i) => ({ tender_no: `T${i}`, total_awarded_cents }));
+  const snapshot = { n: 6, thin: true, wide_band: false, filters: {}, comparables, price_band: { low_cents: 12000000, median_cents: 40000000, high_cents: 61000000 } };
+  const check = renderCheck({ tender: { tender_no: 'X1', title: 'T', agency: 'A' }, reading: { terms: ['t'] }, csrf: 'c', check: { status: 'ready', query_used: 't', comparables: [], snapshot } });
+  assert.doesNotMatch(check, /Median award|Lower quartile|S\$400,000/);
+  assert.match(check, /6 comparable awards, from about S\$100k to S\$700k/);
+  const report = renderRequest({ csrf: 'c', company: 'C', awards: comparables.map((c, i) => ({ tender_no: c.tender_no, cents: c.total_awarded_cents, description: 'd', agency: 'a', date: `202${i % 5}-01-01`, winner: 'w' })),
+    request: { status: 'approved', reference: 'REQ9', title: 'T', agency: 'A', source: 'pasted', recommendation: 'no-bid', price_band: snapshot.price_band, n: 6,
+      parts: { recommendation: 'no-bid', n: 6, thin: true, reasons: ['r'], price_position: null, suggested_range: null, winners: [], requirements: [], questions: [], risks: [], cited: [] } } });
+  assert.doesNotMatch(report.replace(/<style[\s\S]*?<\/style>/g, ''), /Median award|Lower quartile|S\$400,000/);
+  assert.match(report, /6 comparable awards, from about S\$100k to S\$700k/);
 });

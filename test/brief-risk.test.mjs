@@ -56,3 +56,12 @@ test('a non-round band accepts rounded dollars, raw cents and million wording, a
   assert.equal(message(computeRiskFacts({ ...calm, band: demo, content: 'Tender DST000ETT26000005 in 2026.' }), 'unmatched_numbers'),
     '1 figure in the text is not a band figure: 2026.');
 });
+
+test('roughSpread rounds the span of awards to two significant figures, for thin evidence', async () => {
+  const { roughSgd, roughSpread } = await import('../src/brief-risk.mjs');
+  assert.equal(roughSgd(9568800), 'S$96k');
+  assert.equal(roughSgd(28680000), 'S$290k');
+  assert.equal(roughSgd(186045000), 'S$1.9M');
+  assert.equal(roughSgd(84000), 'S$840');
+  assert.equal(roughSpread([28680000, 9568800, 15000000]), 'from about S$96k to S$290k');
+});

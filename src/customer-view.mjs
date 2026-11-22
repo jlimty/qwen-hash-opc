@@ -1,6 +1,6 @@
 // HTML for the customer web app (the AI tender assistant). Server-rendered, no client JavaScript. Every link is written
 // from the app root ("/home") and rewritten to the deployed base path by the handler.
-import { formatSgd, wholeSgd } from './brief-risk.mjs';
+import { formatSgd, roughSpread, wholeSgd } from './brief-risk.mjs';
 import { thinText } from './brief-drafting.mjs';
 import { esc, plural } from './console-view.mjs';
 import { priceLimits } from './price-check.mjs';
@@ -27,6 +27,7 @@ export const assistantCss = chartCss + `
 .cats label{font-weight:400;display:flex;gap:.35rem;align-items:center}
 .proj{display:grid;grid-template-columns:2fr 1.5fr 1fr 1.2fr;gap:.5rem}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-bottom:1px solid var(--line)}
+.stat.wide{grid-column:1/-1}
 .stat{padding:.9rem 1rem;display:grid;gap:.1rem}
 .stat+.stat{border-left:1px solid var(--line)}
 .stat .big{font-size:1.4rem;font-weight:650;font-variant-numeric:tabular-nums}
@@ -95,13 +96,18 @@ export function layout({ title, csrf, company, body, signedIn }) {
 <main class="wrap">${body}</main></body></html>`;
 }
 
+// Thin evidence (under ten awards, or a band wider than five times): the count and a rounded span, never quartiles.
+export const thinLine = (n, cents) => `${plural(n, 'comparable award')}${cents.length ? `, ${roughSpread(cents)}` : ''}`;
+const thinTile = (n, cents) => `<div class="stats"><div class="stat wide"><span class="big">${esc(thinLine(n, cents))}</span><span class="label">Too few or too varied for quartiles: treat these as a rough guide</span></div></div>`;
+
 function tenderList(tenders, csrf, { matches } = {}) {
   if (!tenders.length) return '<p class="empty"><strong>No open tenders yet.</strong>GeBIZ lists new tenders each working day; this list grows as they are published.</p>';
   return `<ul class="tenders">${tenders.map((item) => {
     const tender = item.tender ?? item;
-    const summary = item.check ? (item.check.status === 'ready'
-      ? `Similar contracts were awarded ${wholeSgd(item.check.snapshot.price_band.low_cents)} to ${wholeSgd(item.check.snapshot.price_band.high_cents)} (median ${wholeSgd(item.check.snapshot.price_band.median_cents)}, ${plural(item.check.snapshot.n, 'award')})`
-      : 'Too few comparable awards for a price range') + (item.check.snapshot?.thin ? ' · a rough guide only' : '') : '';
+    const snap = item.check?.snapshot;
+    const summary = !item.check ? '' : item.check.status !== 'ready' ? 'Too few comparable awards for a price range'
+      : snap.thin ? `${thinLine(snap.n, (snap.comparables ?? []).map((c) => c.total_awarded_cents))} · a rough guide only`
+        : `Similar contracts were awarded ${wholeSgd(snap.price_band.low_cents)} to ${wholeSgd(snap.price_band.high_cents)} (median ${wholeSgd(snap.price_band.median_cents)}, ${plural(snap.n, 'award')})`;
     const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
@@ -129,12 +135,15 @@ export function renderLanding({ tenders, refreshedAt, csrf }) {
 ${tenderList(tenders, csrf)}</section>${pasteForm(csrf)}</div>` });
 }
 
+// Lower quartile, median, upper quartile: left to right, the same order as the chart.
+const quartileTiles = (band, n, countLabel) => `<div class="stats"><div class="stat"><span class="big">${wholeSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
+<div class="stat"><span class="big">${wholeSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
+<div class="stat"><span class="big">${wholeSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>
+<div class="stat"><span class="big">${n}</span><span class="label">${countLabel}</span></div></div>`;
+
 export function renderCheck({ tender, reading, check, csrf, company, notice, refusal }) {
   const band = check.status === 'ready' ? check.snapshot.price_band : undefined;
-  const stats = band ? `<div class="stats"><div class="stat"><span class="big">${wholeSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>
-<div class="stat"><span class="big">${check.snapshot.n}</span><span class="label">Comparable awards: past contracts for similar work</span></div></div>
+  const stats = band ? `${check.snapshot.thin ? thinTile(check.snapshot.n, (check.snapshot.comparables ?? []).map((c) => c.total_awarded_cents)) : quartileTiles(band, check.snapshot.n, 'Comparable awards: past contracts for similar work')}
 ${check.snapshot.thin ? `<p class="banner inset-banner">A rough guide only: ${check.snapshot.wide_band ? 'past awards for this kind of work vary a lot' : `only ${plural(check.snapshot.n, 'comparable award')}`}. A reviewed brief would advise on bidding and where to aim, but give no dollar range.</p>` : ''}`
     : `<p class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms.</p>`;
   const agencies = band && check.snapshot.top_agencies?.length ? `<p class="muted small inset">Buyers of this work: ${esc(check.snapshot.top_agencies.slice(0, 4).map((a) => a.name).join(', '))}.
@@ -298,6 +307,8 @@ function renderReport(request, awards) {
   const band = request.price_band;
   const bid = parts.recommendation === 'bid';
   const range = parts.suggested_range ?? {};
+  // Briefs drafted before the thin flag existed fall back to the same rule: under ten awards, or a wide band.
+  const thin = parts.thin ?? (Number(parts.n) < 10 || Boolean(request.wide_band));
   const list = (items) => (items?.length ? `<ul class="bullets">${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : '<p class="empty">None.</p>');
   const counts = Object.fromEntries(['met', 'partly_met', 'gap'].map((k) => [k, (parts.requirements ?? []).filter((r) => r.status === k).length]));
   const requirements = parts.requirements?.length ? `<section class="panel"><header><h2>Requirements check</h2><span class="muted small">From the requirements you pasted</span></header>
@@ -314,12 +325,8 @@ function renderReport(request, awards) {
 ${parts.suggested_range ? `<div class="callout"><span class="label">Suggested price range</span><span class="range">${esc(range.text ?? '')}</span><p>${esc(parts.price_position?.why ?? '')}</p></div>`
     : bid && parts.thin ? `<div class="callout"><span class="label">Where to price</span><p>${esc(thinText)}</p><p><strong>Roughly: ${esc(String(parts.position_text ?? '').toLowerCase())}.</strong> ${esc(parts.price_position?.why ?? '')}</p></div>` : ''}
 ${!bid ? '<header class="chart-head"><h2>Past awards, for context only</h2></header>' : parts.thin ? '<header class="chart-head"><h2>Past awards, a rough guide</h2></header>' : ''}
-<div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined })}</div>
-${band ? `<div class="stats"><div class="stat"><span class="big">${wholeSgd(band.median_cents)}</span><span class="label">Median award: half were above, half below</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.low_cents)}</span><span class="label">Lower quartile: a quarter were below</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.high_cents)}</span><span class="label">Upper quartile: a quarter were above</span></div>
-<div class="stat"><span class="big">${parts.n}</span><span class="label">Comparable awards${parts.query_used ? ` for "${esc(parts.query_used)}"` : ''}</span></div></div>` : ''}
-${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}</section>
+<div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined, thin })}</div>
+${!band ? '' : thin ? thinTile(parts.n, awards.map((a) => a.cents)) : quartileTiles(band, parts.n, `Comparable awards${parts.query_used ? ` for "${esc(parts.query_used)}"` : ''}`)}</section>
 <section class="panel"><header><h2>Why</h2></header>${list(parts.reasons)}</section>
 <div class="report-row"><section class="panel"><header><h2>Who usually wins</h2><span class="muted small">Most frequent winners of these awards</span></header><div class="chart-wrap">${winnersChart(parts.winners, parts.n) || '<p class="empty">No repeat winners.</p>'}</div></section>
 <section class="panel"><header><h2>Awards per year</h2><span class="muted small">How steadily this work is bought</span></header><div class="chart-wrap">${yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) }))) || '<p class="empty">No dates.</p>'}</div></section></div>
@@ -335,11 +342,8 @@ ${awards.length ? `<section class="panel"><details class="awards"><summary>Show 
 
 export function renderRequest({ request, company, csrf, justPaid, awards = [] }) {
   const band = request.price_band;
-  const priceRow = band ? `<div class="stats"><div class="stat"><span class="big">${wholeSgd(band.median_cents)}</span><span class="label">Median award</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
-<div class="stat"><span class="big">${wholeSgd(band.high_cents)}</span><span class="label">Upper quartile</span></div>
-<div class="stat"><span class="big">${request.n ?? ''}</span><span class="label">Comparable awards${request.query_used ? ` for "${esc(request.query_used)}"` : ''}</span></div></div>
-${request.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}` : '';
+  const priceRow = !band ? '' : Number(request.n) < 10 || request.wide_band ? thinTile(request.n, awards.map((a) => a.cents))
+    : quartileTiles(band, request.n ?? '', `Comparable awards${request.query_used ? ` for "${esc(request.query_used)}"` : ''}`);
   const bid = request.recommendation === 'bid';
   const body = request.status === 'approved' ? (request.parts ? renderReport(request, awards) : `<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
 ${priceRow}<div class="brief">${renderBriefHtml(request.content, { skip: ['Recommendation', 'Comparable awards', 'Limits'] })}</div>
