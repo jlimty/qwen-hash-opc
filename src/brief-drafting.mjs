@@ -27,7 +27,6 @@ Rules:
 export function composeBrief(draft, facts) {
   const band = facts.snapshot.price_band;
   const cited = facts.verifiedProjects.filter((project) => draft.credentials_cited.includes(project.id));
-  const agencies = (facts.snapshot.top_agencies ?? []).slice(0, 3).map((agency) => agency.name);
   return [
     '## Recommendation', '', draft.recommendation === 'bid' ? 'Bid' : 'Do not bid', '',
     '## Why', '', ...draft.reasons.map((reason) => `- ${reason}`), '',
@@ -35,7 +34,7 @@ export function composeBrief(draft, facts) {
     '## Your verified projects cited', '', ...(cited.length ? cited.map((project) => `- ${project.title}${project.agency ? ` (${project.agency})` : ''}`) : ['None cited.']), '',
     '## Comparable awards', '',
     `${facts.snapshot.n} comparable past awards${facts.query_used ? ` for "${facts.query_used}"` : ''}: lower quartile ${formatSgd(band.low_cents)}, median ${formatSgd(band.median_cents)}, upper quartile ${formatSgd(band.high_cents)}.`,
-    ...(agencies.length ? ['', `Agencies that buy this most: ${agencies.join(', ')}.`] : []), '',
+    '',
     '## Limits', '', briefLimits,
   ].join('\n');
 }

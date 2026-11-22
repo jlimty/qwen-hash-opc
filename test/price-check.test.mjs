@@ -29,10 +29,12 @@ test('priceCheck reports too few comparables honestly', () => {
   assert.equal(check.limits, 'Past awards from April 2021 to March 2026. Not a quote, and not a winning price. GeBIZ publishes winning amounts only.');
 });
 
-test('priceCheck with no terms falls back to the category alone', () => {
-  const check = priceCheck(dataset, { terms: [], category: 'events-community' });
-  assert.equal(check.status, 'ready');
-  assert.equal(check.query_used, null);
+test('priceCheck never falls back to a whole category: no matching terms means too few comparables', () => {
+  const none = priceCheck(dataset, { terms: [], category: 'events-community' });
+  assert.equal(none.status, 'insufficient_comparables');
+  const unmatched = priceCheck(dataset, { terms: ['registered inspector'], category: 'events-community' });
+  assert.equal(unmatched.status, 'insufficient_comparables');
+  assert.equal(unmatched.query_used, 'registered inspector');
 });
 
 test('fitFacts compares capacity with the median and counts related verified projects', () => {

@@ -64,6 +64,11 @@ test('the prompt carries only this client and asks for no digits', async () => {
   assert.ok(JSON.parse(request.user).client.name === 'Aster Events');
 });
 
+test('the brief carries no agency list, so agency names with digits never trip the figure check', () => {
+  const content = composeBrief(clean, { ...facts, snapshot: { ...facts.snapshot, top_agencies: [{ name: 'Ministry Headquarter 1', contracts: 4 }] } });
+  assert.doesNotMatch(content, /Headquarter 1/);
+});
+
 test('composeBrief writes no-bid as Do not bid', () => {
   assert.match(composeBrief({ ...clean, recommendation: 'no-bid', credentials_cited: [] }, facts), /## Recommendation\n\nDo not bid/);
 });

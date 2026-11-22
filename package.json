@@ -21,7 +21,8 @@
     "site:reseed": "node scripts/site-reseed.mjs",
     "starter-pack": "node scripts/starter-pack.mjs",
     "site:migrate": "node scripts/site-migrate.mjs",
-    "site:test-customers": "node scripts/site-test-customers.mjs"
+    "site:test-customers": "node scripts/site-test-customers.mjs",
+    "assistant:rehearse": "node scripts/assistant-rehearse.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

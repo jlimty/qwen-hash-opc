@@ -1,5 +1,7 @@
 // The free instant price check: comparable past awards for a tender's search terms, over all award history
 // (including the 2026 hold-out rows). Every figure comes from buildStatsSnapshot; nothing here is estimated.
+// There is no category-only fallback: a band over a whole category is not comparable work, so no matching terms
+// means too few comparables.
 import { createHash } from 'node:crypto';
 import { buildStatsSnapshot } from './tender-stats.mjs';
 
@@ -15,7 +17,6 @@ export function cleanTerms(terms) {
 export function priceCheck(dataset, { terms, category, agency } = {}) {
   const cleaned = cleanTerms(terms);
   const queries = [...new Set([cleaned.join(' '), cleaned[0]].filter(Boolean))];
-  if (category) queries.push(null);
   const attempts = queries.map((query) => ({ query, snapshot: buildStatsSnapshot(dataset,
     { ...(query && { query }), ...(category && { category }), ...(agency && { agency: String(agency).toLowerCase() }) }, { includeHoldout: true }) }));
   if (!attempts.length) {
