@@ -16,9 +16,14 @@ function percentileCents(sorted, percentile) {
 
 // includeHoldout (live price checks) adds the 2026 hold-out awards and marks the snapshot scope, so its stat_id never
 // collides with a backtest snapshot, whose contents (and stat_id) stay exactly as before.
+export const minimumLiveAwardCents = 100000;
+export const wideBandRatio = 5;
+
 export function buildStatsSnapshot(dataset, options, { includeHoldout = false } = {}) {
   const filters = Object.freeze(statsFilterSchema.parse(options));
-  const contracts = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents > 0)
+  // Live checks drop nominal awards (panel and schedule-of-rates contracts record values like S$5): they are not prices.
+  const floor = includeHoldout ? minimumLiveAwardCents : 1;
+  const contracts = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents >= floor)
     .sort((a, b) => compareName(a.tender_no, b.tender_no));
   const n = contracts.length;
   const snapshot = {
@@ -27,7 +32,7 @@ export function buildStatsSnapshot(dataset, options, { includeHoldout = false } 
     taxonomy_version: dataset.taxonomy_version,
     holdout_from: dataset.holdout_from,
     algorithm_version: 'contract-percentiles-v1',
-    ...(includeHoldout && { scope: 'all-awards' }),
+    ...(includeHoldout && { scope: 'all-awards', minimum_award_cents: minimumLiveAwardCents, wide_band: false }),
     method: 'All query token prefixes and exact category/agency filters; contract totals; linear quartiles rounded half-up to cents.',
     limitations: 'Historical award totals are not a bid recommendation; contract scope and duration may differ.',
     filters,
@@ -48,6 +53,7 @@ export function buildStatsSnapshot(dataset, options, { includeHoldout = false } 
       median_cents: percentileCents(amounts, 50),
       high_cents: percentileCents(amounts, 75),
     });
+    if (includeHoldout) snapshot.wide_band = snapshot.price_band.high_cents > wideBandRatio * snapshot.price_band.low_cents;
     const suppliers = new Map();
     const agencies = new Map();
     for (const contract of contracts) {

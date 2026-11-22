@@ -35,6 +35,8 @@ export const assistantCss = `
 .tenders .meta{display:block;font-size:.8125rem;color:var(--muted);overflow-wrap:anywhere}
 .testmode{border:1px dashed var(--warn);background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:.6rem .9rem;font-weight:600}
 .narrow{max-width:30rem}
+.inset-banner{margin:.75rem 1rem 0}
+.tick{display:flex;gap:.5rem;align-items:flex-start;font-weight:500}
 .inset{padding:.75rem 1rem 0}
 .brief{padding:1rem;white-space:pre-wrap;overflow-wrap:anywhere;max-width:72ch}
 @media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0}.proj{grid-template-columns:1fr}.tenders li{grid-template-columns:1fr}.wrap{padding:1rem 1rem 3rem}.top{padding:.6rem 1rem}}
@@ -67,7 +69,7 @@ function tenderList(tenders, csrf, { matches } = {}) {
     const tender = item.tender ?? item;
     const summary = item.check ? (item.check.status === 'ready'
       ? `Similar contracts were awarded ${formatSgd(item.check.snapshot.price_band.low_cents)} to ${formatSgd(item.check.snapshot.price_band.high_cents)} (median ${formatSgd(item.check.snapshot.price_band.median_cents)}, ${plural(item.check.snapshot.n, 'award')})`
-      : 'Too few comparable awards for a price range') : '';
+      : 'Too few comparable awards for a price range') + (item.check.snapshot?.wide_band ? ' · wide range, a rough guide only' : '') : '';
     const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
@@ -75,7 +77,8 @@ function tenderList(tenders, csrf, { matches } = {}) {
 <span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}</span>
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
-${matches ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Reviewed brief · S$99</a>` : ''}</div></li>`;
+${!matches ? '' : item.taken ? '<span class="muted small">Not available: Tender Desk already advises a client on this tender.</span>' : item.ownRequest ? `<a class="btn outline" href="/requests/${esc(item.ownRequest)}">View your brief</a>`
+    : item.check?.status === 'ready' ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Reviewed brief · S$99</a>` : ''}</div></li>`;
   }).join('')}</ul>`;
 }
 
@@ -98,7 +101,8 @@ export function renderCheck({ tender, reading, check, csrf, company, notice, ref
   const stats = band ? `<div class="stats"><div class="stat"><span class="big">${formatSgd(band.median_cents)}</span><span class="label">Median award</span></div>
 <div class="stat"><span class="big">${formatSgd(band.low_cents)}</span><span class="label">Lower quartile</span></div>
 <div class="stat"><span class="big">${formatSgd(band.high_cents)}</span><span class="label">Upper quartile</span></div>
-<div class="stat"><span class="big">${check.snapshot.n}</span><span class="label">Comparable awards</span></div></div>`
+<div class="stat"><span class="big">${check.snapshot.n}</span><span class="label">Comparable awards</span></div></div>
+${check.snapshot.wide_band ? '<p class="banner inset-banner">Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide.</p>' : ''}`
     : `<p class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms.</p>`;
   const agencies = band && check.snapshot.top_agencies?.length ? `<p class="muted small inset">Buyers of this work: ${esc(check.snapshot.top_agencies.slice(0, 4).map((a) => a.name).join(', '))}.
 ${check.snapshot.top_suppliers?.length ? ` The most frequent winner took ${esc(plural(check.snapshot.top_suppliers[0].wins, 'award'))} of ${check.snapshot.n}.` : ''}</p>` : '';
@@ -121,7 +125,7 @@ ${banner(notice, 'ok')}
 <section class="panel"><header><h2>What comparable contracts were awarded for</h2></header>${stats}${agencies}
 <form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
 <label for="terms">Search terms</label><input id="terms" name="terms" value="${esc(termsValue)}" maxlength="120">
-<span class="hint">Separate terms with commas. ${check.query_used ? `Searched past awards for "${esc(check.query_used)}"${check.snapshot.filters?.category ? ` in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)}` : ''}.` : ''}</span>
+<span class="hint">Separate terms with commas. ${check.query_used ? `Matched on "${esc(check.query_used)}", the most specific of these terms with at least five past awards${check.snapshot.filters?.category ? ` (in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)})` : ''}. Awards under S$1,000 are left out: they are panel or nominal values, not prices.` : ''}</span>
 <div><button type="submit">Check again</button></div></form>
 ${rows ? `<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
 <p class="limits">${esc(priceLimits)}</p></section>
@@ -192,16 +196,18 @@ function greeting() {
   return hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
 }
 
-export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked }) {
+export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside, notice }) {
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   return layout({ title: 'Checkout', csrf, company, body: `<div><p class="eyebrow">Reviewed brief</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.pasted ? '' : ` · <span class="num">${esc(tender.tender_no)}</span>`}</p></div>
-${refusal ? banner(refusal) : `<p class="testmode" role="note">Test mode: no card is charged</p>
+${refusal ? banner(refusal) : `${banner(notice)}<p class="testmode" role="note">Test mode: no card is charged</p>
 ${noChecked ? '<p class="banner">None of your projects has been checked yet, so this brief cannot cite your track record. You can go ahead now, or wait until we have checked your projects against GeBIZ.</p>' : ''}
 <section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, with a price position against comparable awards</dd></div>
 <div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Amount</dt><dd class="num">S$99.00</dd></div>
 <div><dt>When</dt><dd>Usually within one business day, after a person reviews it</dd></div></dl>
 <form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
+${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the S$99 is not refunded for that.</p>
+<label class="tick"><input type="checkbox" name="confirm_outside" value="yes" required> I understand and still want a brief on this tender</label>` : ''}
 <div><button class="primary" type="submit">Pay S$99 (test mode)</button></div></form></section>`}
 <p><a href="/home">Back to home</a></p>` });
 }

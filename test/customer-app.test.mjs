@@ -183,7 +183,7 @@ test('a pasted tender goes through checkout too', async () => {
   const start = await b.post('/checkout/start', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management' });
   assert.equal(start.status, 200);
   assert.match(start.text, /Pay S\$99 \(test mode\)/);
-  const paid = await b.post('/checkout', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management' });
+  const paid = await b.post('/checkout', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management', confirm_outside: 'yes' });
   assert.equal(paid.status, 303);
 });
 
@@ -291,4 +291,43 @@ test('the rate limit keys on the proxy-appended address, not the first forwarded
     'x-forwarded-for': `198.51.100.${Math.floor(Math.random() * 200)}, 203.0.113.9`, Cookie: [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ') },
   body: new URLSearchParams({ csrf: b.jar.get('td_ccsrf'), tender_no: 'RPO000ETQ26000129' }).toString() }), '/check');
   assert.equal(spoof.status, 429);
+});
+
+test('home offers a brief only where one can be made, and links to an existing brief instead of selling it again', async () => {
+  const b = await signedUpCustomer('Kale');
+  await db.query("UPDATE tender_desk.open_tenders SET terms=ARRAY['qqqzzz'] WHERE tender_no='MOESCHETQ26006510'");
+  await b.post('/checkout/start', { title: 'Audit certification for a museum', agency: 'Agency A', text: '', terms: 'audit' });
+  const home = await b.get('/home');
+  const row = (no) => home.text.slice(home.text.indexOf(no), home.text.indexOf('</li>', home.text.indexOf(no)));
+  assert.doesNotMatch(row('MOESCHETQ26006510'), /Reviewed brief/, 'too few awards: no paid brief on offer');
+  await b.post('/checkout', { tender_no: 'RPO000ETQ26000129', terms: 'audit' }).catch(() => {});
+  const again = await b.get('/home');
+  const owned = await db.query("SELECT 1 FROM tender_desk.brief_requests r JOIN tender_desk.customers c ON c.client_id=r.client_id WHERE r.tender_no='RPO000ETQ26000129'");
+  assert.match(again.text.slice(again.text.indexOf('RPO000ETQ26000129'), again.text.indexOf('</li>', again.text.indexOf('RPO000ETQ26000129'))),
+    owned.rows.length ? /View your brief|already advises a client/ : /already advises a client/);
+});
+
+test('the terms note explains the most-specific rule, and a wide band carries a warning', async () => {
+  const b = browser('10.0.1.1');
+  await b.get('/');
+  const check = await b.post('/check', { tender_no: 'MOESCHETQ26006510', terms: 'audit, zzzq' });
+  assert.match(check.text, /Matched on "audit", the most specific of these terms with at least five past awards/);
+  assert.doesNotMatch(check.text, /Wide range/, 'the audit awards span about 2x');
+  const { renderCheck } = await import('../src/customer-view.mjs');
+  const wide = renderCheck({ tender: { tender_no: 'X1', title: 'T', agency: 'A' }, reading: { terms: ['t'] }, csrf: 'c',
+    check: { status: 'ready', query_used: 't', comparables: [], snapshot: { n: 9, wide_band: true, filters: {}, price_band: { low_cents: 100000, median_cents: 400000, high_cents: 900000 } } } });
+  assert.match(wide, /Wide range: past awards for this kind of work vary a lot, so treat it as a rough guide/);
+});
+
+test('checkout outside the customer\'s categories needs an explicit tick', async () => {
+  const b = await signedUpCustomer('Lime');
+  const pasted = { title: 'Event management for a district carnival', agency: 'Agency Q', text: '', terms: 'event management', category: 'events-community' };
+  const start = await b.post('/checkout/start', pasted);
+  assert.match(start.text, /This tender is outside the categories in your profile/);
+  assert.match(start.text, /name="confirm_outside"/);
+  const refused = await b.post('/checkout', pasted);
+  assert.equal(refused.status, 409);
+  assert.match(refused.text, /Tick the box to confirm/);
+  const paid = await b.post('/checkout', { ...pasted, confirm_outside: 'yes' });
+  assert.equal(paid.status, 303);
 });

@@ -13,8 +13,12 @@ export const categoryRules = [
   ['training-consultancy', /\b(training|consultancy|consulting|workshops?|courses?|coaching)\b/i],
   ['catering', /\b(catering|meals?|food services)\b/i],
 ];
+// Live tenders and pasted text: "consultancy" alone is not training (an architectural or engineering consultancy is
+// professional services). The award dataset keeps categoryRules as they were, so backtest figures do not move.
+const liveRules = categoryRules.map(([category, pattern]) => (category === 'training-consultancy'
+  ? [category, /\b(training|workshops?|courses?|coaching)\b/i] : [category, pattern]));
 export function categorize(text) {
-  return categoryRules.find(([, pattern]) => pattern.test(String(text ?? '')))?.[0] ?? 'other';
+  return liveRules.find(([, pattern]) => pattern.test(String(text ?? '')))?.[0] ?? 'other';
 }
 export const tenderCategories = Object.freeze([...categoryRules.map(([category]) => category), 'other']);
 

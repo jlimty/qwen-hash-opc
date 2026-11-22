@@ -64,7 +64,7 @@ async function fetchFeed(source, fetchImpl, timeoutMs) {
 
 // Claims the refresh atomically (one caller per window), fetches every feed in parallel, then upserts what came back.
 // A failing feed is reported, never thrown. Terms already derived for a tender are kept.
-export async function refreshOpenTenders(database, { fetchImpl = fetch, now = new Date(), maxAgeMs = 3600000, timeoutMs = 4000 } = {}) {
+export async function refreshOpenTenders(database, { fetchImpl = fetch, now = new Date(), maxAgeMs = 3600000, timeoutMs = 4000, reader } = {}) {
   const claimed = await database.query(`UPDATE tender_desk.feed_state SET refreshed_at=$1
     WHERE id=1 AND (refreshed_at IS NULL OR refreshed_at <= $2) RETURNING id`, [now.toISOString(), new Date(now.getTime() - maxAgeMs).toISOString()]);
   if (!claimed.rows.length) return { refreshed: false, feeds: [] };
@@ -80,7 +80,27 @@ export async function refreshOpenTenders(database, { fetchImpl = fetch, now = ne
       [item.tender_no, item.title, item.agency, item.published_on, item.closes_at, item.gebiz_url, item.source_feed, item.category, now.toISOString()]);
     }
   });
+  if (typeof reader === 'function') await readNewTenders(database, results.flatMap((result) => result.items ?? []), reader);
   return { refreshed: true, feeds: results.map(({ items, ...rest }) => rest) };
+}
+
+// Each tender is read once (search terms and category) and the result stored, so every page uses the same terms.
+// A few run at a time; a failed read leaves the row for the next refresh.
+async function readNewTenders(database, items, reader) {
+  const seen = new Set(items.map((item) => item.tender_no));
+  const unread = (await database.query('SELECT tender_no,title,agency,category FROM tender_desk.open_tenders WHERE terms IS NULL')).rows
+    .filter((row) => seen.has(row.tender_no));
+  for (let at = 0; at < unread.length; at += 4) {
+    await Promise.all(unread.slice(at, at + 4).map(async (row) => {
+      try {
+        const reading = await reader(row);
+        if (reading?.terms?.length) {
+          await database.query('UPDATE tender_desk.open_tenders SET terms=$1, category=$2 WHERE tender_no=$3 AND terms IS NULL',
+            [reading.terms, reading.category ?? row.category, row.tender_no]);
+        }
+      } catch { /* left unread; tried again next refresh */ }
+    }));
+  }
 }
 
 export async function feedRefreshedAt(database) {

@@ -198,10 +198,12 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const context = await customer.context();
       const tenders = await listOpenTenders(database, { categories: context.client.categories, now: now(), limit: 15 });
       const verified = context.projects.filter((p) => p.verified);
+      const owned = new Map(context.requests.filter((r) => ['requested', 'drafted', 'approved'].includes(r.status)).map((r) => [r.tender_no, r.reference]));
       const matches = tenders.map((tender) => {
         const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category });
-        return { tender, check, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
+        return { tender, check, ownRequest: owned.get(tender.tender_no), fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
+      for (const match of matches) if (!match.ownRequest) match.taken = (await customer.canRequest(match.tender.tender_no, { now: now() })).reason === 'held';
       return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf }));
     }
 
@@ -226,7 +228,8 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.'
         : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
       const noChecked = !(await customer.context()).projects.some((project) => project.verified);
-      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked }));
+      const outside = !(await customer.context()).client.categories.includes(category);
+      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked, outside }));
     }
     if (path === '/checkout' && post) {
       const tenderNo = String(form.get('tender_no') ?? '').trim();
@@ -236,6 +239,12 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const input = tenderNo ? { tender_no: tenderNo, terms, ...category }
         : { pasted: { title: String(form.get('title') ?? '').trim().slice(0, 300), ...(String(form.get('agency') ?? '').trim() && { agency: String(form.get('agency')).trim().slice(0, 250) }),
           ...(String(form.get('text') ?? '').trim() && { text: String(form.get('text')).slice(0, maxTenderText) }) }, terms, ...category };
+      const tenderCategory = category.category ?? (tenderNo ? (await getOpenTender(database, tenderNo))?.category : categorize(`${input.pasted.title} ${input.pasted.text ?? ''}`));
+      if (!(await customer.context()).client.categories.includes(tenderCategory) && form.get('confirm_outside') !== 'yes') {
+        const shown = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
+        return html(409, renderCheckout({ tender: shown, company, csrf, terms, category: tenderCategory, outside: true,
+          notice: 'Tick the box to confirm you want a brief on a tender outside your categories, then pay again.' }));
+      }
       const result = await customer.requestBrief(input, { now: now() });
       if (result.outcome === 'allowed' || result.request_reference) return redirect(`/requests/${result.request_reference}`);
       const tender = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };

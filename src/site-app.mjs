@@ -5,6 +5,7 @@ import { createCustomerAuth } from './customer-auth.mjs';
 import { createCustomerHandler } from './customer-handler.mjs';
 import { refreshOpenTenders } from './gebiz-feed.mjs';
 import { createOpenRouterLlm } from './openrouter.mjs';
+import { readTender } from './tender-reading.mjs';
 import { createTenderDesk } from './governance.mjs';
 import { createMcpWebHandler } from './mcp-web.mjs';
 import { createNeonAuth } from './neon-auth.mjs';
@@ -49,7 +50,8 @@ export function createSiteApp({ openDatabase, env, csv, backtestJson, origin, fe
       console: createConsoleHandler({ admin: desk.admin, adminToken, auth, dataset, basePath: publicBase, secureCookies: true, llm, models }),
       assistant: createCustomerHandler({ desk, dataset, llm, models, database, basePath: `${publicBase}/assistant`, secureCookies: true, waitUntil,
         auth: createCustomerAuth({ baseUrl: authUrl, origin, adminUserId, fetchImpl }),
-        refresh: () => refreshOpenTenders(database, { fetchImpl: feedFetch }) }),
+        refresh: () => refreshOpenTenders(database, { fetchImpl: feedFetch,
+          reader: (row) => readTender({ title: row.title, agency: row.agency }, { llm, model: models.read }) }) }),
       mcp: createMcpWebHandler({ authenticate: (token) => desk.agent(token) }),
     };
   }

@@ -138,3 +138,10 @@ test('imports all downloaded source rows without changing the dataset', () => {
   assert.equal(data.contracts.filter((c) => !c.is_holdout).length, 11516);
   assert.equal(readFileSync(new URL('../data/GovernmentProcurementviaGeBIZ.csv', import.meta.url), 'utf8'), text);
 });
+
+test('consultancy alone is not training: an architectural consultancy is other', async () => {
+  const { categorize } = await import('../src/tender-data.mjs');
+  assert.equal(categorize('Provision of registered inspector (architectural) consultancy services'), 'other');
+  assert.equal(categorize('Leadership training and consultancy workshop'), 'training-consultancy');
+  assert.equal(categorize('Coaching for school leaders'), 'training-consultancy');
+});

@@ -123,8 +123,21 @@ test('includeHoldout adds held-out awards under a distinct stat_id and leaves ba
   const backtest = buildStatsSnapshot(dataset(), { category: 'events-community' });
   assert.equal(backtest.stat_id, 'stat_f0382665c4922d9da91b5cdf2eecd218131330868bd6123c8d1d82687205502c');
   const all = buildStatsSnapshot(dataset(), { category: 'events-community' }, { includeHoldout: true });
-  assert.equal(all.n, 6);
+  assert.equal(all.n, 1, 'only the held-out award is at least S$1,000; the S$0.40-S$5 rows are nominal');
   assert.equal(all.scope, 'all-awards');
   assert.notEqual(all.stat_id, backtest.stat_id);
   assert.ok(all.comparables.some((c) => c.tender_no === 'HELD'));
+});
+
+test('live snapshots drop nominal awards under S$1,000 and flag a band wider than five times', () => {
+  const live = buildStatsSnapshot(dataset([
+    'P1,Event management,Agency A,1/7/2025,Awarded to Suppliers,Panel Co,5',
+    'P2,Event management,Agency A,1/8/2025,Awarded to Suppliers,Panel Co,999.99',
+  ]), { category: 'events-community' }, { includeHoldout: true });
+  assert.ok(!live.comparables.some((c) => ['P1', 'P2'].includes(c.tender_no)));
+  assert.equal(live.minimum_award_cents, 100000);
+  assert.equal(typeof live.wide_band, 'boolean');
+  const backtest = buildStatsSnapshot(dataset(), { category: 'events-community' });
+  assert.equal(backtest.stat_id, 'stat_f0382665c4922d9da91b5cdf2eecd218131330868bd6123c8d1d82687205502c');
+  assert.equal(backtest.minimum_award_cents, undefined);
 });

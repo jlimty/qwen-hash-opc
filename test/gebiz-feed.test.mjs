@@ -95,3 +95,19 @@ test('numeric character references in titles are decoded', () => {
     + '<description>ITQ: ABC000ETQ26000001 | Published Date: 20/11/2026 | Closing Date: 04/12/2026 13:00:00 | Calling Entity: Agency A |</description></item></channel></rss>';
   assert.equal(parseFeed(xmlWithEntities, professional)[0].title, 'Children’s Day & Family Fair');
 });
+
+test('a reader stores terms and category for new tenders once, and keeps them on later refreshes', async () => {
+  const fresh = await PGlite.create();
+  await initializeGovernance(fresh);
+  const reads = [];
+  const reader = async (item) => { reads.push(item.tender_no); return { terms: ['audit certification'], category: 'training-consultancy' }; };
+  const fetchOne = async (url) => new Response(url === professional.url ? xml : '<rss version="2.0"><channel></channel></rss>');
+  await refreshOpenTenders(fresh, { fetchImpl: fetchOne, now: new Date('2026-11-22T00:00:00Z'), reader });
+  const row = (await fresh.query("SELECT terms, category FROM tender_desk.open_tenders WHERE tender_no='RPO000ETQ26000129'")).rows[0];
+  assert.deepEqual(row.terms, ['audit certification']);
+  assert.equal(row.category, 'training-consultancy');
+  assert.equal(reads.length, 8);
+  await refreshOpenTenders(fresh, { fetchImpl: fetchOne, now: new Date('2026-11-22T02:00:00Z'), reader });
+  assert.equal(reads.length, 8, 'tenders already read are not read again');
+  await fresh.close();
+});
