@@ -152,7 +152,7 @@ try {
     must(after.status === 'drafted', `draft did not save after ${draftSeconds}s: ${after.last_error}`);
     const brief = (await db.query('SELECT content,risk_facts FROM tender_desk.briefs WHERE id=$1', [after.brief_id])).rows[0];
     must((await admin.reviewBrief({ brief_id: after.brief_id, decision: 'approved' })).outcome === 'approved', 'approval refused');
-    must(/## Recommendation/.test((await owner.get(requestPath)).text), 'customer cannot see the approved brief');
+    { const page = (await owner.get(requestPath)).text; must(/Our recommendation/.test(page) && !/##/.test(page), 'customer cannot see the approved brief, or it shows raw Markdown'); }
     console.log(`\n----- approved brief (drafted in ${draftSeconds}s) -----\n${brief.content}\n----- risk facts: ${JSON.stringify(brief.risk_facts)} -----\n`);
   });
   await step('7 a second customer is stopped before checkout without learning who holds it', async () => {
