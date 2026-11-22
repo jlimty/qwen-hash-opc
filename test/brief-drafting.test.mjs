@@ -241,3 +241,11 @@ test('questions and risks may quote tender facts like durations; only invented m
   const bad = await draftBrief(facts, { llm: llmReturning({ ...clean, risks: ['Rivals may bid near $250k.'] }), model: 'm' });
   assert.equal(bad.ok, false);
 });
+
+test('digits inside known names (an agency like "Ministry of Defence 6") are not figures', async () => {
+  const named = { ...facts, tender: { ...facts.tender, agency: 'Ministry of Defence 6' } };
+  const ok = await draftBrief(named, { llm: llmReturning({ ...clean, reasons: ['Ministry of Defence 6 buys this kind of work and your ministry event fits it.'] }), model: 'm' });
+  assert.equal(ok.ok, true, ok.reason);
+  const stillCaught = await draftBrief(named, { llm: llmReturning({ ...clean, reasons: ['Ministry of Defence 6 usually pays 7 suppliers.'] }), model: 'm' });
+  assert.equal(stillCaught.ok, false);
+});

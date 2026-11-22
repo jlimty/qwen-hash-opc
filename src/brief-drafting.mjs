@@ -110,7 +110,11 @@ export function checkDraft(raw, facts) {
     return { ok: false, reason: 'Draft repeated the price position in its reasons. Try Redraft.' };
   }
   const prose = [...draft.reasons, draft.price_position.why].join('\n');
-  const spelled = [...new Set(prose.match(quantityWords) ?? [])].map((word) => word.toLowerCase());
+  // Names the facts already contain (an agency like "Ministry of Defence 6", a tender title, the client's projects) are not figures.
+  const names = [facts.tender?.agency, facts.tender?.title, facts.client?.name, ...facts.verifiedProjects.flatMap((p) => [p.title, p.agency])]
+    .filter((name) => typeof name === 'string' && /\d/.test(name)).sort((a, b) => b.length - a.length);
+  const unnamed = (text) => names.reduce((out, name) => out.split(name).join(' '), text);
+  const spelled = [...new Set(unnamed(prose).match(quantityWords) ?? [])].map((word) => word.toLowerCase());
   if (spelled.length) return { ok: false, reason: `Draft stated quantities in words: ${spelled.slice(0, 5).join(', ')}. Try Redraft.` };
   const everything = [prose, ...draft.questions, ...draft.risks, ...draft.requirements.flatMap((r) => [r.requirement, r.evidence])].join('\n');
   if (internalId.test(everything)) return { ok: false, reason: 'Draft wrote an internal ID. Name projects by their title. Try Redraft.' };
@@ -119,7 +123,7 @@ export function checkDraft(raw, facts) {
   // Reasons and price reasoning carry no figures at all; questions and risks may quote tender facts (durations, terms),
   // so there only money figures are checked against the comparables.
   const money = [...draft.questions, ...draft.risks].join('\n').match(/(?:S?\$\s?)\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?\b|\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)\b/gi) ?? [];
-  const figures = unmatchedFigures([prose, money.join(' ')].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
+  const figures = unmatchedFigures([unnamed(prose), money.join(' ')].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
   if (figures.length) return { ok: false, reason: `Draft contained figures not in the comparables: ${figures.slice(0, 5).join(', ')}.` };
   const { content, parts, riskText } = composeBrief(draft, facts);
   return { ok: true, draft: { recommendation: draft.recommendation, content, parts, risk_text: riskText, credentials_cited: draft.credentials_cited } };
