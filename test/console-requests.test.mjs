@@ -247,3 +247,10 @@ test('the operator page issues a QwenWork connector once and lists it for revoki
   assert.doesNotMatch((await c.get('/operator')).text, /mcpServers/, 'the connector is not shown again');
   assert.match((await c.get('/operator')).text, /Revoke/);
 });
+
+test('the QwenWork page opens QwenWork in a new tab (it cannot be embedded)', async () => {
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  const page = await c.get('/operator');
+  assert.match(page.text, /<a class="btn primary" href="https:\/\/qwenwork\.ai\/app\/" target="_blank" rel="noopener noreferrer">Open QwenWork ↗<\/a>/);
+});

@@ -440,7 +440,9 @@ ${form(csrf, `/actions/credential/${c.id}/revoke`, 'Revoke', 'outline', '/operat
     sub: 'Paste the connector into QwenWork, with the tender-desk-operator skill, to work the queue faster. It prepares reviews, leaves notes and proposes revisions; approving, declining and verifying stay here.',
     body: `${issued ? `<section class="panel"><header><h2>New connector: shown once</h2></header><div class="form"><p>Paste this into QwenWork → Connectors now. It is not stored and won't be shown again.</p>
 <pre class="prose">${esc(issued)}</pre></div></section>` : ''}
-<section class="panel"><header><h2>Connectors</h2>${form(csrf, '/actions/operator/issue', 'Issue a connector', 'primary')}</header>${rows}</section>
+<section class="panel"><header><h2>QwenWork</h2><a class="btn primary" href="https://qwenwork.ai/app/" target="_blank" rel="noopener noreferrer">Open QwenWork ↗</a></header>
+<p class="empty">QwenWork opens in a new tab (it can't be shown inside this console). Sign in there, add the connector below and the tender-desk-operator skill, then ask it to work the queue.</p></section>
+<section class="panel"><header><h2>Connectors</h2>${form(csrf, '/actions/operator/issue', 'Issue a connector', 'outline')}</header>${rows}</section>
 <section class="panel"><header><h2>What it can do</h2></header><ul class="feed">
 <li>List the queue: paid requests and pending briefs, soonest-closing first.</li>
 <li>Read a review pack: the draft, comparables with outliers flagged, the customer's projects and requirements.</li>

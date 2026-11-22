@@ -116,7 +116,10 @@ export function checkDraft(raw, facts) {
   if (internalId.test(everything)) return { ok: false, reason: 'Draft wrote an internal ID. Name projects by their title. Try Redraft.' };
   const verifiedIds = new Set(facts.verifiedProjects.map((project) => project.id));
   if (!draft.credentials_cited.every((id) => verifiedIds.has(id))) return { ok: false, reason: 'Draft cited a project that is not verified.' };
-  const figures = unmatchedFigures([prose, ...draft.questions, ...draft.risks].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
+  // Reasons and price reasoning carry no figures at all; questions and risks may quote tender facts (durations, terms),
+  // so there only money figures are checked against the comparables.
+  const money = [...draft.questions, ...draft.risks].join('\n').match(/(?:S?\$\s?)\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)?\b|\d[\d,]*(?:\.\d+)?\s?(?:k|m|million)\b/gi) ?? [];
+  const figures = unmatchedFigures([prose, money.join(' ')].join('\n'), facts.snapshot.price_band, facts.snapshot.n);
   if (figures.length) return { ok: false, reason: `Draft contained figures not in the comparables: ${figures.slice(0, 5).join(', ')}.` };
   const { content, parts, riskText } = composeBrief(draft, facts);
   return { ok: true, draft: { recommendation: draft.recommendation, content, parts, risk_text: riskText, credentials_cited: draft.credentials_cited } };

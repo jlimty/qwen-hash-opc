@@ -103,7 +103,7 @@ try {
     for (const tender of open.slice(0, 12)) {
       check = await visitor.post('/check', { tender_no: tender.tender_no });
       must(/Not a quote, and not a winning price/.test(check.text), 'price check has no limits line');
-      if (/Create an account for a reviewed brief/.test(check.text)) { target = tender; break; }
+      if (/Create an account: your first reviewed brief is free/.test(check.text)) { target = tender; break; }
     }
     must(target, 'none of the first 12 open tenders had enough comparable awards for a brief');
     return `${open.length} open tenders; checked ${target.tender_no}`;
@@ -122,7 +122,9 @@ try {
     const p = await owner.post('/profile', { name: 'Rehearsal Co (test)', capabilities: `Work of this kind: ${target.title}`, categories: target.category,
       team_size: '10', max_contract: '2,000,000', project_title_0: `Past project: ${keywordTerms(target.title).terms.join(' ')}`, project_agency_0: target.agency, project_title_1: 'Unchecked project' });
     must(p.status === 303, `profile returned ${p.status}: ${p.text.slice(0, 200)}`);
-    must(/Unverified/.test((await owner.get('/home')).text), 'home does not show unverified projects');
+    const home = (await owner.get('/home')).text;
+    must(/Unverified/.test(home), 'home does not show unverified projects');
+    must(/>1 credit</.test(home), 'the welcome credit is not shown');
   });
   await step('4 the admin verifies a project and the customer sees it checked', async () => {
     const project = (await db.query("SELECT id FROM tender_desk.projects WHERE title LIKE 'Past project:%'")).rows[0];
@@ -133,10 +135,11 @@ try {
   let requestPath;
   await step('5 ask for a reviewed brief: test-mode checkout, then In review', async () => {
     const checkout = await owner.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
-    must(/Test mode: no card is charged/.test(checkout.text), `no test-mode banner; the page says: ${/<p class="banner[^>]*>([^<]*)/.exec(checkout.text)?.[1] ?? 'nothing'}`);
+    must(/Use 1 credit/.test(checkout.text), `no credit checkout; the page says: ${/<p class="banner[^>]*>([^<]*)/.exec(checkout.text)?.[1] ?? 'nothing'}`);
     const terms = /name="terms" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
     const category = /name="category" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
-    const paid = await owner.post('/checkout', { tender_no: target.tender_no, terms, category });
+    const paid = await owner.post('/checkout', { tender_no: target.tender_no, terms, category, confirm_outside: 'yes',
+      requirements: 'Bidder must have delivered similar work for a public agency. Bidder must name a project lead.' });
     must(paid.status === 303, `checkout returned ${paid.status}: ${paid.text.slice(0, 300)}`);
     requestPath = paid.location.slice(2);
     must(/In review/.test((await owner.get(requestPath)).text), 'request page is not In review');
@@ -153,7 +156,10 @@ try {
     must(after.status === 'drafted', `draft did not save after ${draftSeconds}s: ${after.last_error}`);
     const brief = (await db.query('SELECT content,risk_facts FROM tender_desk.briefs WHERE id=$1', [after.brief_id])).rows[0];
     must((await admin.reviewBrief({ brief_id: after.brief_id, decision: 'approved' })).outcome === 'approved', 'approval refused');
-    { const page = (await owner.get(requestPath)).text; must(/Our recommendation/.test(page) && !/##/.test(page), 'customer cannot see the approved brief, or it shows raw Markdown'); }
+    { const page = (await owner.get(requestPath)).text;
+      must(/Our recommendation/.test(page) && !/##/.test(page), 'customer cannot see the approved brief, or it shows raw Markdown');
+      must(/Suggested price range/.test(page) && /<svg class="chart"/.test(page), 'the brief has no suggested range or charts');
+      if (!values['fake-llm']) must(/Requirements check/.test(page), 'the pasted requirements were not checked'); }
     console.log(`\n----- approved brief (drafted in ${draftSeconds}s) -----\n${brief.content}\n----- risk facts: ${JSON.stringify(brief.risk_facts)} -----\n`);
   });
   await step('7 a second customer is stopped before checkout without learning who holds it', async () => {

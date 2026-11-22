@@ -234,3 +234,10 @@ test("an admin's redraft note reaches the model", async () => {
   await draftBrief(facts, { llm: async (r) => { request = r; return clean; }, model: 'm', note: 'Mention their school programmes.' });
   assert.equal(JSON.parse(request.user).admin_note, 'Mention their school programmes.');
 });
+
+test('questions and risks may quote tender facts like durations; only invented money figures are refused there', async () => {
+  const ok = await draftBrief(facts, { llm: llmReturning({ ...clean, questions: ['Can the 6-month delivery period start in March?'], risks: ['The 2-year term ties up the team.'] }), model: 'm' });
+  assert.equal(ok.ok, true, ok.reason);
+  const bad = await draftBrief(facts, { llm: llmReturning({ ...clean, risks: ['Rivals may bid near $250k.'] }), model: 'm' });
+  assert.equal(bad.ok, false);
+});
