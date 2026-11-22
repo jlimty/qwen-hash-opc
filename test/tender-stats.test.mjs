@@ -118,3 +118,13 @@ test('never counts a zero-value supplier item as a positive-contract win', () =>
   ]), { query: 'event' });
   assert.equal(result.top_suppliers.some((s) => s.name === 'ZeroSupplier'), false);
 });
+
+test('includeHoldout adds held-out awards under a distinct stat_id and leaves backtest snapshots unchanged', () => {
+  const backtest = buildStatsSnapshot(dataset(), { category: 'events-community' });
+  assert.equal(backtest.stat_id, 'stat_f0382665c4922d9da91b5cdf2eecd218131330868bd6123c8d1d82687205502c');
+  const all = buildStatsSnapshot(dataset(), { category: 'events-community' }, { includeHoldout: true });
+  assert.equal(all.n, 6);
+  assert.equal(all.scope, 'all-awards');
+  assert.notEqual(all.stat_id, backtest.stat_id);
+  assert.ok(all.comparables.some((c) => c.tender_no === 'HELD'));
+});

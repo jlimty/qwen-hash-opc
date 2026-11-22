@@ -26,13 +26,13 @@ export const historicalFilterSchema = z.strictObject({
 const searchSchema = historicalFilterSchema.safeExtend(pagination);
 const incomingSchema = z.strictObject({ category: z.enum(tenderCategories).optional(), ...pagination });
 
-export function selectHistoricalContracts(dataset, options = {}) {
+export function selectHistoricalContracts(dataset, options = {}, { includeHoldout = false } = {}) {
   const filters = historicalFilterSchema.parse(options);
   const queryTokens = filters.query ? tokens(filters.query) : [];
   const minCents = filters.min_amt === undefined ? undefined : Number(filters.min_amt.toFixed(2).replace('.', ''));
   const maxCents = filters.max_amt === undefined ? undefined : Number(filters.max_amt.toFixed(2).replace('.', ''));
   return dataset.contracts.filter((contract) => {
-    if (contract.is_holdout) return false;
+    if (contract.is_holdout && !includeHoldout) return false;
     if (filters.agency && contract.agency.toLowerCase() !== filters.agency) return false;
     if (filters.category && contract.category !== filters.category) return false;
     if (filters.from && contract.last_award_date < filters.from) return false;

@@ -14,9 +14,11 @@ function percentileCents(sorted, percentile) {
   return Number((lower * BigInt(100 - remainder) + upper * BigInt(remainder) + 50n) / 100n);
 }
 
-export function buildStatsSnapshot(dataset, options) {
+// includeHoldout (live price checks) adds the 2026 hold-out awards and marks the snapshot scope, so its stat_id never
+// collides with a backtest snapshot, whose contents (and stat_id) stay exactly as before.
+export function buildStatsSnapshot(dataset, options, { includeHoldout = false } = {}) {
   const filters = Object.freeze(statsFilterSchema.parse(options));
-  const contracts = selectHistoricalContracts(dataset, filters).filter((contract) => contract.total_awarded_cents > 0)
+  const contracts = selectHistoricalContracts(dataset, filters, { includeHoldout }).filter((contract) => contract.total_awarded_cents > 0)
     .sort((a, b) => compareName(a.tender_no, b.tender_no));
   const n = contracts.length;
   const snapshot = {
@@ -25,6 +27,7 @@ export function buildStatsSnapshot(dataset, options) {
     taxonomy_version: dataset.taxonomy_version,
     holdout_from: dataset.holdout_from,
     algorithm_version: 'contract-percentiles-v1',
+    ...(includeHoldout && { scope: 'all-awards' }),
     method: 'All query token prefixes and exact category/agency filters; contract totals; linear quartiles rounded half-up to cents.',
     limitations: 'Historical award totals are not a bid recommendation; contract scope and duration may differ.',
     filters,
