@@ -110,8 +110,8 @@ try {
   });
   await step('2 a pasted tender gets a price check or an honest too-few state', async () => {
     const check = await visitor.post('/check', { title: 'Provision of event management services for a community festival', agency: 'People\'s Association', text: '' });
-    must(/Median award|Too few comparable awards/.test(check.text), 'no result state');
-    return /Median award/.test(check.text) ? 'price range shown' : 'too few comparables';
+    must(/Median award|comparable awards?, from about|Too few comparable awards/.test(check.text), 'no result state');
+    return /Median award/.test(check.text) ? 'price range shown' : /from about/.test(check.text) ? 'thin evidence: count and rough spread' : 'too few comparables';
   });
   const owner = browser(app, '/a');
   await step('3 sign up and create a profile; projects show as unverified', async () => {
