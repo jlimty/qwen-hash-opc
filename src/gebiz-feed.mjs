@@ -16,8 +16,10 @@ export const feeds = Object.freeze([
 ]);
 
 const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" };
+const codePoint = (n) => (Number.isInteger(n) && n > 0 && n <= 0x10FFFF ? String.fromCodePoint(n) : '');
 const decode = (text) => String(text ?? '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-  .replace(/&(amp|lt|gt|quot|apos|#39);/g, (_, name) => entities[name]).trim();
+  .replace(/&#x([0-9a-f]+);/gi, (_, hex) => codePoint(parseInt(hex, 16))).replace(/&#(\d+);/g, (_, dec) => codePoint(Number(dec)))
+  .replace(/&(amp|lt|gt|quot|apos);/g, (_, name) => entities[name]).trim();
 const tag = (block, name) => decode(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`).exec(block)?.[1]);
 const sgDate = (text) => {
   const match = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}:\d{2}:\d{2}))?$/.exec(String(text ?? '').trim());
@@ -68,6 +70,7 @@ export async function refreshOpenTenders(database, { fetchImpl = fetch, now = ne
   if (!claimed.rows.length) return { refreshed: false, feeds: [] };
   const results = await Promise.all(feeds.map((source) => fetchFeed(source, fetchImpl, timeoutMs)));
   await database.transaction(async (tx) => {
+    if (results.some((result) => result.ok)) await tx.query('UPDATE tender_desk.feed_state SET succeeded_at=$1 WHERE id=1', [now.toISOString()]);
     for (const item of results.flatMap((result) => result.items ?? [])) {
       await tx.query(`INSERT INTO tender_desk.open_tenders
         (tender_no,title,agency,published_on,closes_at,gebiz_url,source_feed,category,first_seen,last_seen)
@@ -81,7 +84,7 @@ export async function refreshOpenTenders(database, { fetchImpl = fetch, now = ne
 }
 
 export async function feedRefreshedAt(database) {
-  return (await database.query('SELECT refreshed_at FROM tender_desk.feed_state WHERE id=1')).rows[0]?.refreshed_at ?? null;
+  return (await database.query('SELECT succeeded_at FROM tender_desk.feed_state WHERE id=1')).rows[0]?.succeeded_at ?? null;
 }
 
 export async function listOpenTenders(database, { categories, now = new Date(), limit = 50 } = {}) {

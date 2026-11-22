@@ -345,7 +345,7 @@ test('NUL characters are rejected as audited validation blocks without side effe
   assert.ok(after - before >= 3);
 });
 
-test('a admin-resolved conflict stays resolved when the challenger asks again', async () => {
+test('an admin-resolved conflict stays resolved when the challenger asks again', async () => {
   const c = await setup();
   await price(c);
   await submitAs(c, c.agentA);

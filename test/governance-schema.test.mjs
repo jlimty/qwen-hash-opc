@@ -113,7 +113,7 @@ describe('PostgreSQL governance schema', () => {
       conflicts: 'id:uuid tender_no:text client_id:uuid holder_client_id:uuid status:text resolution:text created_at:timestamptz reference_number:int8',
       audit_log: 'id:int8 ts:timestamptz actor:text action:text client_id:uuid tender_no:text outcome:text rule_id:text reason:text summary:jsonb',
       open_tenders: 'tender_no:text title:text agency:text published_on:date closes_at:timestamptz gebiz_url:text source_feed:text category:text terms:_text first_seen:timestamptz last_seen:timestamptz',
-      feed_state: 'id:int4 refreshed_at:timestamptz',
+      feed_state: 'id:int4 refreshed_at:timestamptz succeeded_at:timestamptz',
       customers: 'user_id:text client_id:uuid created_at:timestamptz',
       brief_requests: 'id:uuid reference_number:int8 client_id:uuid tender_no:text source:text title:text agency:text pasted_text:text terms:_text stat_id:text status:text brief_id:uuid last_error:text decline_reason:text created_at:timestamptz updated_at:timestamptz',
       payments: 'id:uuid request_id:uuid amount_cents:int8 currency:text status:text created_at:timestamptz',

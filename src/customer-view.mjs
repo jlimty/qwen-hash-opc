@@ -83,7 +83,7 @@ const pasteForm = (csrf) => `<section class="panel"><header><h2>Paste a tender</
 <form class="form" method="post" action="/check">${hidden('csrf', csrf)}
 <label for="title">Tender title</label><input id="title" name="title" required maxlength="300">
 <label for="agency">Agency <span class="hint">(optional)</span></label><input id="agency" name="agency" maxlength="250">
-<label for="text">Description <span class="hint">(optional, up to 4000 characters)</span></label><textarea id="text" name="text" rows="4"></textarea>
+<label for="text">Description <span class="hint">(optional; the first 4000 characters are read)</span></label><textarea id="text" name="text" rows="4"></textarea>
 <div><button class="primary" type="submit">Check prices</button></div></form></section>`;
 
 export function renderLanding({ tenders, refreshedAt, csrf }) {
@@ -107,17 +107,21 @@ ${check.snapshot.top_suppliers?.length ? ` The most frequent winner took ${esc(p
   const keep = tender.tender_no && !tender.pasted ? hidden('tender_no', tender.tender_no)
     : `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}`;
   const termsValue = (reading.terms ?? []).join(', ');
-  const next = refusal ? banner(refusal, 'bad') : company
-    ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Ask for a reviewed brief · S$99</a>`
-      : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}<button class="primary" type="submit">Ask for a reviewed brief · S$99</button></form>`)
-    : '<a class="btn primary" href="/signup">Create an account for a reviewed brief · S$99</a>';
+  const category = check.snapshot.filters?.category ?? reading.category ?? '';
+  const checkoutQuery = new URLSearchParams({ tender: tender.tender_no ?? '', terms: termsValue, category }).toString();
+  const next = refusal ? banner(refusal, 'bad') : !band
+    ? '<p>A reviewed brief needs at least five comparable awards. Try other search terms above first.</p>'
+    : company
+      ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?${esc(checkoutQuery)}">Ask for a reviewed brief · S$99</a>`
+        : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · S$99</button></form>`)
+      : '<a class="btn primary" href="/signup">Create an account for a reviewed brief · S$99</a>';
   return layout({ title: 'Price check', csrf, company, body: `<div><p class="eyebrow">Free price check</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.tender_no && !tender.pasted ? ` · <span class="num">${esc(tender.tender_no)}</span>` : ''}${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}</p></div>
 ${banner(notice, 'ok')}
 <section class="panel"><header><h2>What comparable contracts were awarded for</h2></header>${stats}${agencies}
 <form class="form" method="post" action="/check">${hidden('csrf', csrf)}${keep}
 <label for="terms">Search terms</label><input id="terms" name="terms" value="${esc(termsValue)}" maxlength="120">
-<span class="hint">Separate terms with commas. ${check.query_used ? `Comparables matched "${esc(check.query_used)}"${check.snapshot.filters?.category ? ` in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)}` : ''}.` : ''}</span>
+<span class="hint">Separate terms with commas. ${check.query_used ? `Searched past awards for "${esc(check.query_used)}"${check.snapshot.filters?.category ? ` in ${esc(categoryNames[check.snapshot.filters.category] ?? check.snapshot.filters.category)}` : ''}.` : ''}</span>
 <div><button type="submit">Check again</button></div></form>
 ${rows ? `<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
 <p class="limits">${esc(priceLimits)}</p></section>
@@ -188,15 +192,16 @@ function greeting() {
   return hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
 }
 
-export function renderCheckout({ tender, company, csrf, refusal, terms }) {
+export function renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked }) {
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   return layout({ title: 'Checkout', csrf, company, body: `<div><p class="eyebrow">Reviewed brief</p><h1>${esc(tender.title)}</h1>
 <p class="sub">${esc(tender.agency ?? '')}${tender.pasted ? '' : ` · <span class="num">${esc(tender.tender_no)}</span>`}</p></div>
 ${refusal ? banner(refusal) : `<p class="testmode" role="note">Test mode: no card is charged</p>
+${noChecked ? '<p class="banner">None of your projects has been checked yet, so this brief cannot cite your track record. You can go ahead now, or wait until we have checked your projects against GeBIZ.</p>' : ''}
 <section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, with a price position against comparable awards</dd></div>
 <div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Amount</dt><dd class="num">S$99.00</dd></div>
 <div><dt>When</dt><dd>Usually within one business day, after a person reviews it</dd></div></dl>
-<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}
+<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
 <div><button class="primary" type="submit">Pay S$99 (test mode)</button></div></form></section>`}
 <p><a href="/home">Back to home</a></p>` });
 }

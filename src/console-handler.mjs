@@ -59,7 +59,7 @@ export function createSecretAuth(adminToken) {
 }
 
 export function createConsoleHandler({ admin, adminToken, auth, dataset, basePath = '', secureCookies = false, llm, models = {}, now = () => new Date() }) {
-  if (typeof admin !== 'function') throw new Error('A admin function is required.');
+  if (typeof admin !== 'function') throw new Error('An admin function is required.');
   const ops = admin(adminToken);
   const provider = auth ?? createSecretAuth(adminToken);
   const canReset = typeof provider.requestReset === 'function' && typeof provider.resetPassword === 'function';

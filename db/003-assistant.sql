@@ -18,9 +18,11 @@ CREATE TABLE tender_desk.open_tenders (
 
 CREATE TABLE tender_desk.feed_state (
   id integer PRIMARY KEY CHECK (id = 1),
-  refreshed_at timestamptz
+  refreshed_at timestamptz,
+  succeeded_at timestamptz
 );
-INSERT INTO tender_desk.feed_state (id, refreshed_at) VALUES (1, NULL);
+-- refreshed_at: when a refresh was last claimed (at most one per window). succeeded_at: when at least one feed last parsed.
+INSERT INTO tender_desk.feed_state (id, refreshed_at, succeeded_at) VALUES (1, NULL, NULL);
 
 CREATE TABLE tender_desk.customers (
   user_id text PRIMARY KEY CHECK (user_id ~ '^[A-Za-z0-9_-]{8,64}$'),

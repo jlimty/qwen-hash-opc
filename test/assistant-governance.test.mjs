@@ -216,3 +216,15 @@ test('cancelRequest frees the tender', async () => {
   const other = await b.ops.cancelRequest({ request_id: requested.request_id });
   assert.equal(other.outcome, 'blocked');
 });
+
+test('an open conflict on a tender whose hold was released resolves instead of crashing', async () => {
+  const a = await customer('Quince');
+  const b = await customer('Rowan');
+  const tender_no = await openTender();
+  const requested = await ask(a, tender_no);
+  const { rows } = await db.query('INSERT INTO tender_desk.conflicts (tender_no,client_id,holder_client_id) VALUES ($1,$2,$3) RETURNING id', [tender_no, b.client_id, a.client_id]);
+  await admin.declineRequest({ request_id: requested.request_id, reason: 'Not a fit.' });
+  const resolved = await admin.resolveConflict({ conflict_id: rows[0].id, resolution: 'serve_holder' });
+  assert.equal(resolved.outcome, 'allowed');
+  assert.equal((await db.query('SELECT status FROM tender_desk.conflicts WHERE id=$1', [rows[0].id])).rows[0].status, 'resolved');
+});

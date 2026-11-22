@@ -53,3 +53,14 @@ test('pastedTenderNo is stable across spacing and case', () => {
   assert.equal(a, pastedTenderNo({ title: 'event management', agency: 'agency a' }));
   assert.notEqual(a, pastedTenderNo({ title: 'event management', agency: 'agency b' }));
 });
+
+test('a category narrows the comparables only when it keeps five, and other is never a filter', () => {
+  const wrongCategory = priceCheck(dataset, { terms: ['event management'], category: 'training-consultancy' });
+  assert.equal(wrongCategory.status, 'ready');
+  assert.equal(wrongCategory.snapshot.filters.category, undefined);
+  const right = priceCheck(dataset, { terms: ['event management'], category: 'events-community' });
+  assert.equal(right.snapshot.filters.category, 'events-community');
+  const other = priceCheck(dataset, { terms: ['event management'], category: 'other' });
+  assert.equal(other.status, 'ready');
+  assert.equal(other.snapshot.filters.category, undefined);
+});

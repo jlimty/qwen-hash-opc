@@ -14,11 +14,14 @@ export function cleanTerms(terms) {
     .filter((term) => term.length >= 2))].slice(0, 3);
 }
 
+// One rule for the free check and the paid brief: each query is tried with the tender's category first and then
+// without it, so a misfiled category can't hide real comparables; 'other' is a catch-all and never a filter.
 export function priceCheck(dataset, { terms, category, agency } = {}) {
   const cleaned = cleanTerms(terms);
   const queries = [...new Set([cleaned.join(' '), cleaned[0]].filter(Boolean))];
-  const attempts = queries.map((query) => ({ query, snapshot: buildStatsSnapshot(dataset,
-    { ...(query && { query }), ...(category && { category }), ...(agency && { agency: String(agency).toLowerCase() }) }, { includeHoldout: true }) }));
+  const narrow = category && category !== 'other' ? category : undefined;
+  const attempts = queries.flatMap((query) => [...(narrow ? [narrow] : []), undefined].map((filter) => ({ query, snapshot: buildStatsSnapshot(dataset,
+    { query, ...(filter && { category: filter }), ...(agency && { agency: String(agency).toLowerCase() }) }, { includeHoldout: true }) })));
   if (!attempts.length) {
     return { status: 'insufficient_comparables', query_used: null, snapshot: { n: 0, status: 'insufficient_comparables' }, comparables: [], limits: priceLimits };
   }

@@ -209,3 +209,86 @@ test('sign out ends the session', async () => {
   assert.equal(out.status, 303);
   assert.equal((await b.get('/home')).location, `${base}/signin`);
 });
+
+test('a too-few check does not offer a brief, and checkout with such terms hides the pay button', async () => {
+  const b = await signedUpCustomer('Hazel');
+  const thin = await b.post('/check', { tender_no: 'MOESCHETQ26006510', terms: 'qqqzzz' });
+  assert.doesNotMatch(thin.text, /Ask for a reviewed brief/);
+  assert.match(thin.text, /A reviewed brief needs at least five comparable awards/);
+  const checkout = await b.get('/checkout?tender=MOESCHETQ26006510&terms=qqqzzz');
+  assert.doesNotMatch(checkout.text, /Pay S\$99/);
+  assert.match(checkout.text, /A reviewed brief needs at least five comparable awards/);
+});
+
+test('edited terms carry into checkout, and the brief is priced on the band the customer saw', async () => {
+  const b = await signedUpCustomer('Iris');
+  const check = await b.post('/check', { tender_no: 'MOESCHETQ26006510', terms: 'event management' });
+  const link = /href="[^"]*\/checkout\?([^"]+)"/.exec(check.text)?.[1].replaceAll('&amp;', '&');
+  assert.ok(link, 'the check page links to checkout');
+  assert.match(link, /terms=event(\+|%20)management/);
+  // The payment half uses a pasted tender, so the band can be compared with what the customer saw.
+  const pasted = { title: 'Event management for a district fair', agency: 'Agency Z', text: '' };
+  const seen = await b.post('/check', { ...pasted, terms: 'event management' });
+  const median = /<span class="big">(S\$[\d,.]+)<\/span><span class="label">Median award/.exec(seen.text)?.[1];
+  const start = await b.post('/checkout/start', { ...pasted, terms: 'event management', category: 'other' });
+  assert.match(start.text, /Pay S\$99/);
+  const paid = await b.post('/checkout', { ...pasted, terms: 'event management', category: 'other' });
+  assert.equal(paid.status, 303);
+  const row = (await db.query("SELECT s.snapshot FROM tender_desk.brief_requests r JOIN tender_desk.stats_snapshots s ON s.stat_id=r.stat_id AND s.client_id=r.client_id WHERE r.title=$1", [pasted.title])).rows[0];
+  const { formatSgd } = await import('../src/brief-risk.mjs');
+  assert.equal(formatSgd(row.snapshot.price_band.median_cents), median);
+});
+
+test('a 20,000-character paste is read, cut to 4000 with a notice', async () => {
+  const b = browser('10.0.0.7');
+  await b.get('/');
+  const check = await b.post('/check', { title: 'Audit certification', agency: 'Agency A', text: 'Audit, certification; scope. '.repeat(700) });
+  assert.equal(check.status, 200);
+  assert.match(check.text, /Only the first 4000 characters were read\./);
+});
+
+test('checkout tells a customer with no checked projects what a brief can cite', async () => {
+  const b = browser('10.0.0.8');
+  await b.get('/signup');
+  await b.post('/signup', { email: `nocheck-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
+  await b.get('/profile');
+  await b.post('/profile', { name: `Nocheck ${randomBytes(3).toString('hex')}`, capabilities: 'Audit.', categories: 'other', team_size: '2', max_contract: '100000', project_title_0: 'Unchecked audit' });
+  const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
+  assert.match(start.text, /None of your projects has been checked yet/);
+  assert.match(start.text, /Pay S\$99/);
+});
+
+test('after a brief is approved, checkout for the same tender opens that brief instead of charging again', async () => {
+  const b = await signedUpCustomer('Juniper');
+  const pasted = { title: 'Audit certification for a library', agency: 'Agency A', text: '', terms: 'audit' };
+  await b.post('/checkout/start', pasted);
+  const paid = await b.post('/checkout', pasted);
+  const ref = paid.location.split('/').pop();
+  const request = (await db.query('SELECT * FROM tender_desk.brief_requests WHERE reference_number=$1', [Number(ref.slice(3))])).rows[0];
+  const admin = desk.admin(adminToken);
+  const prepared = await admin.prepareDraft(request.id);
+  const saved = await admin.saveDraft({ request_id: request.id, recommendation: 'bid', content: 'Bid.', credentials_cited: [] });
+  assert.equal(saved.outcome, 'allowed', JSON.stringify(saved) + JSON.stringify(prepared.snapshot?.status));
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  const again = await b.post('/checkout/start', pasted);
+  assert.equal(again.status, 303);
+  assert.equal(again.location, paid.location);
+});
+
+test('a malformed customer cookie on sign-out does not crash', async () => {
+  const b = browser('10.0.0.9');
+  await b.get('/');
+  b.jar.set('td_customer', '%E0%A4%A');
+  const out = await b.post('/signout', {});
+  assert.equal(out.status, 303);
+});
+
+test('the rate limit keys on the proxy-appended address, not the first forwarded entry', async () => {
+  const b = browser('203.0.113.9');
+  await b.get('/');
+  for (let i = 0; i < 20; i++) await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
+  const spoof = await handler(new Request(`${origin}${base}/check`, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded',
+    'x-forwarded-for': `198.51.100.${Math.floor(Math.random() * 200)}, 203.0.113.9`, Cookie: [...b.jar].map(([k, v]) => `${k}=${v}`).join('; ') },
+  body: new URLSearchParams({ csrf: b.jar.get('td_ccsrf'), tender_no: 'RPO000ETQ26000129' }).toString() }), '/check');
+  assert.equal(spoof.status, 429);
+});

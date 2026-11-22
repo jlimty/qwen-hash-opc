@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 import { agentWorkflows, clientProfileSchema, createClient, hasVerifiedCitations, insertAgentCredential, submitBrief } from './governance-agent.mjs';
 import { fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
-import { categorize } from './tender-data.mjs';
+import { categorize, tenderCategories } from './tender-data.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
 import { referenceCode } from './references.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
@@ -16,6 +16,7 @@ const requestSchema = z.strictObject({
   tender_no: short(100).optional(),
   pasted: z.strictObject({ title: short(300), agency: short(250).optional(), text: z.string().max(4000).optional() }).optional(),
   terms: z.array(z.string().max(80)).max(3).default([]),
+  category: z.enum(tenderCategories).optional(),
 }).refine((value) => Boolean(value.tender_no) !== Boolean(value.pasted), 'Give either an open tender or a pasted tender.');
 const requestIdSchema = z.strictObject({ request_id: z.uuid() });
 const draftInputSchema = z.strictObject({ request_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), content: short(20000),
@@ -96,6 +97,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const active = (await tx.query(`SELECT reference_number FROM tender_desk.brief_requests
       WHERE client_id=$1 AND tender_no=$2 AND status IN ('requested','drafted')`, [client_id, tender_no])).rows[0];
     if (active) return { ok: false, reason: 'active', request_reference: referenceCode('REQ', active.reference_number) };
+    const approved = (await tx.query(`SELECT reference_number FROM tender_desk.brief_requests
+      WHERE client_id=$1 AND tender_no=$2 AND status='approved' ORDER BY created_at DESC LIMIT 1`, [client_id, tender_no])).rows[0];
+    if (approved) return { ok: false, reason: 'approved', request_reference: referenceCode('REQ', approved.reference_number) };
     const open = (await tx.query('SELECT closes_at FROM tender_desk.open_tenders WHERE tender_no=$1', [tender_no])).rows[0];
     if (open?.closes_at && new Date(open.closes_at) <= now) return { ok: false, reason: 'closed' };
     const hold = (await tx.query('SELECT client_id,state FROM tender_desk.pricing_holds WHERE tender_no=$1', [tender_no])).rows[0];
@@ -123,8 +127,9 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       payment_status: 'test', tender_no: tender.tender_no, reason: 'This request already exists; no second payment was taken.' };
     const allowed = await requestable(tx, client_id, tender.tender_no, now);
     if (allowed.reason === 'closed') return { ...blocked('VALIDATION', 'This tender has closed.'), tender_no: tender.tender_no };
+    if (allowed.reason === 'approved') return { ...blocked('G5', 'You already have an approved brief on this tender.'), tender_no: tender.tender_no, request_reference: allowed.request_reference };
     if (!allowed.ok) return { ...blocked('G2', refusal), tender_no: tender.tender_no };
-    const check = priceCheck(dataset, { terms: input.terms, category: tender.category });
+    const check = priceCheck(dataset, { terms: input.terms, category: input.category ?? tender.category });
     if (check.status !== 'ready') return { ...blocked('G4', 'At least five comparable awards are needed for a brief. Try broader terms.'), tender_no: tender.tender_no };
     await tx.query(`INSERT INTO tender_desk.stats_snapshots (client_id,tender_no,stat_id,snapshot) VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
       [client_id, tender.tender_no, check.snapshot.stat_id, JSON.stringify(check.snapshot)]);
@@ -288,6 +293,11 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const hold = (await tx.query('SELECT * FROM tender_desk.pricing_holds WHERE tender_no=$1 FOR UPDATE', [conflict.tender_no])).rows[0];
           const locked = (await tx.query('SELECT status FROM tender_desk.conflicts WHERE id=$1 FOR UPDATE', [conflict.id])).rows[0];
           if (locked.status !== 'open') return blocked('G2', 'Only open conflicts may be resolved.');
+          if (!hold) {
+            await tx.query("UPDATE tender_desk.conflicts SET status='resolved',resolution=$1 WHERE id=$2", ['serve_neither', conflict.id]);
+            return { outcome: 'allowed', conflict_id: conflict.id, client_id: conflict.client_id, tender_no: conflict.tender_no, resolution: 'serve_neither',
+              reason: 'The holder no longer holds this tender, so the conflict was closed.' };
+          }
           if (input.resolution === 'serve_holder' && hold.state !== 'held') return blocked('G2', 'Stopped pricing service cannot be reopened.');
           if (input.resolution === 'serve_neither') await tx.query("UPDATE tender_desk.pricing_holds SET state='stopped' WHERE tender_no=$1", [conflict.tender_no]);
           await tx.query("UPDATE tender_desk.conflicts SET status='resolved',resolution=$1 WHERE id=$2", [input.resolution, conflict.id]);

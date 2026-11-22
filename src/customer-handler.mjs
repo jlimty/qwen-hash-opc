@@ -10,8 +10,9 @@ import { parseReference } from './references.mjs';
 import { categorize, tenderCategories } from './tender-data.mjs';
 import { keywordTerms, maxTenderText, readTender } from './tender-reading.mjs';
 
-const maxBodyBytes = 16 * 1024;
+const maxBodyBytes = 256 * 1024;
 const checksPerHour = 20;
+const customerChecksPerHour = 60;
 const sessionSeconds = 7 * 24 * 60 * 60;
 const securityHeaders = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
@@ -75,12 +76,12 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     if (body.length > maxBodyBytes) throw new Error('too large');
     return new URLSearchParams(body);
   }
-  function allowCheck(ip) {
+  function allowCheck(key, limit) {
     const at = now().getTime();
-    const recent = (checks.get(ip) ?? []).filter((time) => at - time < 3600000);
-    if (recent.length >= checksPerHour) { checks.set(ip, recent); return false; }
+    const recent = (checks.get(key) ?? []).filter((time) => at - time < 3600000);
+    if (recent.length >= limit) { checks.set(key, recent); return false; }
     recent.push(at);
-    checks.set(ip, recent);
+    checks.set(key, recent);
     if (checks.size > 5000) checks.delete(checks.keys().next().value);
     return true;
   }
@@ -128,8 +129,9 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     }
 
     if (path === '/check' && post) {
-      const ip = (request.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'local';
-      if (!customer && !allowCheck(ip)) return html(429, layout({ title: 'Slow down', csrf, body: '<p class="banner bad" role="alert">You have run a lot of checks this hour. Create a free account, or try again later.</p>' }));
+      // The last forwarded address is the one the platform's proxy appended; earlier entries are client-supplied.
+      const ip = (request.headers.get('x-forwarded-for') ?? '').split(',').map((part) => part.trim()).filter(Boolean).pop() || 'local';
+      if (!(customer ? allowCheck(`customer:${userId}`, customerChecksPerHour) : allowCheck(`ip:${ip}`, checksPerHour))) return html(429, layout({ title: 'Slow down', csrf, body: '<p class="banner bad" role="alert">You have run a lot of checks this hour. Create a free account, or try again later.</p>' }));
       const typedTerms = cleanTerms(String(form.get('terms') ?? ''));
       const tenderNo = String(form.get('tender_no') ?? '').trim();
       let tender; let reading; let notice;
@@ -147,7 +149,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         reading = typedTerms.length ? { terms: typedTerms, category: categorize(`${title} ${tender.text}`) }
           : await readTender({ title, agency: tender.agency, text: tender.text }, { llm, model: models.read });
       }
-      const check = priceCheck(dataset, { terms: reading.terms, category: reading.category === 'other' ? undefined : reading.category });
+      const check = priceCheck(dataset, { terms: reading.terms, category: reading.category });
       let refusal;
       if (customer) {
         const allowed = await customer.canRequest(tender.pasted ? pastedTenderNo(tender) : tender.tender_no, { now: now() });
@@ -172,7 +174,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       return redirect('/home', { cookies: [sessionCookie(result.session)] });
     }
     if (path === '/signout' && post) {
-      if (rawSession) await auth.signOut(decodeURIComponent(rawSession)).catch(() => {});
+      if (rawSession) { try { await auth.signOut(decodeURIComponent(rawSession)); } catch { /* a malformed cookie is simply cleared */ } }
       return redirect('/', { cookies: [`td_customer=; Max-Age=0; ${cookieFlags}`] });
     }
 
@@ -197,37 +199,45 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const tenders = await listOpenTenders(database, { categories: context.client.categories, now: now(), limit: 15 });
       const verified = context.projects.filter((p) => p.verified);
       const matches = tenders.map((tender) => {
-        const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category === 'other' ? undefined : tender.category });
+        const check = priceCheck(dataset, { terms: tenderTerms(tender), category: tender.category });
         return { tender, check, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
       return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf }));
     }
 
     if ((path === '/checkout' && !post) || path === '/checkout/start') {
-      let tender; let terms;
+      const params = post ? form : url.searchParams;
+      let tender;
       if (!post) {
-        const row = await getOpenTender(database, String(url.searchParams.get('tender') ?? ''));
-        if (!row) return redirect('/home');
-        tender = row; terms = tenderTerms(row);
+        tender = await getOpenTender(database, String(url.searchParams.get('tender') ?? ''));
+        if (!tender) return redirect('/home');
       } else {
         const title = String(form.get('title') ?? '').trim().slice(0, 300);
         if (!title) return redirect('/home');
         tender = { pasted: true, title, agency: String(form.get('agency') ?? '').trim().slice(0, 250), text: String(form.get('text') ?? '').slice(0, maxTenderText) };
-        terms = cleanTerms(String(form.get('terms') ?? ''));
       }
+      const typed = cleanTerms(String(params.get('terms') ?? ''));
+      const terms = typed.length ? typed : tender.pasted ? keywordTerms(`${tender.title} ${tender.text}`).terms : tenderTerms(tender);
+      const requested = String(params.get('category') ?? '');
+      const category = tenderCategories.includes(requested) ? requested : tender.pasted ? categorize(`${tender.title} ${tender.text}`) : tender.category;
       const allowed = await customer.canRequest(tender.pasted ? pastedTenderNo(tender) : tender.tender_no, { now: now() });
-      if (allowed.reason === 'active') return redirect(`/requests/${allowed.request_reference}`);
-      const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.' : undefined;
-      return html(200, renderCheckout({ tender, company, csrf, refusal, terms }));
+      if (allowed.reason === 'active' || allowed.reason === 'approved') return redirect(`/requests/${allowed.request_reference}`);
+      const thin = priceCheck(dataset, { terms, category }).status !== 'ready';
+      const refusal = allowed.reason === 'held' ? allowed.message : allowed.reason === 'closed' ? 'This tender has closed.'
+        : thin ? 'A reviewed brief needs at least five comparable awards. Go back to the price check and try other search terms.' : undefined;
+      const noChecked = !(await customer.context()).projects.some((project) => project.verified);
+      return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, noChecked }));
     }
     if (path === '/checkout' && post) {
       const tenderNo = String(form.get('tender_no') ?? '').trim();
       const terms = cleanTerms(String(form.get('terms') ?? ''));
-      const input = tenderNo ? { tender_no: tenderNo, terms }
+      const requested = String(form.get('category') ?? '');
+      const category = tenderCategories.includes(requested) ? { category: requested } : {};
+      const input = tenderNo ? { tender_no: tenderNo, terms, ...category }
         : { pasted: { title: String(form.get('title') ?? '').trim().slice(0, 300), ...(String(form.get('agency') ?? '').trim() && { agency: String(form.get('agency')).trim().slice(0, 250) }),
-          ...(String(form.get('text') ?? '').trim() && { text: String(form.get('text')).slice(0, maxTenderText) }) }, terms };
+          ...(String(form.get('text') ?? '').trim() && { text: String(form.get('text')).slice(0, maxTenderText) }) }, terms, ...category };
       const result = await customer.requestBrief(input, { now: now() });
-      if (result.outcome === 'allowed') return redirect(`/requests/${result.request_reference}`);
+      if (result.outcome === 'allowed' || result.request_reference) return redirect(`/requests/${result.request_reference}`);
       const tender = tenderNo ? (await getOpenTender(database, tenderNo)) ?? { tender_no: tenderNo, title: tenderNo } : { pasted: true, ...input.pasted };
       return html(409, renderCheckout({ tender, company, csrf, refusal: result.reason, terms }));
     }

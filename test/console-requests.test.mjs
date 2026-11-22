@@ -116,3 +116,7 @@ test('without a model the Draft button explains the missing key', async () => {
   assert.match(page.text, /AI drafting is not configured \(TD_OPENROUTER_KEY\)\./);
   assert.doesNotMatch(page.text, />Draft</);
 });
+
+test('the console refuses to start without an admin function, in plain English', () => {
+  assert.throws(() => createConsoleHandler({ adminToken, dataset }), { message: 'An admin function is required.' });
+});

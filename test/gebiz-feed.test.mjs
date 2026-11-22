@@ -79,3 +79,19 @@ test('listOpenTenders hides closed tenders and filters by category', async () =>
   const none = await listOpenTenders(db, { now: new Date('2026-11-22T00:00:00Z'), categories: ['security'] });
   assert.ok(none.every((row) => row.category === 'security'));
 });
+
+test('when every feed fails, the last successful update time stays put', async () => {
+  const { feedRefreshedAt } = await import('../src/gebiz-feed.mjs');
+  const before = await feedRefreshedAt(db);
+  assert.ok(before, 'an earlier refresh succeeded');
+  const later = new Date('2026-11-23T05:00:00Z');
+  const result = await refreshOpenTenders(db, { fetchImpl: async () => { throw new Error('GeBIZ down'); }, now: later });
+  assert.equal(result.refreshed, true);
+  assert.equal(new Date(await feedRefreshedAt(db)).getTime(), new Date(before).getTime());
+});
+
+test('numeric character references in titles are decoded', () => {
+  const xmlWithEntities = '<rss version="2.0"><channel><item><title>Children&#8217;s Day &#x26; Family Fair</title><link>https://www.gebiz.gov.sg/ptn/x</link>'
+    + '<description>ITQ: ABC000ETQ26000001 | Published Date: 20/11/2026 | Closing Date: 04/12/2026 13:00:00 | Calling Entity: Agency A |</description></item></channel></rss>';
+  assert.equal(parseFeed(xmlWithEntities, professional)[0].title, 'Children’s Day & Family Fair');
+});
