@@ -56,10 +56,11 @@ export const actionLabels = {
 const ruleLabels = { ERROR: 'error', VALIDATION: 'invalid input' };
 const outcomeLabel = (row) => {
   const rule = row.rule_id ? ` · ${ruleLabels[row.rule_id] ?? row.rule_id}` : '';
-  return { allowed: 'Allowed', approved: 'Approved', declined: 'Declined', blocked: `Blocked${rule}`, escalated: `Escalated${rule}` }[row.outcome] ?? row.outcome;
+  return { allowed: '', approved: 'Approved', declined: 'Declined', blocked: `Blocked${rule}`, escalated: `Escalated${rule}` }[row.outcome] ?? row.outcome;
 };
 const outcomeClass = { allowed: '', approved: 'ok', declined: 'bad', blocked: 'bad', escalated: 'warn' };
-export const outcomePill = (row) => `<span class="pill ${outcomeClass[row.outcome] ?? ''}">${esc(outcomeLabel(row))}</span>`;
+// A step that went through needs no pill: only blocked steps and review results carry one.
+export const outcomePill = (row) => (row.outcome === 'allowed' ? '' : `<span class="pill ${outcomeClass[row.outcome] ?? ''}">${esc(outcomeLabel(row))}</span>`);
 const pct = (value) => (value === null ? 'n/a' : `${Math.round(value * 100)}%`);
 
 const page = (title, body) => `<!doctype html>
@@ -369,9 +370,10 @@ export const auditFilters = Object.freeze({ rule: ['G1', 'G2', 'G3', 'G4', 'G5',
 
 export function renderAudit({ state, csrf, flash, rows = state.audit.slice(0, 100), filters = {} }) {
   const clients = new Map(state.clients.map((c) => [c.id, c.name]));
-  const opt = (values, current, anyLabel) => [['', anyLabel], ...values.map((v) => [v, v])];
+  const outcomeNames = { allowed: 'Went through', blocked: 'Blocked', escalated: 'Escalated', approved: 'Approved', declined: 'Declined' };
+  const opt = (values, current, anyLabel) => [['', anyLabel], ...values.map((v) => [v, outcomeNames[v] ?? v])];
   return renderShell({ state, csrf, active: 'audit', title: 'Audit log', flash,
-    sub: 'Every agent and admin action, allowed or blocked, written in the same transaction as the change.',
+    sub: 'Every agent and admin action, whether it went through or was blocked, written in the same transaction as the change.',
     body: `<form method="get" action="/audit" class="filters">
 <label>Search<input type="search" name="q" maxlength="120" value="${esc(filters.q ?? '')}" placeholder="AUD00042, action or reason"></label>
 <label>Client<input name="client" maxlength="20" value="${esc(filters.client ?? '')}" placeholder="CLI00003"></label>

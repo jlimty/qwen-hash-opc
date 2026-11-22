@@ -62,11 +62,11 @@ function comparablesPanel(snapshot, dataset, band) {
   const rows = snapshot.comparables.map((c) => ({ ...byNumber.get(c.tender_no), cents: Number(c.total_awarded_cents) }))
     .sort((a, b) => b.cents - a.cents).slice(0, 30).map((c) => {
       const odd = median && (c.cents > 5 * median || c.cents * 5 < median);
-      return `<tr><td class="num nowrap">${esc(c.tender_no)}</td><td>${esc(c.description ?? '')}<span class="sub-line muted">${esc(c.agency ?? '')}</span></td>
-<td class="r num nowrap">${money(c.cents)}${odd ? ' <span class="chip warning">Far from median</span>' : ''}</td><td class="num nowrap">${esc(c.last_award_date ?? '')}</td></tr>`;
+      return `<tr><td class="num nowrap">${esc(c.tender_no)}<span class="sub-line muted">${esc(c.last_award_date ?? '')}</span></td><td class="desc">${esc(c.description ?? '')}<span class="sub-line muted">${esc(c.agency ?? '')}</span></td>
+<td class="r"><span class="num nowrap">${money(c.cents)}</span>${odd ? '<span class="chip warning far">Far from median</span>' : ''}</td></tr>`;
     }).join('');
   return `<section class="panel"><header><h2>Comparable awards</h2><span class="muted small">${snapshot.comparables.length} awards, largest first${snapshot.comparables.length > 30 ? ' (first 30)' : ''}</span></header>
-<div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+<div class="table-wrap"><table class="stack comparables"><thead><tr><th>Tender</th><th>Description</th><th class="r">Awarded</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
 }
 
 export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, snapshot }) {

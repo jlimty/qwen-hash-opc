@@ -243,6 +243,9 @@ test('an audit row from before the rename shows as the admin, never by its store
   const detail = await http({ path: `/audit/AUD${String(id).padStart(5, '0')}`, headers: { Cookie: session.cookie } });
   for (const page of [list.text, detail.text]) assert.doesNotMatch(page, new RegExp(legacy, 'i'));
   assert.match(detail.text, /You \(admin\)/);
+  // A step that went through gets no pill (it would read as if the whole request were finished); the filter calls it "Went through".
+  assert.doesNotMatch(list.text, />(Allowed|Done)</);
+  assert.match(list.text, /<option value="allowed">Went through<\/option>/);
 });
 
 test('the audit log shows plain-language actions with rule IDs, and reading it writes nothing', async () => {

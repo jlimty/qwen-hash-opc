@@ -122,7 +122,10 @@ td .sub-line,.checks .sub-line,dd .sub-line{display:block;font-size:.8125rem;col
 .decisions details.ask summary{color:var(--accent-dark)}
 .decisions details[open]{flex-basis:100%}
 .decision .decisions{flex:1;justify-content:flex-end}
-.decision:has(details[open]){max-height:60vh;overflow:auto}
+.decision:has(details[open]){max-height:60vh;overflow:auto;align-items:flex-start}
+.decision:has(details[open]) .decisions{flex-basis:100%;justify-content:flex-start;border-top:1px solid var(--line);padding-top:.5rem}
+.comparables td.desc{min-width:16rem;overflow-wrap:break-word}
+.comparables .chip.far{display:block;width:max-content;margin:.25rem 0 0 auto}
 button.danger{background:var(--bad);border-color:var(--bad);color:#fff}
 button.danger:hover{filter:brightness(.92)}
 
