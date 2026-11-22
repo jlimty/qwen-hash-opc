@@ -6,11 +6,12 @@ import { categorize, tenderCategories } from './tender-data.mjs';
 import { buildBacktest, summarize } from './backtest.mjs';
 import { referenceCode } from './references.mjs';
 import { crossCheckProject } from './gebiz-check.mjs';
+import { computeRiskFacts } from './brief-risk.mjs';
 
 const digest = (token) => createHash('sha256').update(token).digest();
 const blocked = (rule_id, reason) => ({ outcome: 'blocked', rule_id, reason });
 
-const refusal = 'Tender Desk already advises a client on this tender.';
+const refusal = "This tender isn't available for a reviewed brief right now.";
 const short = (max) => z.string().trim().min(1).max(max).refine((value) => !value.includes('\u0000'), 'NUL characters are not allowed.');
 const requestSchema = z.strictObject({
   tender_no: short(100).optional(),
@@ -324,6 +325,10 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           const decline_reason = input.decision === 'declined' ? input.reason : null;
           await tx.query('UPDATE tender_desk.briefs SET status=$1, decided_at=now(), decline_reason=$2 WHERE id=$3', [input.decision, decline_reason, brief.id]);
           await tx.query('UPDATE tender_desk.brief_requests SET status=$1, decline_reason=$2, updated_at=now() WHERE brief_id=$3', [input.decision, decline_reason, brief.id]);
+          // An approved no-bid frees the tender: the client won't bid, so nobody is being advised against.
+          if (input.decision === 'approved' && brief.recommendation === 'no-bid') {
+            await tx.query("DELETE FROM tender_desk.pricing_holds WHERE tender_no=$1 AND client_id=$2 AND state='held'", [brief.tender_no, brief.client_id]);
+          }
           if (input.decision === 'declined') {
             await releaseHold(tx, brief.tender_no, brief.client_id);
             const request = (await tx.query('SELECT id,client_id FROM tender_desk.brief_requests WHERE brief_id=$1', [brief.id])).rows[0];
@@ -398,6 +403,23 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           await tx.query("UPDATE tender_desk.brief_requests SET status='drafted', brief_id=$1, last_error=NULL, updated_at=now() WHERE id=$2", [result.brief_id, request.id]);
           return { ...result, ...ids };
         }),
+        // The admin's edit or redraft of a pending brief, in place. Citations are re-checked and risk facts recomputed.
+        reviseDraft: adminOperation('revise_draft', z.strictObject({ brief_id: z.uuid(), recommendation: z.enum(['bid', 'no-bid']), content: short(20000),
+          credentials_cited: z.array(z.uuid()).max(30).default([]), parts: z.record(z.string(), z.unknown()).optional(), risk_text: z.string().max(20000).optional() }), async (tx, input) => {
+          const brief = (await tx.query('SELECT * FROM tender_desk.briefs WHERE id=$1 FOR UPDATE', [input.brief_id])).rows[0];
+          if (!brief || brief.status !== 'pending_approval') return blocked('G5', 'Only a pending brief can be revised.');
+          if (!await hasVerifiedCitations(tx, brief.client_id, input.credentials_cited)) return blocked('G3', 'Every cited project must be verified and belong to this client.');
+          const snapshot = (await tx.query('SELECT snapshot FROM tender_desk.stats_snapshots WHERE client_id=$1 AND tender_no=$2 AND stat_id=$3',
+            [brief.client_id, brief.tender_no, brief.stat_id])).rows[0]?.snapshot;
+          const counts = (await tx.query(`SELECT (SELECT max_contract_cents FROM tender_desk.clients WHERE id=$1) AS max_contract_cents,
+            (SELECT count(*)::int FROM tender_desk.projects WHERE client_id=$1 AND verified) AS verified,
+            (SELECT count(*)::int FROM tender_desk.briefs WHERE client_id=$1 AND id<>$2) AS prior`, [brief.client_id, brief.id])).rows[0];
+          const risk = computeRiskFacts({ n: Number(snapshot?.n ?? 0), band: brief.price_band, maxContractCents: Number(counts.max_contract_cents),
+            content: input.risk_text ?? input.content, citedCount: new Set(input.credentials_cited).size, verifiedProjectCount: counts.verified, priorBriefCount: counts.prior });
+          await tx.query(`UPDATE tender_desk.briefs SET recommendation=$1, content=$2, credentials_cited=$3, parts=COALESCE($4,parts), risk_facts=$5, risk_level=$6 WHERE id=$7`,
+            [input.recommendation, input.content, input.credentials_cited, input.parts ? JSON.stringify(input.parts) : null, JSON.stringify(risk.facts), risk.level, brief.id]);
+          return { outcome: 'allowed', brief_id: brief.id, brief_reference: referenceCode('BRF', brief.reference_number), client_id: brief.client_id, tender_no: brief.tender_no };
+        }),
         recordDraftFailure: adminOperation('draft_failed', z.strictObject({ request_id: z.uuid(), reason: short(1000) }), async (tx, input) => {
           const { rows } = await tx.query(`UPDATE tender_desk.brief_requests SET last_error=$1, updated_at=now() WHERE id=$2
             RETURNING id, reference_number, client_id, tender_no`, [input.reason, input.request_id]);
@@ -426,7 +448,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
             holds: (await tx.query('SELECT * FROM tender_desk.pricing_holds ORDER BY tender_no')).rows,
             briefs: (await tx.query('SELECT * FROM tender_desk.briefs ORDER BY created_at,id')).rows,
             conflicts: (await tx.query('SELECT * FROM tender_desk.conflicts ORDER BY created_at,id')).rows,
-            requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no,title,agency,created_at FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
+            requests: (await tx.query('SELECT id,reference_number,status,client_id,tender_no,title,agency,created_at,brief_id FROM tender_desk.brief_requests ORDER BY created_at,id')).rows,
             openTenders: (await tx.query(`SELECT tender_no,title,agency FROM tender_desk.open_tenders WHERE tender_no IN
               (SELECT tender_no FROM tender_desk.briefs UNION SELECT tender_no FROM tender_desk.brief_requests)`)).rows,
             comparables: (await tx.query("SELECT client_id,tender_no,stat_id,(snapshot->>'n')::int AS n FROM tender_desk.stats_snapshots")).rows,

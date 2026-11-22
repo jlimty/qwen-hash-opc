@@ -163,7 +163,7 @@ try {
     await rival.get('/profile');
     await rival.post('/profile', { name: 'Rival Co (test)', capabilities: 'Same work.', categories: target.category, team_size: '3', max_contract: '500000' });
     const page = await rival.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
-    must(/Tender Desk already advises a client on this tender\./.test(page.text) && !/Pay S\$99/.test(page.text), 'rival was not refused');
+    must(/This tender isn(&#39;|')t available for a reviewed brief right now/.test(page.text) && !/Use 1 credit/.test(page.text), 'rival was not refused');
     must(!page.text.includes('Rehearsal Co'), 'rival can see the holder');
   });
   await step('8 every step is in the audit log', async () => {

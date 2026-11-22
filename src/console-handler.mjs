@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { draftBrief } from './brief-drafting.mjs';
+import { checkDraft, draftBrief } from './brief-drafting.mjs';
 import { auditFilters, briefQuery, renderAudit, renderRequests, renderBacktest, renderBriefs, renderClients, renderConflicts, renderForgot, renderLogin, renderOverview, renderReset, renderRevealConfirm } from './console-view.mjs';
 import { recordHref, recordKinds, renderAuditDetail, renderBriefDetail, renderClientDetail, renderConflictDetail, renderNotFound, renderProjectDetail, renderTender } from './console-records.mjs';
 import { parseReference } from './references.mjs';
@@ -230,6 +230,38 @@ export function createConsoleHandler({ admin, adminToken, auth, dataset, basePat
       const flash = result.outcome === 'blocked' ? { ok: false, text: `Blocked · ${result.rule_id}: ${result.reason}` }
         : { ok: true, text: result.scope === 'all' ? `Revealed ${result.revealed_count} outcomes.` : 'Outcome revealed.' };
       return redirect('/backtest', { cookies: [flashCookie(flash)] });
+    }
+    const briefEdit = /^\/actions\/brief\/([^/]+)\/(edit|redraft)$/.exec(path);
+    if (briefEdit) {
+      const [, id, verb] = briefEdit;
+      if (!idPattern.test(id)) return text(404, 'Not found');
+      const state = await ops.readConsole();
+      const brief = state.briefs.find((b) => b.id === id);
+      const request = state.requests.find((r) => r.brief_id === id);
+      if (!brief || !request) return text(404, 'Not found');
+      let flash;
+      try {
+        const facts = await ops.prepareDraft(request.id);
+        if (verb === 'edit') {
+          const linesOf = (name) => String(form.get(name) ?? '').split('\n').map((l) => l.trim()).filter(Boolean);
+          const raw = { recommendation: form.get('recommendation'), reasons: linesOf('reasons'),
+            price_position: { band: form.get('band'), why: String(form.get('why') ?? '').trim() },
+            requirements: brief.parts?.requirements ?? [], questions: linesOf('questions'), risks: linesOf('risks'), credentials_cited: brief.credentials_cited };
+          const checked = checkDraft(raw, facts);
+          const result = checked.ok ? await ops.reviseDraft({ brief_id: id, ...checked.draft }) : undefined;
+          flash = checked.ok && result.outcome === 'allowed' ? { ok: true, text: 'Edits saved. Every check passed.' }
+            : { ok: false, text: `Edit not saved: ${(checked.ok ? result.reason : checked.reason).replace(/ Try Redraft\.$/, '')}` };
+        } else if (typeof llm !== 'function') {
+          flash = { ok: false, text: 'AI drafting is not configured (TD_OPENROUTER_KEY).' };
+        } else {
+          const drafted = await draftBrief(facts, { llm, model: models.draft, note: String(form.get('note') ?? '').slice(0, 1000) });
+          const result = drafted.ok ? await ops.reviseDraft({ brief_id: id, ...drafted.draft }) : undefined;
+          flash = drafted.ok && result.outcome === 'allowed' ? { ok: true, text: 'Redrafted with your note.' } : { ok: false, text: `Redraft failed: ${drafted.ok ? result.reason : drafted.reason}` };
+        }
+      } catch {
+        flash = { ok: false, text: 'The action could not be completed. Nothing was changed.' };
+      }
+      return redirect(recordHref('brief', brief), { cookies: [flashCookie(flash)] });
     }
     const requestAction = /^\/actions\/request\/([^/]+)\/(draft|decline)$/.exec(path);
     if (requestAction) {

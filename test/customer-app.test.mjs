@@ -172,7 +172,7 @@ test('checkout spends one credit, and paying twice creates one request', async (
 test('a second customer sees the refusal and no pay button', async () => {
   const b = await signedUpCustomer('Cedar');
   const checkout = await b.get('/checkout?tender=RPO000ETQ26000129');
-  assert.match(checkout.text, /Tender Desk already advises a client on this tender\./);
+  assert.match(checkout.text, /This tender isn(&#39;|')t available for a reviewed brief right now\./);
   assert.doesNotMatch(checkout.text, /Use 1 credit/);
   assert.doesNotMatch(checkout.text, /Birch/);
 });
@@ -303,7 +303,7 @@ test('home offers a brief only where one can be made, and links to an existing b
   const again = await b.get('/home');
   const owned = await db.query("SELECT 1 FROM tender_desk.brief_requests r JOIN tender_desk.customers c ON c.client_id=r.client_id WHERE r.tender_no='RPO000ETQ26000129'");
   assert.match(again.text.slice(again.text.indexOf('RPO000ETQ26000129'), again.text.indexOf('</li>', again.text.indexOf('RPO000ETQ26000129'))),
-    owned.rows.length ? /View your brief|already advises a client/ : /already advises a client/);
+    owned.rows.length ? /View your brief|available for a reviewed brief/ : /available for a reviewed brief/);
 });
 
 test('the terms note explains the most-specific rule, and a wide band carries a warning', async () => {

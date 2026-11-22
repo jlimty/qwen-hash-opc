@@ -41,7 +41,7 @@ const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 2
 
 export const actionLabels = {
   authenticate: 'Rejected sign-in attempts', create_client: 'Created a client', issue_agent_credential: 'Issued a connector credential',
-  revoke_agent_credential: 'Revoked a connector credential', verify_project: 'Changed project verification', review_brief: 'Reviewed a brief',
+  revoke_agent_credential: 'Revoked a connector credential', revise_draft: 'Edited a draft', verify_project: 'Changed project verification', review_brief: 'Reviewed a brief',
   resolve_conflict: 'Resolved a conflict', reveal_backtest: 'Revealed backtest results', get_policies: 'Read the rules', get_client_context: 'Read a client profile',
   get_incoming_tenders: 'Listed incoming tenders', search_tenders: 'Searched past awards', save_shortlist: 'Saved a shortlist',
   request_pricing: 'Requested pricing', submit_brief: 'Submitted a brief', unknown_tool: 'Called an unavailable tool',

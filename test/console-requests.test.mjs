@@ -12,7 +12,7 @@ const dataset = parseTenderCsv(header + [1, 2, 3, 4, 5, 6].map((i) =>
   `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 100000}.00`).join('\n'));
 const adminToken = randomBytes(32).toString('hex');
 const now = new Date('2026-11-22T02:00:00Z');
-let db; let desk; let admin; let modelReply;
+let db; let desk; let admin; let modelReply; let lastUser;
 
 const llm = async () => { if (modelReply instanceof Error) throw modelReply; return modelReply; };
 before(async () => {
@@ -157,4 +157,39 @@ test('the brief review page shows the live agency and the comparable awards behi
   assert.match(page.text, /OLD-6/);
   assert.match(page.text, /Lower quartile/);
   assert.doesNotMatch(page.text, /##/);
+});
+
+test('the brief page lets the admin edit the draft, and every check re-runs on save', async () => {
+  const request = await paidRequest();
+  modelReply = clean(request.project_id);
+  const c = consoleWith({ llm, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const brief = (await db.query('SELECT b.id,b.reference_number FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0];
+  const ref = `/briefs/BRF${String(brief.reference_number).padStart(5, '0')}`;
+  const page = await c.get(ref);
+  assert.match(page.text, /action="\/actions\/brief\/[^"]+\/edit"/);
+  assert.match(page.text, /name="reasons"/);
+  assert.match(page.text, /AI drafts it; you can edit any part before approving/);
+  await c.post(`/actions/brief/${brief.id}/edit`, { recommendation: 'bid', reasons: 'The work matches your ministry event.\nThe agency buys this regularly.',
+    band: 'median_to_upper_quartile', why: 'Your ministry track record justifies sitting above the middle of past awards.', questions: 'Is there a site visit?', risks: '' });
+  const saved = (await db.query('SELECT parts,content FROM tender_desk.briefs WHERE id=$1', [brief.id])).rows[0];
+  assert.equal(saved.parts.price_position.band, 'median_to_upper_quartile');
+  assert.match(saved.content, /Is there a site visit\?/);
+  await c.post(`/actions/brief/${brief.id}/edit`, { recommendation: 'bid', reasons: 'Similar work went for S$999,999.', band: 'median_to_upper_quartile',
+    why: 'Your ministry track record justifies sitting above the middle of past awards.', questions: '', risks: '' });
+  assert.match((await c.get(ref)).text, /Edit not saved: Draft repeated the price position|Edit not saved: Draft contained figures/);
+});
+
+test('a redraft with a note sends the note to the model and replaces the pending draft', async () => {
+  const request = await paidRequest();
+  modelReply = clean(request.project_id);
+  const c = consoleWith({ llm: async (r) => { lastUser = JSON.parse(r.user); return modelReply; }, models: { draft: 'd' } });
+  await c.login();
+  await c.post(`/actions/request/${request.request_id}/draft`, {});
+  const brief = (await db.query('SELECT b.id FROM tender_desk.briefs b JOIN tender_desk.brief_requests r ON r.brief_id=b.id WHERE r.id=$1', [request.request_id])).rows[0];
+  modelReply = { ...clean(request.project_id), reasons: ['The redraft mentions the school programmes.'] };
+  await c.post(`/actions/brief/${brief.id}/redraft`, { note: 'Mention the school programmes.' });
+  assert.equal(lastUser.admin_note, 'Mention the school programmes.');
+  assert.match((await db.query('SELECT content FROM tender_desk.briefs WHERE id=$1', [brief.id])).rows[0].content, /redraft mentions the school programmes/);
 });

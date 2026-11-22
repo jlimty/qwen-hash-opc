@@ -11,7 +11,7 @@ const dataset = parseTenderCsv(header + [1, 2, 3, 4, 5, 6].map((i) =>
   `OLD-${i},Event management services,Agency A,1/${i}/2025,Awarded to Suppliers,Past supplier,${i * 100000}.00`).join('\n'));
 const adminToken = randomBytes(32).toString('hex');
 const now = new Date('2026-11-22T02:00:00Z');
-const refusal = 'Tender Desk already advises a client on this tender.';
+const refusal = "This tender isn't available for a reviewed brief right now.";
 let db; let desk; let admin;
 
 before(async () => {
@@ -263,4 +263,33 @@ test('a declined or cancelled request gives its credit back', async () => {
   await a.ops.cancelRequest({ request_id: second.request_id });
   assert.equal(await balance(a.client_id), 1);
   assert.deepEqual((await a.ops.credits()).history.slice(0, 2).map((h) => h.reason), ['refund', 'brief']);
+});
+
+test('an approved no-bid frees the tender for the next customer', async () => {
+  const a = await customer('Rowan2');
+  const b = await customer('Sage');
+  const tender_no = await openTender();
+  const requested = await ask(a, tender_no);
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const saved = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared, { recommendation: 'no-bid' }) });
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  assert.deepEqual(await b.ops.canRequest(tender_no, { now }), { ok: true });
+});
+
+test('the admin can revise a pending draft in place; checks still apply and an approved brief is final', async () => {
+  const a = await customer('Thyme');
+  const requested = await ask(a, await openTender());
+  const prepared = await admin.prepareDraft(requested.request_id);
+  const saved = await admin.saveDraft({ request_id: requested.request_id, ...draft(prepared) });
+  const revised = await admin.reviseDraft({ brief_id: saved.brief_id, recommendation: 'no-bid', content: 'Revised: do not bid.', credentials_cited: [],
+    parts: { recommendation: 'no-bid' }, risk_text: 'Revised.' });
+  assert.equal(revised.outcome, 'allowed');
+  const row = (await db.query('SELECT recommendation,content,parts,status FROM tender_desk.briefs WHERE id=$1', [saved.brief_id])).rows[0];
+  assert.deepEqual([row.recommendation, row.content, row.parts.recommendation, row.status], ['no-bid', 'Revised: do not bid.', 'no-bid', 'pending_approval']);
+  const bad = await admin.reviseDraft({ brief_id: saved.brief_id, recommendation: 'bid', content: 'x', credentials_cited: [a.projects[1].id] });
+  assert.equal(bad.rule_id, 'G3');
+  await admin.reviewBrief({ brief_id: saved.brief_id, decision: 'approved' });
+  assert.equal((await admin.reviseDraft({ brief_id: saved.brief_id, recommendation: 'bid', content: 'late', credentials_cited: [] })).outcome, 'blocked');
+  const audit = (await db.query("SELECT count(*)::int AS n FROM tender_desk.audit_log WHERE action='revise_draft'")).rows[0].n;
+  assert.ok(audit >= 1);
 });

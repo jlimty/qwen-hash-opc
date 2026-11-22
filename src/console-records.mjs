@@ -90,6 +90,22 @@ export function renderBriefDetail({ state, dataset, csrf, flash, brief, back, sn
   const facts = brief.risk_facts ?? [];
   const decided = brief.status !== 'pending_approval';
   const banner = decided ? `<p class="banner ${brief.status === 'approved' ? 'ok' : 'bad'}" role="status">This brief was ${brief.status}${brief.decline_reason ? `: ${esc(brief.decline_reason)}` : '.'}</p>` : '';
+  const parts = brief.parts ?? {};
+  const lines = (items) => esc((items ?? []).join('\n'));
+  const bands = [['below_lower_quartile', 'Below the lower quartile'], ['lower_quartile_to_median', 'Lower quartile to median'],
+    ['median_to_upper_quartile', 'Median to upper quartile'], ['above_upper_quartile', 'Above the upper quartile']];
+  const editor = decided ? '' : `<section class="panel"><header><h2>Edit or redraft</h2><span class="muted small">AI drafts it; you can edit any part before approving</span></header>
+<form method="post" action="/actions/brief/${brief.id}/edit" class="form-grid"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<label>Recommendation <select name="recommendation"><option value="bid"${brief.recommendation === 'bid' ? ' selected' : ''}>Bid</option><option value="no-bid"${brief.recommendation === 'no-bid' ? ' selected' : ''}>Do not bid</option></select></label>
+<label>Reasons, one per line <textarea name="reasons" rows="4">${lines(parts.reasons)}</textarea></label>
+<label>Where to price <select name="band">${bands.map(([v, l]) => `<option value="${v}"${parts.price_position?.band === v ? ' selected' : ''}>${l}</option>`).join('')}</select></label>
+<label>Why price there <textarea name="why" rows="2">${esc(parts.price_position?.why ?? '')}</textarea></label>
+<label>Questions to ask the agency, one per line <textarea name="questions" rows="3">${lines(parts.questions)}</textarea></label>
+<label>Risks, one per line <textarea name="risks" rows="2">${lines(parts.risks)}</textarea></label>
+<div><button type="submit">Save edits</button></div></form>
+<form method="post" action="/actions/brief/${brief.id}/redraft" class="form-grid"><input type="hidden" name="csrf" value="${esc(csrf)}">
+<label>Or redraft with a note for the AI <textarea name="note" rows="2" maxlength="1000" placeholder="Mention their school programmes; the scope is not small."></textarea></label>
+<div><button type="submit">Redraft</button></div></form></section>`;
   const actions = decided ? '' : `<div class="decision">
 <p class="muted small">Approval re-checks the advice slot and the citations.</p>
 <div class="row-actions">${form(csrf, `/actions/brief/${brief.id}/approve`, 'Approve', 'primary')}</div>
@@ -107,6 +123,7 @@ ${panel('Risk facts', facts.length ? `<ul class="checks">${facts.map((f) => chec
 <section class="panel"><header><h2>Agent's draft (not checked for meaning)</h2><span class="muted small">${clientLink(brief.client_id)}</span></header>
 <div class="prose brief-prose">${renderBriefHtml(brief.content)}</div>
 <p class="note">Prose is not semantically checked; you are the check.</p></section>
+${editor}
 ${comparablesPanel(snapshot, dataset, brief.price_band)}</div>
 <aside class="stack-gap">
 ${panel('Details', props([

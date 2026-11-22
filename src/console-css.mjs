@@ -176,4 +176,7 @@ form.filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.6rem;margin-b
 form.filters label{display:grid;gap:.2rem;font-size:.8125rem;font-weight:600}
 form.filters input,form.filters select{font:inherit;padding:.4rem .5rem;border:1px solid var(--line-strong);border-radius:6px;background:#fff;min-width:9rem}
 dd form{display:inline}
+.form-grid{display:grid;gap:.6rem;padding:1rem}
+.form-grid label{display:grid;gap:.25rem;font-size:.8125rem;font-weight:600}
+.form-grid select{font:inherit;padding:.35rem .5rem;border:1px solid var(--line-strong);border-radius:6px;background:#fff;max-width:20rem}
 `;
