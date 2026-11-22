@@ -13,7 +13,7 @@ export function formatSgd(cents) {
 // followed by a k / m / million shorthand or a percent sign.
 const numberToken = /(?<![A-Za-z\d.])(\d(?:[\d,]*\d)?(?:\.\d+)?)(?:\s?(million|mil|[kKmM])(?![A-Za-z])|(%)|(?![A-Za-z\d]))/g;
 
-function unmatchedFigures(content, band, n) {
+export function unmatchedFigures(content, band, n) {
   const cents = [band.low_cents, band.median_cents, band.high_cents].map(Number);
   const dollars = cents.map((c) => c / 100);
   // Exact matches: dollars as written, rounded or truncated to whole dollars, raw cents, and n.
