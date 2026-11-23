@@ -103,15 +103,15 @@ try {
     for (const tender of open.slice(0, 12)) {
       check = await visitor.post('/check', { tender_no: tender.tender_no });
       must(/Not a quote, and not a winning price/.test(check.text), 'price check has no limits line');
-      if (/Create an account: your first reviewed brief is free/.test(check.text)) { target = tender; break; }
+      if (/Get your first brief free/.test(check.text)) { target = tender; break; }
     }
     must(target, 'none of the first 12 open tenders had enough comparable awards for a brief');
     return `${open.length} open tenders; checked ${target.tender_no}`;
   });
   await step('2 a pasted tender gets a price check or an honest too-few state', async () => {
     const check = await visitor.post('/check', { title: 'Provision of event management services for a community festival', agency: 'People\'s Association', text: '' });
-    must(/Median award|comparable awards?, from about|Too few comparable awards/.test(check.text), 'no result state');
-    return /Median award/.test(check.text) ? 'price range shown' : /from about/.test(check.text) ? 'thin evidence: count and rough spread' : 'too few comparables';
+    must(/Median award|class="ck-range ck-thin|Too few comparable awards/.test(check.text), 'no result state');
+    return /ck-thin/.test(check.text) ? 'thin evidence: count and rough spread' : /Median award/.test(check.text) ? 'price range shown' : 'too few comparables';
   });
   const owner = browser(app, '/a');
   await step('3 sign up and create a profile; projects show as unverified', async () => {
@@ -123,19 +123,19 @@ try {
       team_size: '10', max_contract: '2,000,000', project_title_0: `Past project: ${keywordTerms(target.title).terms.join(' ')}`, project_agency_0: target.agency, project_title_1: 'Unchecked project' });
     must(p.status === 303, `profile returned ${p.status}: ${p.text.slice(0, 200)}`);
     const home = (await owner.get('/home')).text;
-    must(/Unverified/.test(home), 'home does not show unverified projects');
-    must(/>1 credit</.test(home), 'the welcome credit is not shown');
+    must(/Not checked yet/.test(home), 'home does not show unchecked projects');
+    must(/>1 credit</.test(home) && /Your first brief is free/.test(home), 'the welcome credit is not shown as the free first brief');
   });
   await step('4 the admin verifies a project and the customer sees it checked', async () => {
     const project = (await db.query("SELECT id FROM tender_desk.projects WHERE title LIKE 'Past project:%'")).rows[0];
     verifiedId = project.id;
     must((await admin.verifyProject({ project_id: project.id, verified: true, note: 'Rehearsal check.' })).outcome === 'allowed', 'verify refused');
-    must(/Checked/.test((await owner.get('/home')).text), 'home does not show the checked project');
+    must(/✓ Checked/.test((await owner.get('/home')).text), 'home does not show the checked project');
   });
   let requestPath;
   await step('5 ask for a reviewed brief: test-mode checkout, then In review', async () => {
     const checkout = await owner.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
-    must(/Use 1 credit/.test(checkout.text), `no credit checkout; the page says: ${/<p class="banner[^>]*>([^<]*)/.exec(checkout.text)?.[1] ?? 'nothing'}`);
+    must(/Get my free brief|Use 1 credit/.test(checkout.text), `no credit checkout; the page says: ${/<p class="banner[^>]*>([^<]*)/.exec(checkout.text)?.[1] ?? 'nothing'}`);
     const terms = /name="terms" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
     const category = /name="category" value="([^"]*)"/.exec(checkout.text)?.[1] ?? '';
     const paid = await owner.post('/checkout', { tender_no: target.tender_no, terms, category, confirm_outside: 'yes',
@@ -170,7 +170,7 @@ try {
     await rival.get('/profile');
     await rival.post('/profile', { name: 'Rival Co (test)', uen: 'T99TD0102B', capabilities: 'Same work.', categories: target.category, team_size: '3', max_contract: '500000' });
     const page = await rival.get(`/checkout?tender=${encodeURIComponent(target.tender_no)}`);
-    must(/This tender isn(&#39;|')t available for a reviewed brief right now/.test(page.text) && !/Use 1 credit/.test(page.text), 'rival was not refused');
+    must(/This tender isn(&#39;|')t available for a reviewed brief right now/.test(page.text) && !/Get my free brief|Use 1 credit/.test(page.text), 'rival was not refused');
     must(!page.text.includes('Rehearsal Co'), 'rival can see the holder');
   });
   await step('8 every step is in the audit log', async () => {
