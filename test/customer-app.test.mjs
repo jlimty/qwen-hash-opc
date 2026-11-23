@@ -858,3 +858,24 @@ test('a thin check says its caveat once, as text, and its offer does not promise
   assert.doesNotMatch(html, /class="banner"/);
   assert.match(html, /whether to aim low or high/);
 });
+
+test('a project whose GeBIZ award names the company is checked at once; others, and ones the admin unchecks, wait', async () => {
+  const b = browser('10.0.6.1');
+  await b.get('/signup');
+  await b.post('/signup', { email: `auto-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
+  await b.get('/profile');
+  const saved = await b.post('/profile', { name: 'Auditor 7 Pte Ltd', uen: testUen(), capabilities: 'Audits for public bodies.', categories: 'other', team_size: '5', max_contract: '400,000',
+    project_title_0: 'Audit certification', project_agency_0: 'Agency A', project_gebiz_0: 'AUD-7',
+    project_title_1: 'Audit for another firm', project_agency_1: 'Agency A', project_gebiz_1: 'AUD-8' });
+  assert.equal(saved.status, 303);
+  const rows = (await db.query(`SELECT p.title, p.verified, p.verification_note, p.id FROM tender_desk.projects p JOIN tender_desk.clients c ON c.id=p.client_id
+    WHERE c.name='Auditor 7 Pte Ltd' ORDER BY p.reference_number`)).rows;
+  assert.deepEqual(rows.map((r) => r.verified), [true, false], 'AUD-7 was won by Auditor 7; AUD-8 was won by someone else');
+  assert.match(rows[0].verification_note, /^Checked automatically: exact GeBIZ match\./);
+  const audit = (await db.query("SELECT outcome, summary FROM tender_desk.audit_log WHERE actor='system:gebiz-match' AND summary->>'project_id'=$1", [rows[0].id])).rows;
+  assert.equal(audit.length, 1);
+  // The admin unchecks it; adding another project later does not check it again.
+  await desk.admin(adminToken).verifyProject({ project_id: rows[0].id, verified: false });
+  await b.post('/profile', { capabilities: 'Audits for public bodies.', categories: 'other', team_size: '5', max_contract: '400,000', project_title_0: 'Unchecked gala' });
+  assert.equal((await db.query('SELECT verified FROM tender_desk.projects WHERE id=$1', [rows[0].id])).rows[0].verified, false);
+});

@@ -201,6 +201,25 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     };
   }
 
+  // A newly added project whose GeBIZ tender number names this company as the winner is checked by code at once: an
+  // exact public-record match, the same test the admin's Verify button applies, with no judgement in it. Only new
+  // projects are checked, so a project the admin has unchecked is never checked again behind their back. Anything
+  // else (private work, no number, another name, an award outside the data, a hold-out not yet revealed) waits for the admin.
+  async function autoCheckProjects(tx, client_id, projectIds) {
+    if (!projectIds.length) return;
+    const client = (await tx.query('SELECT name FROM tender_desk.clients WHERE id=$1', [client_id])).rows[0];
+    const projects = (await tx.query('SELECT * FROM tender_desk.projects WHERE id = ANY($1::uuid[]) AND client_id=$2 AND NOT verified', [projectIds, client_id])).rows;
+    const revealed = await revealedTenders(tx);
+    for (const project of projects) {
+      const check = crossCheckProject(dataset, project, client.name, revealed);
+      if (check.result !== 'match') continue;
+      const note = `Checked automatically: exact GeBIZ match. ${check.lines.join(' ')}`.slice(0, 500);
+      await tx.query('UPDATE tender_desk.projects SET verified=true, verification_note=$1, verified_at=now() WHERE id=$2', [note, project.id]);
+      await record(tx, { name: 'system:gebiz-match' }, 'verify_project', { outcome: 'allowed', client_id, project_id: project.id,
+        project_reference: referenceCode('PRJ', project.reference_number), check_result: 'match', reason: 'Checked automatically: exact GeBIZ match.' });
+    }
+  }
+
   async function record(tx, actor, action, result, input = {}) {
     const tender_no = result.tender_no ?? input.tender_no;
     const summary = {};
@@ -356,6 +375,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
           await tx.query('INSERT INTO tender_desk.customers (user_id,client_id) VALUES ($1,$2)', [userId, created.client_id]);
           const { welcome } = await creditSettings(tx);
           if (welcome > 0) await tx.query("INSERT INTO tender_desk.credit_ledger (client_id,delta,reason) VALUES ($1,$2,'welcome')", [created.client_id, welcome]);
+          await autoCheckProjects(tx, created.client_id, created.projects.map((p) => p.id));
         }
         return record(tx, created.client_id ? { name: `customer:${created.client_id}`, client_id: created.client_id } : actor, 'register_customer', created);
       });
@@ -378,10 +398,12 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
         updateProfile: operation('update_profile', clientProfileSchema.omit({ name: true, uen: true }), async (tx, input) => {
           await tx.query('UPDATE tender_desk.clients SET capabilities=$1, categories=$2, team_size=$3, max_contract_cents=$4 WHERE id=$5',
             [input.capabilities, input.categories, input.team_size, input.max_contract_cents, client_id]);
+          const added = [];
           for (const item of input.past_projects) {
-            await tx.query(`INSERT INTO tender_desk.projects (client_id,title,agency,value_cents,verified,gebiz_tender_no) VALUES ($1,$2,$3,$4,false,$5)`,
-              [client_id, item.title, item.agency ?? null, item.value_cents ?? null, item.gebiz_tender_no ?? null]);
+            added.push((await tx.query(`INSERT INTO tender_desk.projects (client_id,title,agency,value_cents,verified,gebiz_tender_no) VALUES ($1,$2,$3,$4,false,$5) RETURNING id`,
+              [client_id, item.title, item.agency ?? null, item.value_cents ?? null, item.gebiz_tender_no ?? null])).rows[0].id);
           }
+          await autoCheckProjects(tx, client_id, added);
           return { outcome: 'allowed', client_id, reason: `Profile updated${input.past_projects.length ? `; ${input.past_projects.length} project(s) added, unverified` : ''}.` };
         }),
         credits: () => database.transaction(async (tx) => {

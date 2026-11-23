@@ -37,7 +37,7 @@ Find them in the tool catalog under their real exposed names, and never invent o
    - **Missing information:** if a better profile or the tender's requirements would make good advice possible, `add_review_note` with `suggested_action: ask_for_more` and, in the note, exactly what the client should add. The admin sends it; the client keeps the tender and resubmits for free.
    - **Not advisable:** `add_review_note` with `suggested_action: decline` and the reason the customer should read.
 5. For waiting requests (no draft yet), the admin drafts in the console. You may leave a note with what the draft should cover.
-6. For unverified projects the admin asks about, call `prepare_project_check` and report the result. The admin verifies.
+6. For unverified projects the admin asks about, call `prepare_project_check` and report the result. The admin verifies. A project whose GeBIZ award already names the client exactly was checked automatically when it was added, so an unverified project has no exact match unless the admin unchecked it: say which.
 
 ## Rules
 

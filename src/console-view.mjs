@@ -121,6 +121,7 @@ export function actorName(row, clientName) {
   if (actor === 'unauthenticated') return 'Unknown caller';
   if (actor.startsWith('operator:')) return 'Your QwenWork';
   if (actor === 'system:reply-deadline') return 'Reply deadline';
+  if (actor === 'system:gebiz-match') return 'Automatic GeBIZ check';
   if (actor.startsWith('agent:')) return row.client_id ? `${clientName(row.client_id)} (AI agent)` : 'AI agent';
   if (actor.startsWith('customer:')) return row.client_id ? clientName(row.client_id) : 'New customer';
   return isAdminActor(actor) ? 'You' : esc(actor);

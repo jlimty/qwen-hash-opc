@@ -22,7 +22,7 @@ Guardrails live in the tools, not the prompts: agents cannot approve their own w
 Hosted at a public URL (Qoder Sites + Neon), admin sign-in by allowlisted Neon Auth account. Data: real GeBIZ awards from data.gov.sg; tenders shown to agents are 2026 awards replayed as a backtest; demo clients are fictional. The console will be screen-recorded.
 
 ## Capabilities and Constraints
-Admin actions: verify or unverify a project (a note is required without a GeBIZ match), approve a brief or decline it with a reason (sent to the client), resolve a conflict (keep advising the holder, or stop advising on that tender; advice is never transferred), revoke a client's connector, reveal backtest outcomes (irreversible), read and filter the audit log. Every record has a readable reference and its own page. Everything money-related is integer cents in SGD. Customers pay in credits: one brief costs 1 credit; 1 credit S$29, 5 for S$119, 20 for S$399; the first brief is free, one per company (UEN). Prices are database settings. Card payments are still in test mode (no card is charged) until terms, refund policy and PDPA notice exist.
+Admin actions: verify or unverify a project (a note is required without a GeBIZ match; exact GeBIZ matches are checked automatically when added, and the admin may uncheck them), approve a brief or decline it with a reason (sent to the client), resolve a conflict (keep advising the holder, or stop advising on that tender; advice is never transferred), revoke a client's connector, reveal backtest outcomes (irreversible), read and filter the audit log. Every record has a readable reference and its own page. Everything money-related is integer cents in SGD. Customers pay in credits: one brief costs 1 credit; 1 credit S$29, 5 for S$119, 20 for S$399; the first brief is free, one per company (UEN). Prices are database settings. Card payments are still in test mode (no card is charged) until terms, refund policy and PDPA notice exist.
 
 ## Brand Commitments
 Working name Tender Desk (registered for the hackathon). No logo or brand assets exist.
@@ -31,7 +31,7 @@ Working name Tender Desk (registered for the hackathon). No logo or brand assets
 Real GeBIZ dataset at data/GovernmentProcurementviaGeBIZ.csv: 12,052 awarded tenders, Apr 2021 to Mar 2026. Backtest: on 512 hold-out contracts awarded in 2026, 47% of actual awards fell inside the predicted middle-half range (a calibrated middle-half range should catch about 50%). No real customers, testimonials or payments exist and none may be fabricated; demo clients are labelled fictional.
 
 ## Product Principles
-1. The admin decides; agents propose. Every consequential action is deliberate, with its reason visible and recorded.
+1. The admin decides; agents propose. Every consequential action is deliberate, with its reason visible and recorded. The one exception is a fact, not a judgement: a newly added project whose GeBIZ award names the client's company exactly is checked by code at once, recorded in the audit log as an automatic GeBIZ check, and the admin can uncheck it.
 2. Show the rule that fired. Blocked and escalated events always name the guardrail and why.
 3. Facts, not judgement: risk facts and verification evidence are computed by code; levels sort, they do not decide.
 4. Never imply more assurance than exists: prose is not verified, the backtest is historical, a level is not a verdict.

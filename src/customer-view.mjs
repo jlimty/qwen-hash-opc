@@ -618,7 +618,7 @@ ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></head
 <fieldset><legend>Categories you bid in</legend><div class="cats">${tenderCategories.map((c) => `<label><input type="checkbox" name="categories" value="${c}"${chosen.has(c) ? ' checked' : ''}>${esc(categoryNames[c])}</label>`).join('')}</div></fieldset>
 <div class="pair"><div class="field"><label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}"><span class="hint">Including subcontractors you use regularly.</span></div>
 <div class="field"><label for="max">Largest contract you could take on (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">${values.largest_mentioned ? `Your text mentions S$${esc(values.largest_mentioned)}. ` : ''}Used to flag tenders that may be too big.</span></div></div>
-<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count too. Add the GeBIZ tender number for government work: we check projects against award records, and only checked projects can be cited in a brief.</span>${listed}${projects}</fieldset>
+<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count too. Add the GeBIZ tender number for government work: when the award names your company, the project is checked as soon as you save. We check the rest by hand, and only checked projects can be cited in a brief.</span>${listed}${projects}</fieldset>
 <div><button class="primary" type="submit">Save profile</button></div></form></section>` });
 }
 
