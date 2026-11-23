@@ -7,7 +7,7 @@
 web
 
 ## Stack
-Two server-rendered web apps with no client JavaScript, served by one Qoder Sites (Deno) function together with the MCP endpoint, on Neon Postgres and Neon Auth: the customer app at /functions/v1/app/assistant and the admin console at /functions/v1/app/. A local Node launcher is kept as a fallback. Marketing site: Hashmeta AI Website Builder, built by the admin, separate from this repository.
+Two server-rendered web apps with no client JavaScript, served by one Qoder Sites (Deno) function together with the MCP endpoint, on Neon Postgres and Neon Auth: the customer app at /functions/v1/app/assistant and the admin console at /functions/v1/app/. A local Node launcher is kept as a fallback. Marketing site: Hashmeta AI Website Builder, separate from this repository.
 
 ## Users
 Two audiences. SME owners in Singapore (cleaning, security, IT, events, renovation, training, catering firms of a few to a few dozen people) use the customer web app: usually the owner or a bid manager, at an office desk or on a phone between site visits, deciding in minutes whether a GeBIZ tender is worth the effort of a bid and what to price it at. They read GeBIZ daily, distrust hype, and count every dollar. First visit: they run a free price check on an open tender with no account; if the numbers help, they sign up (verified email and UEN) for one free reviewed brief, then buy credits. The admin is the single human inside Tender Desk: at a desk, alone, deciding what the agents cannot. His job: verify clients' past projects against public evidence, resolve conflicts between competing SMEs, approve or decline every brief, and read the audit trail. Hackathon judges watch a 3-minute demo video.
