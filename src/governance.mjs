@@ -324,7 +324,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
     const projects = (await tx.query(`SELECT id,reference_number,title,agency,value_cents,verified,gebiz_tender_no FROM tender_desk.projects
       WHERE client_id=$1 ORDER BY reference_number`, [client_id])).rows;
     const requests = (await tx.query(`SELECT r.id,r.reference_number,r.tender_no,r.source,r.title,r.agency,r.status,r.created_at,r.decline_reason,r.info_request,r.info_due_at,r.requirements_text,
-        b.recommendation,b.content,b.parts,b.decline_reason AS brief_decline_reason, o.closes_at, o.gebiz_url, s.snapshot->'comparables' AS comparables,
+        b.recommendation,b.content,b.parts,b.decided_at,b.decline_reason AS brief_decline_reason, o.closes_at, o.gebiz_url, s.snapshot->'comparables' AS comparables,
         s.snapshot->'price_band' AS price_band, (s.snapshot->>'n')::int AS n, (s.snapshot->>'wide_band')::boolean AS wide_band, s.snapshot->'filters'->>'query' AS query_used
       FROM tender_desk.brief_requests r LEFT JOIN tender_desk.briefs b ON b.id=r.brief_id
       LEFT JOIN tender_desk.stats_snapshots s ON s.client_id=r.client_id AND s.tender_no=r.tender_no AND s.stat_id=r.stat_id
@@ -336,7 +336,7 @@ export function createTenderDesk({ database, dataset, adminToken, backtest: prec
       requests: requests.map((r) => ({ id: r.id, reference: referenceCode('REQ', r.reference_number), tender_no: r.tender_no, source: r.source, title: r.title,
         agency: r.agency, status: r.status, created_at: r.created_at, closes_at: r.closes_at, gebiz_url: r.gebiz_url,
         ...(r.status === 'needs_info' && { info_request: r.info_request, info_due_at: r.info_due_at, requirements_text: r.requirements_text }),
-        ...(r.status === 'approved' && { content: r.content, parts: r.parts, comparables: r.comparables ?? [], recommendation: r.recommendation, price_band: r.price_band, n: r.n, wide_band: r.wide_band, query_used: r.query_used }),
+        ...(r.status === 'approved' && { approved_at: r.decided_at, content: r.content, parts: r.parts, comparables: r.comparables ?? [], recommendation: r.recommendation, price_band: r.price_band, n: r.n, wide_band: r.wide_band, query_used: r.query_used }),
         ...(r.status === 'declined' && { decline_reason: r.decline_reason ?? r.brief_decline_reason }) })),
     };
   }

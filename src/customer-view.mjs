@@ -13,7 +13,7 @@ export const assistantCss = chartCss + `
 .top nav{display:flex;align-items:center;gap:.75rem;flex-wrap:wrap}
 .top nav a{color:#2A364A;font-weight:500}
 .top nav form{margin:0}
-.wrap{max-width:64rem;margin:0 auto;padding:1.5rem 1.5rem 4rem;display:grid;gap:1.25rem}
+.wrap{max-width:74rem;margin:0 auto;padding:1.5rem 1.5rem 4rem;display:grid;gap:1.25rem}
 .hero h1{font-size:1.75rem}
 .hero p{color:var(--muted);max-width:60ch;margin-top:.35rem}
 .form{display:grid;gap:.6rem;padding:1rem}
@@ -44,7 +44,7 @@ export const assistantCss = chartCss + `
 .report-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1.25rem}
 .callout{padding:1rem 1.25rem;display:grid;gap:.35rem}
 .callout .range{font-size:1.75rem;font-weight:650;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
-.callout .label{font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.callout .label{font-size:.8125rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
 .chart-wrap{padding:.75rem 1rem 1rem}
 .scorecard{display:flex;gap:.5rem;flex-wrap:wrap;padding:.75rem 1rem 0}
 .reqs li{display:grid;grid-template-columns:7.5rem minmax(0,1fr);gap:.75rem;padding:.65rem 1rem;border-bottom:1px solid var(--line)}
@@ -68,15 +68,29 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .brief p{margin:0 0 .5rem}
 .brief ul{list-style:disc;padding-left:1.25rem;display:grid;gap:.35rem}
 .verdict{display:flex;flex-direction:column;gap:.1rem;padding:1rem 1.25rem;border-bottom:1px solid var(--line);border-radius:10px 10px 0 0}
-.verdict .label{font-size:.75rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.verdict .label{font-size:.8125rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
 .verdict strong{font-size:1.5rem;font-weight:650}
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 .wrap.wide{max-width:74rem;gap:2.75rem}
+.top nav button.link{color:#2A364A;font-size:inherit;font-weight:500;padding:0}
+.top nav button.link:hover{background:none;text-decoration:underline}
+.ck-range,.lp-range,.rp-range,.lp-prices dd{font-variant-numeric:proportional-nums}
+.lp-axis{display:flex;justify-content:space-between;font-size:.8125rem;color:var(--muted);margin-top:.25rem}
+.rp-verdict .rp-reviewed{margin-left:auto;font-size:.875rem;font-weight:500}
+.rp-section .chart .bar{fill:#CFDCF8;stroke:#2457D6;stroke-width:1}
+.sample-cta{grid-template-columns:1fr auto}
+.sample-actions{display:flex;gap:.6rem;flex-wrap:wrap;margin:0}
+details.assist>summary{cursor:pointer;padding:1rem 1.25rem;list-style-position:inside}
+details.assist[open]>summary{border-bottom:1px solid var(--line)}
+.form fieldset{border:0;padding:0;margin:0}
+.form legend{font-size:.9375rem;font-weight:650;padding:0;margin-bottom:.35rem}
+.form:has(fieldset){max-width:52rem}
+@media (max-width:760px){.sample-cta{grid-template-columns:1fr}.rp-verdict .rp-reviewed{margin-left:0}}
 .co-lines{display:grid;gap:.5rem;padding:1rem 1.25rem;margin:0}
 .co-lines div{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:1rem}
 .co-lines dt{color:var(--muted);font-size:.875rem}.co-lines dd{margin:0;font-weight:500}
-.co-gaps{margin:0 1.25rem;padding:.75rem 1rem;border:1px solid #E8C27A;background:var(--warn-bg);border-radius:8px;display:grid;gap:.35rem}
+.co-gaps{margin:0 1.25rem;padding:.75rem 1rem;border:1px solid var(--line-strong);background:var(--side);border-radius:8px;display:grid;gap:.35rem}
 .co-gaps .bullets{padding:0 0 0 1.25rem;gap:.25rem}
 .co-card .form{padding:1rem 1.25rem 1.25rem}
 details.co-reqs summary{cursor:pointer;font-size:.875rem;font-weight:550;color:var(--accent-dark);padding:.25rem 0}
@@ -147,7 +161,7 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .ck-refine summary,.ck-awards summary{cursor:pointer;padding:.85rem 1.5rem;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
 .ck-refine .form{padding:0 1.5rem 1.25rem}
 .ck-awards .table-wrap{border-top:1px solid var(--line)}
-.ck-limits{font-size:.75rem;color:var(--muted)}
+.ck-limits{font-size:.8125rem;color:var(--muted)}
 .ck-offer{padding:1.25rem;display:grid;gap:.75rem;position:sticky;top:1rem}
 .ck-offer h2{font-size:1.0625rem}
 .ck-offer>p{font-size:.875rem;color:var(--muted);line-height:1.6}
@@ -161,7 +175,7 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .lp-check{margin-top:1.5rem}
 .lp-check label{display:block;font-weight:600;font-size:.875rem;margin-bottom:.5rem}
 .lp-input-row{display:flex;gap:.5rem}
-.lp-input-row input{flex:1;min-width:0;font:inherit;height:3rem;padding:0 .8rem;border:1px solid var(--muted);border-radius:6px;color:var(--ink);background:#fff}
+.lp-input-row input{flex:1;min-width:0;font:inherit;height:3rem;padding:0 .8rem;border:1px solid var(--line-strong);border-radius:6px;color:var(--ink);background:#fff}
 .lp-input-row input::placeholder{color:var(--muted);opacity:1}
 .lp-input-row input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .lp-input-row button{min-height:3rem;padding:0 1.25rem;font-size:.9375rem}
@@ -170,7 +184,7 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .lp-paste summary{cursor:pointer;font-size:.875rem;font-weight:500;color:var(--accent-dark)}
 .lp-paste-form{padding:.75rem 0 0}
 .lp-example{overflow:hidden}
-.lp-tag{background:var(--tint);color:var(--accent-dark);font-size:.75rem;font-weight:650;padding:.15rem .5rem;border-radius:4px}
+.lp-tag{background:var(--tint);color:var(--accent-dark);font-size:.8125rem;font-weight:650;padding:.15rem .5rem;border-radius:4px}
 .lp-example-body{padding:1.25rem}
 .lp-example-title{font-weight:600}
 .lp-caption{margin-top:1.1rem;color:var(--muted);font-size:.8125rem}
@@ -179,8 +193,8 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .lp-band .track{fill:var(--hover)}.lp-band .mid{fill:var(--tint);stroke:var(--accent)}
 .lp-band circle{fill:#fff;stroke:var(--ink);stroke-width:1.25}.lp-band .med{stroke:var(--accent-dark);stroke-width:3}
 .lp-facts{display:flex;justify-content:space-between;gap:1rem;margin-top:1rem;padding-top:.9rem;border-top:1px solid var(--line)}
-.lp-facts dt{font-size:.75rem;color:var(--muted)}.lp-facts dd{font-size:1.0625rem;font-weight:650}
-.lp-example-foot{background:var(--side);border-top:1px solid var(--line);padding:.75rem 1.25rem;font-size:.75rem;color:var(--muted)}
+.lp-facts dt{font-size:.8125rem;color:var(--muted)}.lp-facts dd{font-size:1.0625rem;font-weight:650}
+.lp-example-foot{background:var(--side);border-top:1px solid var(--line);padding:.75rem 1.25rem;font-size:.8125rem;color:var(--muted)}
 .lp-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;margin-bottom:.85rem}
 .lp-section-head h2,.lp-how h2{font-size:1.375rem;letter-spacing:-.02em}
 .lp-section-head p{font-size:.8125rem;color:var(--muted)}
@@ -189,22 +203,22 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .lp-row{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:grid;grid-template-columns:5rem minmax(0,1fr) 9rem 1.125rem;gap:1.25rem;align-items:center;padding:1rem 1.25rem}
 .lp-row:hover{background:var(--side)}
 .lp-row:focus-visible{outline:2px solid var(--accent);outline-offset:-3px;border-radius:8px}
-.lp-close{display:grid;align-self:start}.lp-close strong{font-size:1rem;font-weight:650}.lp-close span{font-size:.75rem;color:var(--muted)}
+.lp-close{display:grid;align-self:start}.lp-close strong{font-size:1rem;font-weight:650}.lp-close span{font-size:.8125rem;color:var(--muted)}
 .lp-title{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;font-weight:600;line-height:1.4}
-.lp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;margin-top:.35rem;font-size:.75rem;color:var(--muted)}
+.lp-meta{display:flex;flex-wrap:wrap;align-items:center;gap:.3rem .6rem;margin-top:.35rem;font-size:.8125rem;color:var(--muted)}
 .lp-kind{background:var(--hover);border-radius:4px;padding:.1rem .45rem;font-weight:650}
-.lp-ref{font-size:.75rem}
-.lp-median{text-align:right}.lp-median strong{display:block;font-weight:650}.lp-median span{font-size:.75rem;color:var(--muted)}
+.lp-ref{font-size:.8125rem}
+.lp-median{text-align:right}.lp-median strong{display:block;font-weight:650}.lp-median span{font-size:.8125rem;color:var(--muted)}
 
 .lp-cta{color:var(--accent-dark);font-size:.8125rem;font-weight:550;text-align:right}
 .lp-arrow{width:1.125rem;height:1.125rem;color:var(--accent)}
 .lp-more{border-top:1px solid var(--line)}
 .lp-more summary{cursor:pointer;padding:.85rem 1.25rem;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
 .lp-more .lp-list{border-top:1px solid var(--line)}
-.lp-foot{padding:.75rem 1.25rem;border-top:1px solid var(--line);font-size:.75rem;color:var(--muted)}
+.lp-foot{padding:.75rem 1.25rem;border-top:1px solid var(--line);font-size:.8125rem;color:var(--muted)}
 .lp-steps{list-style:none;padding:0;margin-top:1.25rem;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2rem;counter-reset:step}
 .lp-steps li{position:relative;padding-left:2.25rem;counter-increment:step}
-.lp-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:1.5rem;height:1.5rem;display:grid;place-items:center;background:var(--tint);color:var(--accent-dark);border-radius:6px;font-size:.75rem;font-weight:650}
+.lp-steps li::before{content:counter(step);position:absolute;left:0;top:0;width:1.5rem;height:1.5rem;display:grid;place-items:center;background:var(--tint);color:var(--accent-dark);border-radius:6px;font-size:.8125rem;font-weight:650}
 .lp-steps h3{font-size:1rem;font-weight:650}
 .lp-steps p{margin-top:.35rem;font-size:.875rem;color:var(--muted);line-height:1.6;max-width:36ch}
 .lp-sample{margin-top:1.5rem;font-weight:600}
@@ -215,7 +229,7 @@ button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px
 .lp-prices{display:grid;grid-template-columns:repeat(auto-fit,minmax(7rem,1fr));gap:1.25rem}
 .lp-prices>div{border-left:1px solid var(--line-strong);padding-left:1.25rem}
 .lp-prices dt{font-size:.8125rem;color:var(--muted)}.lp-prices dd{font-size:1.5rem;font-weight:650;letter-spacing:-.02em}
-.lp-prices small{font-size:.75rem;color:var(--muted)}
+.lp-prices small{font-size:.8125rem;color:var(--muted)}
 .lp-proof{display:grid;grid-template-columns:1fr 1fr;gap:3rem;padding-bottom:1rem}
 .lp-proof h2{font-size:.9375rem}
 .lp-proof p{margin-top:.35rem;font-size:.8125rem;line-height:1.65;color:var(--muted);max-width:62ch}
@@ -249,6 +263,11 @@ document.addEventListener('submit', (event) => {
   const target = button.querySelector('.lp-cta, .lp-median') || button;
   target.dataset.label = target.textContent;
   target.textContent = label[1];
+  const status = document.createElement('p');
+  status.className = 'visually-hidden';
+  status.setAttribute('role', 'status');
+  form.append(status);
+  setTimeout(() => { status.textContent = label[1]; }, 50);
 });
 addEventListener('pageshow', (event) => {
   if (!event.persisted) return;
@@ -257,6 +276,7 @@ addEventListener('pageshow', (event) => {
     form.removeAttribute('aria-busy');
     for (const el of form.querySelectorAll('[data-label]')) { el.textContent = el.dataset.label; delete el.dataset.label; }
     for (const b of form.querySelectorAll('.is-busy')) { b.classList.remove('is-busy'); b.removeAttribute('aria-disabled'); }
+    for (const p of form.querySelectorAll('p.visually-hidden[role=status]')) p.remove();
   }
 });
 `;
@@ -271,12 +291,12 @@ const mark = '<span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 2
 const banner = (message, kind = 'bad') => (message ? `<p class="banner ${kind}" role="${kind === 'bad' ? 'alert' : 'status'}">${esc(message)}</p>` : '');
 const hidden = (name, value) => `<input type="hidden" name="${esc(name)}" value="${esc(value ?? '')}">`;
 
-export function layout({ title, csrf, company, body, signedIn, wide = false }) {
+export function layout({ title, csrf, company, body, signedIn, wide = false, on }) {
   const nav = signedIn && !company
     ? `<form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
     : company
     ? `<a href="/home">Home</a><a href="/">Open tenders</a><!--credits--><form method="post" action="/signout">${hidden('csrf', csrf)}<button class="link" type="submit">Sign out</button></form>`
-    : '<a href="/sample">Sample brief</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
+    : `<a href="/sample">Sample brief</a>${on === 'signin' ? '' : '<a href="/signin">Sign in</a>'}${on === 'signup' ? '' : '<a class="btn primary" href="/signup">Create an account</a>'}`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} · Tender Desk</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head><body>
@@ -300,7 +320,8 @@ function tenderList(tenders, csrf, { matches } = {}) {
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
     const parts = tenderParts(tender.title);
-    return `<li><div><strong>${esc(parts.headline)}</strong>${parts.facts.length ? `<span class="tt-facts tt-row">${factsLine(parts.facts)}</span>` : ''}
+    const rowFacts = parts.facts.filter((f) => f.label !== 'Lot');
+    return `<li><div><strong>${esc(parts.headline)}</strong>${rowFacts.length ? `<span class="tt-facts tt-row">${factsLine(rowFacts)}</span>` : ''}
 <span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}${item.closesInDays !== undefined && item.closesInDays <= 3 ? ` <span class="chip warning">Closes in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}</span>` : ''}</span>
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
@@ -316,15 +337,27 @@ const keepUpper = new Set(['IT', 'ICT', 'AV', 'AI', 'IOT', 'CCTV', 'ACMV', 'M&E'
 const keepProper = new Map(['singapore', 'jurong', 'taman', 'tampines', 'woodlands', 'changi', 'sentosa', 'punggol', 'sengkang', 'bedok', 'yishun', 'toa', 'payoh',
   'ang', 'mo', 'kio', 'bukit', 'timah', 'batok', 'panjang', 'merah', 'clementi', 'queenstown', 'pasir', 'ris', 'serangoon', 'hougang', 'geylang', 'kallang', 'marina',
   'tuas', 'seletar', 'novena', 'orchard', 'bishan', 'choa', 'chu', 'kang', 'lim', 'chu'].map((w) => [w, w[0].toUpperCase() + w.slice(1)]));
+const agencyNames = ['National Library Board', "People's Association", 'Housing and Development Board', 'Land Transport Authority', 'Jurong Town Corporation',
+  'Health Promotion Board', 'Ministry of Health', 'Ministry of Education', 'National Environment Agency', 'National Parks Board', 'Public Utilities Board',
+  'Republic Polytechnic', 'Singapore Polytechnic', 'Temasek Polytechnic', 'Nanyang Polytechnic', 'Ngee Ann Polytechnic', 'Sport Singapore',
+  'Singapore Police Force', 'Singapore Civil Defence Force', 'Inland Revenue Authority of Singapore', 'Urban Redevelopment Authority', 'Jurong Lake District'];
+const agencyPattern = new RegExp(`\\b(${agencyNames.map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi');
+const canonical = new Map(agencyNames.map((n) => [n.toLowerCase(), n]));
 export function displayTitle(raw) {
   const original = String(raw ?? '').replace(/\s+/g, ' ').trim();
   let title = original.replace(/^[A-Z]{2,}[0-9/]*\s*[-–:]\s*/, '')
     .replace(/^(invitation to (quote|tender)|itq|itt|quotation|tender)\b\s*(for\s+)?(the\s+)?(provision\s+of\s+)?/i, '')
     .replace(/^(for\s+)?(the\s+)?provision\s+of\s+/i, '').replace(/^for\s+the\s+/i, '');
   if (title.length < 8) title = original;
-  if (!/[a-z]/.test(title)) {
-    title = title.toLowerCase().replace(/[a-z0-9&]+/g, (word) => (keepUpper.has(word.toUpperCase()) ? word.toUpperCase() : keepProper.get(word) ?? word));
+  const relower = (text) => text.replace(/[A-Za-z0-9&]+/g, (word) => (keepUpper.has(word.toUpperCase()) ? word.toUpperCase() : keepProper.get(word.toLowerCase()) ?? word.toLowerCase()));
+  if (!/[a-z]/.test(title)) title = relower(title);
+  else {
+    // Title Case ("Audit Certification Services") reads as shouting in a list of sentence-case titles.
+    if ((title.match(/\b[A-Z][a-z]{3,}\b/g) ?? []).length >= 3) {
+      title = title.replace(/\b[A-Z][a-z]+\b/g, (w) => keepProper.get(w.toLowerCase()) ?? w.toLowerCase());
+    }
   }
+  title = title.replace(agencyPattern, (m) => canonical.get(m.toLowerCase()) ?? m);
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 // GeBIZ titles pack the service, the site, the place and the contract period into one sentence. Split the common
@@ -356,7 +389,7 @@ export function tenderParts(raw) {
   const purpose = /^(.{3,}?\b(?:services?|works?|systems?|solutions?|consultancy|supply|maintenance|management|delivery|production))\s+(for|to)\s+(?:the\s+|an?\s+)?(.+)$/i.exec(rest)
     ?? /^(.{12,}?)\s+(for)\s+(?:the\s+|an?\s+)?(.+)$/i.exec(rest);
   let headline = rest;
-  if (purpose) {
+  if (purpose && tidy(purpose[3]).length >= 4) {
     headline = purpose[1];
     facts.unshift({ label: capital(purpose[2].toLowerCase()), value: capital(tidy(purpose[3])) });
   }
@@ -365,6 +398,7 @@ export function tenderParts(raw) {
   headline = capital(tidy(headline));
   return headline.split(' ').length >= 2 ? { headline, facts } : { headline: whole, facts: [] };
 }
+const metaLine = (items) => items.filter(Boolean).map((item, i) => (i ? `<span class="nowrap">· ${item}</span>` : item)).join(' ');
 const factsLine = (facts) => facts.map((f) => `<span class="tt-fact"><span class="tt-label">${esc(f.label)}</span> ${esc(f.value)}</span>`).join('');
 export const titleBlock = (raw, tag = 'h1') => {
   const { headline, facts } = tenderParts(raw);
@@ -380,10 +414,12 @@ function closingRow(row, csrf) {
   const closes = row.closes_at ? new Date(row.closes_at) : undefined;
   const kind = tenderKind(row.tender_no);
   const parts = tenderParts(row.title);
+  const rowFacts = parts.facts.filter((f) => f.label !== 'Lot');
   const right = row.median_cents ? `<span class="lp-median num"><strong>${wholeSgd(row.median_cents)}</strong><span>median award</span></span>` : '<span class="lp-cta">Check price</span>';
-  return `<li><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', row.tender_no)}<button class="lp-row" type="submit">
-<span class="lp-close num">${closes ? `<strong>${esc(shortDay.format(closes))}</strong><span>${esc(yearOf.format(closes))} · closes</span>` : '<strong>Open</strong><span>no closing date</span>'}</span>
-<span class="lp-body"><span class="lp-title">${esc(parts.headline)}</span>${parts.facts.length ? `<span class="tt-facts tt-row">${factsLine(parts.facts)}</span>` : ''}<span class="lp-meta"><span>${esc(row.agency)}</span>${kind ? `<span class="lp-kind">${kind}</span>` : ''}<span class="lp-ref num">${esc(row.tender_no)}</span></span></span>
+  const name = `${parts.headline}, ${row.agency ?? ''}${closes ? `, closes ${shortDay.format(closes)} ${yearOf.format(closes)}` : ''}: check price`;
+  return `<li><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', row.tender_no)}<button class="lp-row" type="submit" aria-label="${esc(name)}">
+<span class="lp-close num">${closes ? `<span>Closes</span><strong>${esc(shortDay.format(closes))}</strong>` : '<span>Closes</span><strong>Open</strong>'}</span>
+<span class="lp-body"><span class="lp-title">${esc(parts.headline)}</span>${rowFacts.length ? `<span class="tt-facts tt-row">${factsLine(rowFacts)}</span>` : ''}<span class="lp-meta"><span>${esc(row.agency)}</span>${kind ? `<span class="lp-kind">${kind}</span>` : ''}<span class="lp-ref num">${esc(row.tender_no)}</span></span></span>
 ${right}${arrow}</button></form></li>`;
 }
 
@@ -401,15 +437,17 @@ function exampleCard(example) {
 <svg class="lp-band" viewBox="0 0 400 36" role="img" aria-label="Each dot is one past award; the shaded band is the middle half, the line is the median.">
 <rect class="track" x="0" y="20" width="400" height="12" rx="4"/><rect class="mid" x="${x(band.low_cents)}" y="20" width="${(x(band.high_cents) - x(band.low_cents)).toFixed(1)}" height="12" rx="3"/>${dots}
 <line class="med" x1="${x(band.median_cents)}" x2="${x(band.median_cents)}" y1="16" y2="36"/></svg>
+<p class="lp-axis num"><span>Lowest ${wholeSgd(Math.min(...values))}</span><span>Highest ${wholeSgd(Math.max(...values))}</span></p>
 <dl class="lp-facts num"><div><dt>Median award</dt><dd>${wholeSgd(band.median_cents)}</dd></div><div><dt>Comparable awards</dt><dd>${esc(plural(snap.n, 'award'))}</dd></div></dl></div>
 <p class="lp-example-foot">Real GeBIZ awards matched on “${esc(example.check.query_used)}”. Your check runs on the tender you pick.</p></section>`;
 }
 
+const oneClient = 'We advise one company per tender: ask first, and no competitor gets a brief on it.';
 const pasteFields = (csrf) => `<form class="form lp-paste-form" method="post" action="/check">${hidden('csrf', csrf)}
 <label for="title">Tender title</label><input id="title" name="title" required maxlength="300">
 <label for="agency">Agency <span class="hint">(optional)</span></label><input id="agency" name="agency" maxlength="250">
 <label for="text">Description <span class="hint">(optional; the first 4000 characters are read)</span></label><textarea id="text" name="text" rows="4"></textarea>
-<div><button class="primary" type="submit">Check prices</button></div></form>`;
+<div><button class="primary" type="submit">Check price</button></div></form>`;
 
 const pasteForm = (csrf) => `<section class="panel"><header><h2>Paste a tender</h2></header>${pasteFields(csrf)}</section>`;
 
@@ -438,7 +476,7 @@ ${exampleCard(example)}</section>
 <ol class="lp-steps"><li><h3>Check past award prices</h3><p>Pick a tender or paste its title. See what comparable contracts were awarded for, free.</p></li>
 <li><h3>Get a reviewed brief</h3><p>Our AI drafts it and a person approves it, citing only your checked projects. Usually within one business day.</p></li>
 <li><h3>Decide whether to bid</h3><p>A bid or no-bid recommendation and where to price, against the awards you saw.</p></li></ol>
-<p class="lp-sample"><a href="/sample">Read a sample reviewed brief</a></p></section>
+<p class="lp-sample"><a href="/sample">See a sample brief</a></p></section>
 ${packs ? `<section class="lp-pricing" aria-labelledby="pricing-heading"><div><h2 id="pricing-heading">${free ? 'Your first reviewed brief is free.' : 'Reviewed briefs'}</h2><p>${free ? 'One per company (UEN). After that, one brief costs one credit.' : 'One brief costs one credit.'}</p>
 <p><a class="btn primary" href="/signup">Create an account</a></p></div><dl class="lp-prices num">${packs}</dl></section>` : ''}
 ${proof ? `<section class="lp-proof" aria-label="Data and backtest"><div><h2>Built on ${esc(proof.awards.toLocaleString('en-SG'))} GeBIZ awards</h2><p>Public award records from ${esc(proof.from)} to ${esc(proof.to)}, used to find comparable contracts. Not a quote: GeBIZ publishes winning amounts only.</p></div>
@@ -470,7 +508,7 @@ export function renderCheck({ tender, reading, check, csrf, company, notice, ref
     ? `<div class="empty"><strong>Too few comparable awards for a price range.</strong>We need at least five past awards that match. Try broader or different search terms below.</div>`
     : `<div class="ck-answer"><p class="ck-lead">Similar government contracts went for</p>
 ${thin ? `<p class="ck-range ck-thin num">${esc(thinLine(snap.n, allCents))}</p>
-<p class="banner">A rough guide only: ${snap.wide_band ? 'past awards for this kind of work vary a lot' : `only ${plural(snap.n, 'comparable award')}`}. A reviewed brief would advise on bidding and where to aim, but give no dollar range.</p>`
+<p class="ck-sub">A rough guide only: ${snap.wide_band ? 'past awards for this kind of work vary a lot' : 'too few awards for a middle-half range'}. A reviewed brief would advise on bidding and where to aim, but give no dollar range.</p>`
     : `<p class="ck-range num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</p>
 <p class="ck-sub">The middle half of ${esc(plural(snap.n, 'comparable award'))}. Median award <strong class="num">${wholeSgd(band.median_cents)}</strong>: half were above, half below.</p>`}
 ${allCents.length ? `<div class="ck-chart">${priceChart({ awards: allCents.map((cents) => ({ cents })), band, thin })}</div>` : ''}
@@ -497,15 +535,16 @@ ${snap.top_agencies?.length ? `<p class="ck-who">Bought by ${esc(snap.top_agenci
         : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · 1 credit</button></form>`)
       : `<a class="btn primary" href="/signup?next=${esc(encodeURIComponent(tender.tender_no && !tender.pasted ? `/checkout?${checkoutQuery}`
         : `/checkout?${new URLSearchParams({ title: tender.title ?? '', agency: tender.agency ?? '', terms: termsValue, category }).toString()}`))}">Get your first brief free</a><p class="small muted">Create an account with your work email and company UEN. We bring you back to this tender.</p>`;
-  const meta = [tender.agency ? esc(tender.agency) : '', tender.tender_no && !tender.pasted ? `<span class="num">${esc(tender.tender_no)}</span>` : '',
-    tender.closes_at ? `<span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''].filter(Boolean).join(' · ');
+  const meta = metaLine([tender.agency ? esc(tender.agency) : '', tender.tender_no && !tender.pasted ? `<span class="num">${esc(tender.tender_no)}</span>` : '',
+    tender.closes_at ? `closes ${esc(day(tender.closes_at))}` : '']);
   return layout({ title: 'Price check', csrf, company, wide: true, body: `<div class="ck-head">${titleBlock(tender.title)}${meta ? `<p class="sub">${meta}</p>` : ''}</div>
 ${banner(notice, 'ok')}
 <div class="ck-grid"><div class="ck-main"><section class="panel ck-result" aria-label="Free price check">${answer}${refine}</section>${awards}
 <p class="ck-limits">${esc(priceLimits)}</p></div>
 <aside class="panel ck-offer" aria-labelledby="offer-heading"><h2 id="offer-heading">Should you bid, and at what price?</h2>
-<p>A reviewed brief compares this tender with your checked projects and these awards, then says bid or no-bid and where to price. Our AI drafts it and a person approves it, usually within one business day.</p>
-<div class="ck-next">${next}</div><p class="small"><a href="/sample">See a sample brief</a></p></aside></div>` });
+<p>${thin ? 'A reviewed brief compares this tender with your checked projects and says bid or no-bid, and whether to aim low or high against these awards.'
+    : 'A reviewed brief compares this tender with your checked projects and these awards, then says bid or no-bid and where to price.'} Our AI drafts it and a person approves it, usually within one business day.</p>
+<div class="ck-next">${next}</div><p class="small">${oneClient}</p><p class="small"><a href="/sample">See a sample brief</a></p></aside></div>` });
 }
 
 export function renderSignup({ csrf, message, pending, prices }) {
@@ -515,7 +554,7 @@ ${pending ? `<div class="su-tender">${titleBlock(pending.title, 'p')}</div>` : '
 <ol class="su-steps"><li>Confirm your email</li><li>Tell us about your company, with its UEN</li><li>${pending ? 'Back to this tender to ask for your brief' : 'Pick a tender and ask for a reviewed brief'}</li></ol>
 ${prices ? `<p class="su-price">${free ? `Your first reviewed brief is free, one per company. After that, ${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.` : `${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.`}</p>` : ''}
 <p class="small"><a href="/sample">See a sample brief</a></p></aside>`;
-  return layout({ title: 'Create an account', csrf, body: `<div class="su-grid"><section class="panel"><header><h2>Create an account</h2></header>
+  return layout({ title: 'Create an account', csrf, on: 'signup', body: `<div class="ck-head"><h1>Create an account</h1></div><div class="su-grid"><section class="panel">
 <form class="form" method="post" action="/signup">${hidden('csrf', csrf)}${banner(message)}
 <label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="100" required>
 <label for="email">Work email</label><input id="email" name="email" type="email" autocomplete="username" required>
@@ -534,7 +573,7 @@ ${pending ? `<p>After that we bring you back to <strong>${esc(tenderParts(pendin
 }
 
 export function renderSignin({ csrf, message }) {
-  return layout({ title: 'Sign in', csrf, body: `<section class="panel narrow"><header><h2>Sign in</h2></header>
+  return layout({ title: 'Sign in', csrf, on: 'signin', body: `<div class="ck-head"><h1>Sign in</h1></div><section class="panel narrow">
 <form class="form" method="post" action="/signin">${hidden('csrf', csrf)}${banner(message)}
 <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="current-password" required>
@@ -566,12 +605,12 @@ ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></head
 <label for="atext">Paste your capability statement, company profile or website "About" page <span class="hint">(optional)</span></label>
 <textarea id="atext" name="text" rows="5" maxlength="6000">${esc(pasted)}</textarea>
 <div><button type="submit">Fill in the form again</button></div></form></details></section>`
-    : `<section class="panel"><header><h2>Fill this in for me</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
+    : `<details class="panel assist"><summary><strong>Fill this in for me</strong><span class="muted small"> · paste your company profile and we fill the form below</span></summary><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
 <label for="aname">Company name, as registered</label><input id="aname" name="name" maxlength="150" required value="${v('name')}">
 <label for="atext">Paste your capability statement, company profile or website "About" page <span class="hint">(optional)</span></label>
 <textarea id="atext" name="text" rows="5" maxlength="6000">${esc(pasted)}</textarea>
 <span class="hint">Our AI reads it into the form below, and we look up GeBIZ awards under your company name. Nothing is saved until you check it and press Save.</span>
-<div><button type="submit">Fill in the form</button></div></form></section>`}
+<div><button type="submit">Fill in the form</button></div></form></details>`}
 <section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}${notice ? banner(notice, noticeKind) : ''}
 <div class="pair"><div class="field"><label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}></div>
 <div class="field"><label for="uen">UEN</label><input id="uen" name="uen" maxlength="10" autocapitalize="characters" ${existing ? 'readonly' : 'required'} value="${v('uen')}"><span class="hint">${existing ? 'To correct it, contact Tender Desk.' : 'As registered with ACRA. One account per company.'}</span></div></div>
@@ -591,9 +630,9 @@ const statusChip = { requested: 'progress', drafted: 'progress', needs_info: 'wa
 export function renderHome({ context, matches, refreshedAt, csrf, flash }) {
   const { client, projects, requests } = context;
   const projectRows = projects.length ? `<ul class="feed">${projects.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>
-${p.verified ? '<span class="chip done">Checked</span>' : '<span class="chip warning">Unverified</span>'}</div>
+${p.verified ? '<span class="chip done">✓ Checked</span>' : '<span class="chip warning">Not checked yet</span>'}</div>
 <span class="meta">${esc([p.agency, p.value_cents !== null ? wholeSgd(p.value_cents) : null, p.gebiz_tender_no].filter(Boolean).join(' · '))}</span></li>`).join('')}</ul>
-${projects.some((p) => !p.verified) ? '<p class="note">Unverified: we check these against GeBIZ before a brief can cite them.</p>' : ''}`
+${projects.some((p) => !p.verified) ? '<p class="note">Not checked yet: we check these against GeBIZ before a brief can cite them.</p>' : ''}`
     : '<p class="empty">No past projects yet.</p>';
   const requestRows = requests.length ? `<ul class="feed">${requests.map((r) => `<li><div class="line"><a href="/requests/${esc(r.reference)}"><strong>${esc(r.title)}</strong></a>
 <span class="chip ${statusChip[r.status]}">${esc(chipText[r.status])}</span></div><span class="meta">${esc(r.reference)} · ${esc(r.agency ?? '')}</span></li>`).join('')}</ul>`
@@ -615,29 +654,31 @@ export function renderCheckout({ tender, company, csrf, refusal, terms, category
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   const perBrief = credits?.perBrief ?? 1;
   const short = credits && credits.balance < perBrief;
-  const meta = [tender.agency ? esc(tender.agency) : '', tender.pasted ? '' : `<span class="num">${esc(tender.tender_no)}</span>`].filter(Boolean).join(' · ');
+  // The welcome credit, unspent and never topped up, is the free first brief the earlier pages promised.
+  const history = credits?.history ?? [];
+  const free = !short && history.some((h) => h.reason === 'welcome') && !history.some((h) => h.reason === 'purchase' || h.reason === 'brief');
+  const meta = metaLine([tender.agency ? esc(tender.agency) : '', tender.pasted ? '' : `<span class="num">${esc(tender.tender_no)}</span>`]);
   // One card: what it costs, when it arrives, anything to fix first, and the one button. Requirements are optional and fold away.
   const card = refusal ? banner(refusal) : `${banner(notice)}
 <section class="panel co-card" aria-labelledby="co-heading"><header><h2 id="co-heading">Your reviewed brief</h2><span class="muted small">for ${esc(company)}</span></header>
-<dl class="co-lines">${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
+<dl class="co-lines">${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>Cost</dt><dd>${free ? 'Free: your first brief' : `Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}`}</dd></div>
 <div><dt>Ready</dt><dd>Usually within one business day, after a person reviews it</dd></div>
 <div><dt>If we decline</dt><dd>The credit comes back</dd></div></dl>
-${gaps.length ? `<div class="co-gaps" role="note"><p><strong>Before you spend a credit</strong></p><ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
+${gaps.length ? `<div class="co-gaps" role="note"><p><strong>${free ? 'Before you use your free brief' : 'Before you spend a credit'}</strong></p><ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
 <p class="small"><a href="/profile">Improve your profile</a> or go ahead below.</p></div>` : ''}
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
     : `<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
 <details class="co-reqs"${requirements ? ' open' : ''}><summary>Add the tender's key requirements (optional)</summary>
 <label for="requirements">Key requirements from the tender <span class="hint">(up to 4000 characters: we check each one against your projects)</span></label>
 <textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(requirements ?? '')}</textarea></details>
-${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the credit is not returned for that.</p>
+${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and ${free ? 'your free brief is used either way' : 'the credit is not returned for that'}.</p>
 <label class="tick"><input type="checkbox" name="confirm_outside" value="yes" required> I understand and still want a brief on this tender</label>` : ''}
-<div><button class="primary co-pay" type="submit">Use ${creditWord(perBrief)}</button></div></form>`}</section>`;
+<div><button class="primary co-pay" type="submit">${free ? 'Get my free brief' : `Use ${creditWord(perBrief)}`}</button></div></form>`}</section>`;
   return layout({ title: 'Checkout', csrf, company, wide: true, body: `<div class="ck-head">${titleBlock(tender.title)}${meta ? `<p class="sub">${meta}</p>` : ''}</div>
 <div class="ck-grid"><div class="ck-main">${card}</div>
 <aside class="panel ck-offer" aria-labelledby="co-what"><h2 id="co-what">What the brief contains</h2>
 <ul class="bullets co-contains"><li>Bid or no-bid, and why</li><li>A suggested price range, when there are enough comparable awards</li><li>Who usually wins this work</li><li>Your requirements checked against your projects</li><li>Questions to ask the agency</li></ul>
-<p class="small"><a href="/sample">See a sample brief</a></p></aside></div>
-<p><a href="/home">Back to home</a></p>` });
+<p class="small">${oneClient}</p><p class="small"><a href="/sample">See a sample brief</a></p><p class="small"><a href="/home">Back to home</a></p></aside></div>` });
 }
 
 const reasonText = { welcome: 'Welcome credit', purchase: 'Bought credits', brief: 'Reviewed brief', refund: 'Credit returned', adjustment: 'Adjustment' };
@@ -692,13 +733,17 @@ ${risks.length ? `<h3 class="rp-sub">Risks</h3>${bullets(risks)}` : ''}`, reqs.l
     : bid && parts.thin ? `<div class="rp-thin"><p class="rp-price-label">Where to price</p><p>${esc(thinText)}</p><p><strong>Roughly: ${esc(String(parts.position_text ?? '').toLowerCase())}.</strong> ${esc(parts.price_position?.why ?? '')}</p></div>`
       : !bid && parts.reasons?.[0] ? `<p class="rp-why">${esc(parts.reasons[0])}</p>` : '';
   const facts = !band ? '' : thin ? `<p class="rp-facts num">${esc(thinLine(parts.n, awards.map((a) => a.cents)))}. Too few or too varied for quartiles: treat these as a rough guide.</p>`
-    : `<p class="rp-facts">Middle half of ${esc(plural(parts.n, 'comparable award'))}${parts.query_used ? ` for “${esc(parts.query_used)}”` : ''}: <span class="num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</span>. Median <span class="num">${wholeSgd(band.median_cents)}</span>: half were above, half below.</p>`;
+    : `<p class="rp-facts">Past awards, for comparison: the middle half of ${esc(plural(parts.n, 'comparable award'))}${parts.query_used ? ` for “${esc(parts.query_used)}”` : ''} went for <span class="num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</span>. Median <span class="num">${wholeSgd(band.median_cents)}</span>: half were above, half below.</p>`;
   const winnersNote = (parts.winners ?? []).slice(0, 5).reduce((sum, w) => sum + Number(w.wins), 0) > Number(parts.n) ? `<p class="limits">Some awards went to more than one firm, so these counts add up to more than ${esc(String(parts.n))}.</p>` : '';
-  const winners = winnersChart(parts.winners, parts.n);
+  // A tie at the top says no firm dominates; three equal bars would say the same thing less clearly.
+  const top = (parts.winners ?? []).slice(0, 5);
+  const tied = top.length > 1 && top.every((w) => Number(w.wins) === Number(top[0].wins));
+  const winners = tied ? `<p>No single firm dominates: the top ${top.length} each won ${esc(String(top[0].wins))} of ${esc(String(parts.n))}.</p>` : winnersChart(parts.winners, parts.n);
   const perYear = yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) })));
   return `<div class="report">
 <section class="panel rp-hero" aria-label="Recommendation">
-<div class="rp-verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="rp-label">Our recommendation</span><strong class="rp-word">${bid ? 'Bid' : 'Do not bid'}</strong></div>
+<div class="rp-verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="rp-label">Our recommendation</span><strong class="rp-word">${bid ? 'Bid' : 'Do not bid'}</strong>
+${request.reference === 'SAMPLE' ? '<span class="rp-reviewed">Reviewed and approved by a person before it is sent</span>' : request.approved_at ? `<span class="rp-reviewed">Reviewed and approved by a person on ${esc(day(request.approved_at))}</span>` : ''}</div>
 <div class="rp-hero-body">${where}
 ${!bid ? '<h2 class="rp-chart-head">Past awards, for context only</h2>' : parts.thin ? '<h2 class="rp-chart-head">Past awards, a rough guide</h2>' : ''}
 <div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined, thin })}</div>
@@ -743,24 +788,27 @@ ${request.status === 'requested' ? `<form method="post" action="/requests/${esc(
     `<li class="${at < stage ? 'done' : at === stage ? `current${request.status === 'needs_info' ? ' waiting' : ''}` : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
   const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
   return layout({ title: request.reference, csrf, company, body: `<div class="ck-head">${titleBlock(request.title)}
-<p class="sub">${request.reference === 'SAMPLE' ? '' : `<span class="num">${esc(request.reference)}</span> · `}${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · <span class="nowrap">closes ${esc(day(request.closes_at))}</span>` : ''}</p></div>
-${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
+<p class="sub">${metaLine([request.reference === 'SAMPLE' ? '' : `<span class="num">${esc(request.reference)}</span>`, esc(request.agency ?? ''),
+  request.source === 'feed' ? `<span class="num">${esc(request.tender_no)}</span>` : '', request.closes_at ? `closes ${esc(day(request.closes_at))}` : ''])}</p></div>
+${paidBanner}${steps}${body}${request.reference === 'SAMPLE' && !company ? `<section class="lp-pricing sample-cta" aria-labelledby="sample-next"><div><h2 id="sample-next">Get a brief like this on your tender</h2>
+<p>Check any GeBIZ tender's prices free. Your first reviewed brief is free too.</p></div><p class="sample-actions"><a class="btn primary" href="/">Check a tender free</a><a class="btn" href="/signup">Create an account</a></p></section>`
+    : '<p><a href="/home">Back to home</a></p>'}` });
 }
 
 // A fictional sample brief, so a customer sees what a credit buys before spending one. Every figure is invented and labelled so.
 const sampleAwards = [86000, 92500, 104000, 118000, 121500, 133000, 140000, 152000, 168000, 189000, 210000, 265000].map((dollars, i) => ({
   tender_no: `SAMPLE${String(i + 1).padStart(3, '0')}`, cents: dollars * 100, description: ['Community festival production', 'National Day celebrations at a community club',
     'School carnival and games', 'Heritage week events', 'Mid-Autumn lantern festival'][i % 5], agency: ['A town council', 'A community development council', 'A school', 'A heritage agency'][i % 4],
-  date: `${2021 + (i % 5)}-0${(i % 9) + 1}-15`, winner: ['Example Events Pte Ltd', 'Sample Productions', 'Demo Stage Co'][i % 3] }));
+  date: `${2021 + (i % 5)}-0${(i % 9) + 1}-15`, winner: i % 12 < 5 ? 'Example Events Pte Ltd' : i % 12 < 9 ? 'Sample Productions' : 'Demo Stage Co' }));
 export function renderSample({ csrf, company }) {
   const request = { status: 'approved', reference: 'SAMPLE', title: 'Event management for a community festival (sample)', agency: 'A town council', source: 'pasted',
     recommendation: 'bid', price_band: { low_cents: 11050000, median_cents: 13650000, high_cents: 17325000 }, n: sampleAwards.length, wide_band: false, query_used: 'event management',
     parts: { recommendation: 'bid', n: sampleAwards.length, query_used: 'event management',
       reasons: ['You have run community festivals for town councils before, which is exactly what this buyer is asking for.',
         'The scope sits comfortably inside the size of contract your team delivers.', 'This buyer issues this kind of work every year, so a good result builds a track record for later tenders.'],
-      price_position: { band: 'lower_quartile_to_median', why: 'Your experience is strong but the scope is standard, so stay near the middle of past awards rather than at the top.' },
+      price_position: { band: 'lower_quartile_to_median', why: 'Your experience is strong but the scope is standard, so price between the lower quartile and the median: competitive, without going to the bottom.' },
       suggested_range: { from_cents: 11050000, to_cents: 13650000, text: 'S$110,500 to S$136,500' },
-      winners: [{ name: 'Example Events Pte Ltd', wins: 4 }, { name: 'Sample Productions', wins: 4 }, { name: 'Demo Stage Co', wins: 4 }],
+      winners: [{ name: 'Example Events Pte Ltd', wins: 5 }, { name: 'Sample Productions', wins: 4 }, { name: 'Demo Stage Co', wins: 3 }],
       requirements: [{ requirement: 'Has delivered a public event for a government agency', status: 'met', evidence: 'Community festival for a town council' },
         { requirement: 'Holds public liability insurance', status: 'partly_met', evidence: 'Policy on file, but its cover may be below what the agency asks for' },
         { requirement: 'Has a certified crowd-control officer', status: 'gap', evidence: 'Not shown in your profile' }],

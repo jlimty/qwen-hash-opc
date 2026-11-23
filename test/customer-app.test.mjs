@@ -148,7 +148,7 @@ test('sign up, profile, and home shows projects with their verification state', 
   const home = await b.get('/home');
   assert.equal(home.status, 200);
   assert.match(home.text, /Audit for a polytechnic/);
-  assert.match(home.text, /Unverified: we check these against GeBIZ before a brief can cite them/);
+  assert.match(home.text, /Not checked yet: we check these against GeBIZ before a brief can cite them/);
   assert.match(home.text, /RPO000ETQ26000129/);
   assert.doesNotMatch(home.text, /admin/i);
   assert.equal((await b.get('/')).location, `${base}/home`);
@@ -158,8 +158,8 @@ test('checkout spends one credit, and paying twice creates one request', async (
   const b = await signedUpCustomer('Birch');
   const checkout = await b.get('/checkout?tender=RPO000ETQ26000129');
   assert.equal(checkout.status, 200);
-  assert.match(checkout.text, /Uses 1 credit · you have 1/);
-  assert.match(checkout.text, /Use 1 credit/);
+  assert.match(checkout.text, /Free: your first brief/, 'the unspent welcome credit is shown as the free first brief');
+  assert.match(checkout.text, /Use 1 credit|Get my free brief/);
   const paid = await b.post('/checkout', { tender_no: 'RPO000ETQ26000129', terms: 'audit' });
   assert.equal(paid.status, 303);
   assert.match(paid.location, new RegExp(`^${base}/requests/REQ\\d{5}$`));
@@ -175,7 +175,7 @@ test('a second customer sees the refusal and no pay button', async () => {
   const b = await signedUpCustomer('Cedar');
   const checkout = await b.get('/checkout?tender=RPO000ETQ26000129');
   assert.match(checkout.text, /This tender isn(&#39;|')t available for a reviewed brief right now\./);
-  assert.doesNotMatch(checkout.text, /Use 1 credit/);
+  assert.doesNotMatch(checkout.text, /Use 1 credit|Get my free brief/);
   assert.doesNotMatch(checkout.text, /Birch/);
 });
 
@@ -183,7 +183,7 @@ test('a pasted tender goes through checkout too', async () => {
   const b = await signedUpCustomer('Dahlia');
   const start = await b.post('/checkout/start', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management' });
   assert.equal(start.status, 200);
-  assert.match(start.text, /Use 1 credit/);
+  assert.match(start.text, /Use 1 credit|Get my free brief/);
   const paid = await b.post('/checkout', { title: 'Event management for a heritage week', agency: 'Agency Q', text: 'Run the events.', terms: 'event management', confirm_outside: 'yes' });
   assert.equal(paid.status, 303);
 });
@@ -217,7 +217,7 @@ test('a too-few check does not offer a brief, and checkout with such terms hides
   assert.doesNotMatch(thin.text, /Ask for a reviewed brief/);
   assert.match(thin.text, /A reviewed brief needs at least five comparable awards/);
   const checkout = await b.get('/checkout?tender=MOESCHETQ26006510&terms=qqqzzz');
-  assert.doesNotMatch(checkout.text, /Use 1 credit/);
+  assert.doesNotMatch(checkout.text, /Use 1 credit|Get my free brief/);
   assert.match(checkout.text, /A reviewed brief needs at least five comparable awards/);
 });
 
@@ -234,7 +234,7 @@ test('edited terms carry into checkout, and the brief is priced on the band the 
   const spread = /(\d+ comparable awards, from about [^<]+)</.exec(seen.text)?.[1];
   assert.ok(spread, 'the check page shows the rounded spread');
   const start = await b.post('/checkout/start', { ...pasted, terms: 'event management', category: 'other' });
-  assert.match(start.text, /Use 1 credit/);
+  assert.match(start.text, /Use 1 credit|Get my free brief/);
   const paid = await b.post('/checkout', { ...pasted, terms: 'event management', category: 'other' });
   assert.equal(paid.status, 303);
   const row = (await db.query("SELECT s.snapshot FROM tender_desk.brief_requests r JOIN tender_desk.stats_snapshots s ON s.stat_id=r.stat_id AND s.client_id=r.client_id WHERE r.title=$1", [pasted.title])).rows[0];
@@ -258,7 +258,7 @@ test('checkout tells a customer with no checked projects what a brief can cite',
   await b.post('/profile', { name: `Nocheck ${randomBytes(3).toString('hex')}`, uen: testUen(), capabilities: 'Audit.', categories: 'other', team_size: '2', max_contract: '100000', project_title_0: 'Unchecked audit' });
   const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
   assert.match(start.text, /None of your projects has been checked yet/);
-  assert.match(start.text, /Use 1 credit/);
+  assert.match(start.text, /Use 1 credit|Get my free brief/);
 });
 
 test('after a brief is approved, checkout for the same tender opens that brief instead of charging again', async () => {
@@ -414,7 +414,7 @@ test('with no credits left, checkout offers to buy credits instead of spending',
   await b.post('/checkout/start', pasted);
   await b.post('/checkout', pasted);
   const second = await b.post('/checkout/start', { ...pasted, title: 'Audit certification for a town council' });
-  assert.doesNotMatch(second.text, /Use 1 credit/);
+  assert.doesNotMatch(second.text, /Use 1 credit|Get my free brief/);
   assert.match(second.text, /href="[^"]*\/credits"[^>]*>Buy credits/);
 });
 
@@ -621,7 +621,7 @@ test('an existing customer can look up their GeBIZ awards into the add-project s
 test('checkout lists what would make the brief weak before a credit is spent', async () => {
   const b = await signedUpCustomer('Gappy');
   const start = await b.post('/checkout/start', { title: 'Audit certification for a hospital', agency: 'Agency A', text: '', terms: 'audit' });
-  assert.match(start.text, /Before you spend a credit/);
+  assert.match(start.text, /Before you use your free brief/);
   assert.match(start.text, /None of your projects has been checked yet/);
   assert.match(start.text, /href="[^"]*\/profile"[^>]*>Improve your profile/);
 });
@@ -758,7 +758,7 @@ test('the tender a visitor checked comes back after sign-up and profile, at its 
   assert.ok(href, 'the free brief button carries the tender');
   const signup = await b.get(href.slice(base.length));
   assert.match(signup.text, /Next: your free brief/);
-  assert.match(signup.text, /Audit Certification Services/);
+  assert.match(signup.text, /Audit certification services/);
   assert.match(signup.text, /Your first reviewed brief is free/);
   assert.ok(b.jar.get('td_next'), 'the tender is kept while they sign up');
   const email = `next-${randomBytes(3).toString('hex')}@sme.example`;
@@ -805,7 +805,7 @@ test('long GeBIZ titles split into a headline and labelled facts; short ones sta
   assert.deepEqual(polyclinic.facts, [{ label: 'For', value: 'Proposed 4-storey polyclinic and kidney dialysis centre with 1 basement' },
     { label: 'At', value: 'Taman Jurong' }, { label: 'Lot', value: '05141C MK 06' }]);
   const audit = tenderParts('Quotation for Provision of Audit Certification Services for a period of 2 years with an option to extend for another year for OFN');
-  assert.equal(audit.headline, 'Audit Certification Services');
+  assert.equal(audit.headline, 'Audit certification services for OFN', 'Title Case becomes sentence case, and a three-letter purpose stays in the headline');
   assert.deepEqual(audit.facts.find((f) => f.label === 'Period'), { label: 'Period', value: '2 years, option to extend another year' });
   assert.deepEqual(tenderParts('Audit certification for a museum board'), { headline: 'Audit certification for a museum board', facts: [] });
 });
@@ -834,4 +834,27 @@ test('the new-profile form shows two project rows and folds the rest; checkout f
     VALUES ($1,'Audit services for a council','Agency A','2026-12-04T05:00:00Z','https://www.gebiz.gov.sg/x','Professional Services','other',$2)`, [tenderNo, ['audit']]);
   const checkout = await shopper.get(`/checkout?tender=${tenderNo}&terms=audit`);
   assert.match(checkout.text, /<details class="co-reqs"><summary>Add the tender's key requirements \(optional\)<\/summary>/);
+});
+
+test('round-two fixes: the sample ends on a next step, ties read as text, the report says who approved it and when', async () => {
+  const b = browser('10.0.5.1');
+  const sample = await b.get('/sample');
+  assert.match(sample.text, /Get a brief like this on your tender/);
+  assert.doesNotMatch(sample.text, /Back to home/, 'a signed-out visitor cannot open home');
+  assert.match(sample.text, /Reviewed and approved by a person/);
+  const tie = await reportFor({ recommendation: 'no-bid', n: 6, winners: [{ name: 'A Co', wins: 2 }, { name: 'B Co', wins: 2 }] }, { approved_at: '2026-11-20T03:00:00Z' });
+  assert.match(tie, /No single firm dominates: the top 2 each won 2 of 6\./);
+  assert.match(tie, /Reviewed and approved by a person on 20 Nov 2026/);
+  const signup = await b.get('/signup');
+  assert.equal((signup.text.match(/href="[^"]*\/signup"/g) ?? []).length, 0, 'the sign-up page does not link to itself from the nav');
+});
+
+test('a thin check says its caveat once, as text, and its offer does not promise a price', async () => {
+  const { renderCheck } = await import('../src/customer-view.mjs');
+  const comparables = [10000000, 12000000, 30000000, 50000000, 61000000].map((total_awarded_cents, i) => ({ tender_no: `T${i}`, total_awarded_cents }));
+  const html = renderCheck({ tender: { tender_no: 'X1', title: 'T', agency: 'A' }, reading: { terms: ['t'] }, csrf: 'c',
+    check: { status: 'ready', query_used: 't', comparables: [], snapshot: { n: 5, thin: true, wide_band: false, filters: {}, comparables, price_band: { low_cents: 12000000, median_cents: 30000000, high_cents: 50000000 } } } });
+  assert.equal((html.replace(/<svg[\s\S]*?<\/svg>/g, '').match(/5 comparable awards/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /class="banner"/);
+  assert.match(html, /whether to aim low or high/);
 });

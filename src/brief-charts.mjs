@@ -26,7 +26,8 @@ export function priceChart({ awards, band, suggested, thin = false }) {
   const values = awards.map((a) => a.cents / 100).filter((v) => v > 0);
   const lo = Math.min(...values, band.low_cents / 100) * 0.8;
   const hi = Math.max(...values, band.high_cents / 100) * 1.25;
-  const left = 16; const right = W - 16; const top = 34; const plotH = 84; const axisY = top + plotH;
+  // Thin evidence draws dots only, with no band to fill the height, so its plot is shorter.
+  const left = 16; const right = W - 16; const top = 34; const plotH = thin ? 48 : 84; const axisY = top + plotH;
   const x = (dollars) => left + ((Math.log10(dollars) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * (right - left);
   const q1 = x(band.low_cents / 100); const q3 = x(band.high_cents / 100); const med = x(band.median_cents / 100);
   const hasRange = Boolean(suggested && (suggested.from_cents || suggested.to_cents));
@@ -111,7 +112,7 @@ export const chartCss = `
 .chart .dot{fill:#2457D6;stroke:#fff;stroke-width:2}
 .chart .dot:hover{fill:#1B45B0}
 .chart .bar{fill:#2457D6}
-.chart .band{fill:#EAF0FD}
+.chart .band{fill:#EAF0FD;stroke:#2457D6;stroke-width:1}
 .chart .suggested{fill:none;stroke:#1A6B3F;stroke-width:2;stroke-dasharray:6 4}
 .chart .median{stroke:#0F1A2B;stroke-width:2}
 .chart .axis{stroke:#C9D1DB;stroke-width:1}
