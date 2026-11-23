@@ -73,6 +73,31 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 .wrap.wide{max-width:74rem;gap:2.75rem}
+.rp-hero{overflow:hidden}
+.rp-verdict{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;padding:1.1rem 1.5rem;border-bottom:1px solid var(--line)}
+.rp-verdict.bid{background:var(--ok-bg);color:var(--ok)}.rp-verdict.nobid{background:var(--warn-bg);color:var(--warn)}
+.rp-label{font-size:.8125rem;font-weight:600}
+.rp-word{font-size:2.25rem;line-height:1.1;font-weight:700;letter-spacing:-.025em}
+.rp-hero-body{padding:1.25rem 1.5rem 1.25rem;display:grid;gap:.6rem}
+.rp-price{display:grid;gap:.1rem}
+.rp-price-label{font-size:.8125rem;color:var(--muted);font-weight:600}
+.rp-range{font-size:2.25rem;line-height:1.15;font-weight:650;letter-spacing:-.025em}
+.rp-why{max-width:68ch;font-size:1rem}
+.rp-thin{display:grid;gap:.35rem;max-width:68ch}
+.rp-chart-head{font-size:.9375rem;margin-top:.5rem}
+.rp-hero .chart-wrap{padding:0;max-width:46rem}
+.rp-facts{font-size:.875rem;color:var(--muted);max-width:72ch}
+.rp-section{display:grid;gap:.5rem;padding-top:1.25rem;border-top:1px solid var(--line);min-width:0}
+.rp-section-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}
+.rp-section h2{font-size:1.125rem;letter-spacing:-.01em}
+.rp-section .bullets{padding:0 0 0 1.25rem}
+.rp-section .reqs li{padding:.65rem 0}
+.rp-section .scorecard{padding:0}
+.rp-section .chart-wrap{padding:.25rem 0 0}
+.rp-section details.awards summary{padding:.25rem 0}
+.rp-sub{font-size:.9375rem;font-weight:650;margin-top:.5rem}
+.report{gap:2rem}
+@media (max-width:760px){.rp-word,.rp-range{font-size:1.75rem}.rp-verdict,.rp-hero-body{padding-left:1rem;padding-right:1rem}}
 .ck-head{display:grid;gap:.35rem;max-width:62rem}.ck-head h1{font-size:1.75rem;line-height:1.2;letter-spacing:-.02em;text-wrap:balance}
 .ck-grid{display:grid;grid-template-columns:minmax(0,1fr) 20rem;gap:1.5rem;align-items:start}
 .ck-main{display:grid;gap:1.25rem;min-width:0}
@@ -503,8 +528,9 @@ export function renderCredits({ company, csrf, credits, notice, noticeKind = 'ba
 
 const statusChipFor = { met: ['done', '✓ Met'], partly_met: ['warning', '◐ Partly met'], gap: ['danger', '✕ Gap'] };
 
-// The paid brief as a visual report: verdict, the suggested range (computed by code) on a chart of the past awards,
-// reasons, who usually wins, awards per year, the requirements scorecard, questions and risks, and the awards themselves.
+// The paid brief as a visual report, ordered by the decision: the verdict and where to price first, then what could stop
+// the client, why, what to ask the agency, and last the context (who wins, how often it is bought, the awards). Empty
+// sections are left out rather than printed as "None".
 function renderReport(request, awards) {
   const parts = request.parts;
   const band = request.price_band;
@@ -512,11 +538,16 @@ function renderReport(request, awards) {
   const range = parts.suggested_range ?? {};
   // Briefs drafted before the thin flag existed fall back to the same rule: under ten awards, or a wide band.
   const thin = parts.thin ?? (Number(parts.n) < 10 || Boolean(request.wide_band));
-  const list = (items) => (items?.length ? `<ul class="bullets">${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>` : '<p class="empty">None.</p>');
-  const counts = Object.fromEntries(['met', 'partly_met', 'gap'].map((k) => [k, (parts.requirements ?? []).filter((r) => r.status === k).length]));
-  const requirements = parts.requirements?.length ? `<section class="panel"><header><h2>Requirements check</h2><span class="muted small">From the requirements you pasted</span></header>
-<p class="scorecard"><span class="chip done">${counts.met} met</span><span class="chip warning">${counts.partly_met} partly met</span><span class="chip danger">${counts.gap} gap</span></p>
-<ul class="reqs">${parts.requirements.map((r) => `<li><span><span class="chip ${statusChipFor[r.status][0]}">${statusChipFor[r.status][1]}</span></span><div>${esc(r.requirement)}<span class="evidence">${esc(r.evidence)}</span></div></li>`).join('')}</ul></section>` : '';
+  const bullets = (items) => `<ul class="bullets">${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+  const section = (id, title, body, note = '') => `<section class="rp-section" aria-labelledby="${id}"><div class="rp-section-head"><h2 id="${id}">${title}</h2>${note ? `<span class="muted small">${note}</span>` : ''}</div>${body}</section>`;
+  const order = { gap: 0, partly_met: 1, met: 2 };
+  const reqs = [...(parts.requirements ?? [])].sort((a, b) => order[a.status] - order[b.status]);
+  const counts = Object.fromEntries(['met', 'partly_met', 'gap'].map((k) => [k, reqs.filter((r) => r.status === k).length]));
+  const risks = parts.risks ?? [];
+  const stop = reqs.length || risks.length ? section('rp-stop', 'What could stop you',
+    `${reqs.length ? `<p class="scorecard">${counts.gap ? `<span class="chip danger">${counts.gap} gap</span>` : ''}${counts.partly_met ? `<span class="chip warning">${counts.partly_met} partly met</span>` : ''}${counts.met ? `<span class="chip done">${counts.met} met</span>` : ''}</p>
+<ul class="reqs">${reqs.map((r) => `<li><span><span class="chip ${statusChipFor[r.status][0]}">${statusChipFor[r.status][1]}</span></span><div>${esc(r.requirement)}<span class="evidence">${esc(r.evidence)}</span></div></li>`).join('')}</ul>` : ''}
+${risks.length ? `<h3 class="rp-sub">Risks</h3>${bullets(risks)}` : ''}`, reqs.length ? 'Requirements from the tender, checked against your profile' : '') : '';
   const years = awards.map((a) => String(a.date ?? '').slice(0, 4)).filter((y) => /^\d{4}$/.test(y)).sort();
   const span = years.length ? (years[0] === years.at(-1) ? `These comparable awards date from ${years[0]}.` : `These comparable awards date from ${years[0]} to ${years.at(-1)}.`) : '';
   const panels = Number(parts.excluded_panels ?? 0);
@@ -525,21 +556,29 @@ function renderReport(request, awards) {
   const tripNote = trips ? ` ${plural(trips, 'study trip')} that only name this kind of work in their title ${trips === 1 ? 'was' : 'were'} left out: they are travel packages, not this work.` : '';
   const awardRows = awards.map((a) => `<tr><td data-label="Tender" class="num nowrap">${esc(a.tender_no)}</td><td data-label="Description">${esc(a.description)}<span class="sub-line">${esc(a.agency)}</span></td>
 <td data-label="Winner">${esc(a.winner)}</td><td data-label="Awarded" class="r num nowrap">${wholeSgd(a.cents)}</td><td data-label="Date" class="num nowrap">${esc(day(a.date))}</td></tr>`).join('');
+  const where = parts.suggested_range
+    ? `<p class="rp-price"><span class="rp-price-label">Suggested price range</span><span class="rp-range num">${esc(range.text ?? '')}</span></p>${parts.price_position?.why ? `<p class="rp-why">${esc(parts.price_position.why)}</p>` : ''}`
+    : bid && parts.thin ? `<div class="rp-thin"><p class="rp-price-label">Where to price</p><p>${esc(thinText)}</p><p><strong>Roughly: ${esc(String(parts.position_text ?? '').toLowerCase())}.</strong> ${esc(parts.price_position?.why ?? '')}</p></div>`
+      : !bid && parts.reasons?.[0] ? `<p class="rp-why">${esc(parts.reasons[0])}</p>` : '';
+  const facts = !band ? '' : thin ? `<p class="rp-facts num">${esc(thinLine(parts.n, awards.map((a) => a.cents)))}. Too few or too varied for quartiles: treat these as a rough guide.</p>`
+    : `<p class="rp-facts">Middle half of ${esc(plural(parts.n, 'comparable award'))}${parts.query_used ? ` for “${esc(parts.query_used)}”` : ''}: <span class="num">${wholeSgd(band.low_cents)} to ${wholeSgd(band.high_cents)}</span>. Median <span class="num">${wholeSgd(band.median_cents)}</span>: half were above, half below.</p>`;
+  const winnersNote = (parts.winners ?? []).slice(0, 5).reduce((sum, w) => sum + Number(w.wins), 0) > Number(parts.n) ? `<p class="limits">Some awards went to more than one firm, so these counts add up to more than ${esc(String(parts.n))}.</p>` : '';
+  const winners = winnersChart(parts.winners, parts.n);
+  const perYear = yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) })));
   return `<div class="report">
-<section class="panel"><div class="verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="label">Our recommendation</span><strong>${bid ? 'Bid' : 'Do not bid'}</strong></div>
-${parts.suggested_range ? `<div class="callout"><span class="label">Suggested price range</span><span class="range">${esc(range.text ?? '')}</span><p>${esc(parts.price_position?.why ?? '')}</p></div>`
-    : bid && parts.thin ? `<div class="callout"><span class="label">Where to price</span><p>${esc(thinText)}</p><p><strong>Roughly: ${esc(String(parts.position_text ?? '').toLowerCase())}.</strong> ${esc(parts.price_position?.why ?? '')}</p></div>` : ''}
-${!bid ? '<header class="chart-head"><h2>Past awards, for context only</h2></header>' : parts.thin ? '<header class="chart-head"><h2>Past awards, a rough guide</h2></header>' : ''}
+<section class="panel rp-hero" aria-label="Recommendation">
+<div class="rp-verdict ${bid ? 'bid' : 'nobid'}" role="note"><span class="rp-label">Our recommendation</span><strong class="rp-word">${bid ? 'Bid' : 'Do not bid'}</strong></div>
+<div class="rp-hero-body">${where}
+${!bid ? '<h2 class="rp-chart-head">Past awards, for context only</h2>' : parts.thin ? '<h2 class="rp-chart-head">Past awards, a rough guide</h2>' : ''}
 <div class="chart-wrap">${priceChart({ awards: awards.map((a) => ({ cents: a.cents, label: `${a.agency} · ${day(a.date)}` })), band, suggested: parts.suggested_range ?? undefined, thin })}</div>
-${!band ? '' : thin ? thinTile(parts.n, awards.map((a) => a.cents)) : quartileTiles(band, parts.n, `Comparable awards${parts.query_used ? ` for "${esc(parts.query_used)}"` : ''}`)}</section>
-<section class="panel"><header><h2>Why</h2></header>${list(parts.reasons)}</section>
-<div class="report-row"><section class="panel"><header><h2>Who usually wins</h2><span class="muted small">Most frequent winners of these awards</span></header><div class="chart-wrap">${winnersChart(parts.winners, parts.n) || '<p class="empty">No repeat winners.</p>'}</div>${(parts.winners ?? []).slice(0, 5).reduce((sum, w) => sum + Number(w.wins), 0) > Number(parts.n) ? `<p class="limits">Some awards went to more than one firm, so these counts add up to more than ${esc(String(parts.n))}.</p>` : ''}</section>
-<section class="panel"><header><h2>Awards per year</h2><span class="muted small">How steadily this work is bought</span></header><div class="chart-wrap">${yearsChart(awards.map((a) => ({ year: String(a.date ?? '').slice(0, 4) }))) || '<p class="empty">No dates.</p>'}</div></section></div>
-${requirements}
-<div class="report-row"><section class="panel"><header><h2>Questions to ask the agency</h2></header>${list(parts.questions)}</section>
-<section class="panel"><header><h2>Risks</h2></header>${list(parts.risks)}</section></div>
-<section class="panel"><header><h2>Your verified projects cited</h2></header>${list((parts.cited ?? []).map((p) => `${p.title}${p.agency ? ` (${p.agency})` : ''}`))}</section>
-${awards.length ? `<section class="panel"><details class="awards"><summary>Show the ${awards.length} comparable awards</summary>
+${facts}</div></section>
+${stop}
+${parts.reasons?.length ? section('rp-why-h', bid ? 'Why we say bid' : 'Why we say do not bid', bullets(parts.reasons)) : ''}
+${parts.questions?.length ? section('rp-ask', 'Ask the agency', bullets(parts.questions), 'Before you submit') : ''}
+${parts.cited?.length ? section('rp-cited', 'Your checked projects we cited', bullets(parts.cited.map((p) => `${p.title}${p.agency ? ` (${p.agency})` : ''}`))) : ''}
+${winners || perYear ? `<div class="report-row">${winners ? section('rp-wins', 'Who usually wins', `<div class="chart-wrap">${winners}</div>${winnersNote}`, 'Most frequent winners of these awards') : ''}
+${perYear ? section('rp-years', 'Awards per year', `<div class="chart-wrap">${perYear}</div>`, 'How steadily this work is bought') : ''}</div>` : ''}
+${awards.length ? `<section class="rp-section"><details class="awards"><summary>Show the ${awards.length} comparable awards</summary>
 <div class="table-wrap"><table class="stack"><thead><tr><th>Tender</th><th>Description</th><th>Winner</th><th class="r">Awarded</th><th>Date</th></tr></thead><tbody>${awardRows}</tbody></table></div></details>
 <p class="limits">${esc(span)}${esc(panelNote)}${esc(tripNote)} ${esc(priceLimits)} Contract scope and length differ between awards.</p></section>` : ''}
 </div>`;
@@ -572,8 +611,8 @@ ${request.status === 'requested' ? `<form method="post" action="/requests/${esc(
   const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', request.status === 'needs_info' ? 'Needs your reply' : 'In review', 'Brief ready'].map((label, at) =>
     `<li class="${at < stage ? 'done' : at === stage ? `current${request.status === 'needs_info' ? ' waiting' : ''}` : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
   const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
-  return layout({ title: request.reference, csrf, company, body: `<div><p class="eyebrow">${esc(request.reference)}</p><h1>${esc(request.title)}</h1>
-<p class="sub">${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · <span class="nowrap">closes ${esc(day(request.closes_at))}</span>` : ''}</p></div>
+  return layout({ title: request.reference, csrf, company, body: `<div class="ck-head"><h1>${esc(displayTitle(request.title))}</h1>
+<p class="sub">${request.reference === 'SAMPLE' ? '' : `<span class="num">${esc(request.reference)}</span> · `}${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · <span class="nowrap">closes ${esc(day(request.closes_at))}</span>` : ''}</p></div>
 ${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
 }
 

@@ -445,9 +445,10 @@ test('an approved brief with parts reads as a visual report: range callout, char
   assert.match(page, /<svg class="chart"[^>]*aria-label="\d+ comparable awards/);
   assert.match(page, /Who usually wins/);
   assert.match(page, /Awards per year/);
-  assert.match(page, /class="scorecard"[\s\S]*1 met[\s\S]*1 gap/);
-  assert.match(page, /Accredited auditor on the team/);
-  assert.match(page, /Questions to ask the agency[\s\S]*joint bid/);
+  assert.match(page, /class="scorecard"[\s\S]*1 gap[\s\S]*1 met/, 'gaps come first: they are what could stop the bid');
+  assert.ok(page.indexOf('Accredited auditor on the team') < page.indexOf('Audited a public body'), 'a gap is listed before a met requirement');
+  assert.ok(page.indexOf('What could stop you') < page.indexOf('Why we say bid'), 'what could stop the bid comes before the reasons');
+  assert.match(page, /Ask the agency[\s\S]*joint bid/);
   assert.match(page, /<details[\s\S]*Show the \d+ comparable awards/);
   assert.doesNotMatch(page, /##/);
 });
