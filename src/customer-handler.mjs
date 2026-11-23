@@ -308,9 +308,10 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
         readFeedTender(t).then((reading) => { t.terms = reading.terms; }).catch(() => {}), pause(homeReadBudgetMs)])));
       const matches = tenders.map((tender) => {
         const check = tender.terms?.length ? priceCheck(dataset, { terms: tender.terms, category: tender.category }) : undefined;
-        return { tender, check, ownRequest: owned.get(tender.tender_no), closesInDays: tender.closes_at ? Math.max(0, Math.ceil((new Date(tender.closes_at) - now()) / 86400000)) : undefined, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
+        return { tender, check, ownRequest: owned.get(tender.tender_no), closesInDays: tender.closes_at ? Math.max(0, Math.ceil((new Date(tender.closes_at) - now()) / 86400000)) : undefined,
+          tooClose: Boolean(tender.closes_at) && new Date(tender.closes_at) - now() < 2 * 86400000, fit: fitFacts({ client: context.client, verifiedProjects: verified, tender, check }) };
       });
-      return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf, flash }), { cookies: flash ? [`td_cflash=; Max-Age=0; ${cookieFlags}`] : [] });
+      return html(200, renderHome({ context, matches, refreshedAt: await feedRefreshedAt(database), csrf, flash, credits: await customer.credits() }), { cookies: flash ? [`td_cflash=; Max-Age=0; ${cookieFlags}`] : [] });
     }
 
     if ((path === '/checkout' && !post) || path === '/checkout/start') {

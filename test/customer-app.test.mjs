@@ -301,7 +301,7 @@ test('home reads a tender the same way the free check does, so the two never dis
   await db.query("UPDATE tender_desk.open_tenders SET terms=NULL WHERE tender_no='RPO000ETQ26000129'");
   const home = await b.get('/home');
   const row = home.text.slice(home.text.indexOf('RPO000ETQ26000129'), home.text.indexOf('</li>', home.text.indexOf('RPO000ETQ26000129')));
-  assert.match(row, /Middle half of past awards: S\$162,500 to S\$387,500 \(median S\$275,000, 10 awards\)/);
+  assert.match(row, /Past awards S\$162,500 to S\$387,500 · median S\$275,000 · 10 awards/);
   assert.deepEqual((await db.query("SELECT terms FROM tender_desk.open_tenders WHERE tender_no='RPO000ETQ26000129'")).rows[0].terms, ['audit'], 'home stored the reading the free check uses');
   const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129' });
   assert.match(check.text, /10 comparable awards|S\$275,000/);
@@ -499,7 +499,8 @@ test('home sorts tenders by closing date and flags those closing within three da
   const { renderHome } = await import('../src/customer-view.mjs');
   const html = renderHome({ csrf: 'c', refreshedAt: null, context: { client: { name: 'C' }, projects: [], requests: [] },
     matches: [{ tender: { tender_no: 'T1', title: 'T', agency: 'A', closes_at: '2026-11-24T05:00:00Z' }, closesInDays: 2, check: { status: 'insufficient_comparables', snapshot: {} } }] });
-  assert.match(html, /class="chip warning">Closes in 2 days/);
+  assert.match(html, /closes 24 Nov 2026, <span class="hm-soon">in 2 days<\/span>/);
+  assert.doesNotMatch(html, /class="chip/, 'a tender row carries no pills');
 });
 
 test('price checks explain median and quartile in plain words', async () => {
@@ -704,9 +705,9 @@ test('thin evidence shows customers no quartile figures: home, free check and re
 test('the credits page sells one credit at S$29 and shows what each pack saves', async () => {
   const b = await signedUpCustomer('Saver');
   const page = await b.get('/credits');
-  assert.match(page.text, /<strong>1 credit<\/strong><span class="meta">S\$29<\/span>/);
-  assert.match(page.text, /5 credits[\s\S]*?S\$119 · S\$23\.80 a credit · save 18%/);
-  assert.match(page.text, /20 credits[\s\S]*?S\$399 · S\$19\.95 a credit · save 31%/);
+  assert.match(page.text, /<h3>1 credit<\/h3><p class="cr-price num">S\$29<\/p>/);
+  assert.match(page.text, /5 credits[\s\S]*?S\$119[\s\S]*?5 reviewed briefs · S\$23\.80 a brief · save 18%/);
+  assert.match(page.text, /20 credits[\s\S]*?S\$399[\s\S]*?20 reviewed briefs · S\$19\.95 a brief · save 31%/);
 });
 
 test('checkout shows when the tender closes', async () => {
@@ -878,4 +879,38 @@ test('a project whose GeBIZ award names the company is checked at once; others, 
   await desk.admin(adminToken).verifyProject({ project_id: rows[0].id, verified: false });
   await b.post('/profile', { capabilities: 'Audits for public bodies.', categories: 'other', team_size: '5', max_contract: '400,000', project_title_0: 'Unchecked gala' });
   assert.equal((await db.query('SELECT verified FROM tender_desk.projects WHERE id=$1', [rows[0].id])).rows[0].verified, false);
+});
+
+test('home leads with your briefs and tenders, says the first brief is free, and folds the paste form away', async () => {
+  const b = await signedUpCustomer('Homely');
+  const home = await b.get('/home');
+  assert.match(home.text, /Your first brief is free/);
+  assert.match(home.text, /Tenders for you/);
+  assert.match(home.text, /<details class="hm-paste"><summary>Check a tender that isn't listed<\/summary>/);
+  assert.match(home.text, /\d+ of \d+ checked/);
+  assert.doesNotMatch(home.text, /<h2>Paste a tender<\/h2>/);
+});
+
+test('home offers the brief first only where it is worth a credit, and says why there is none', async () => {
+  const { renderHome, renderCredits } = await import('../src/customer-view.mjs');
+  const band = { low_cents: 100000, median_cents: 200000, high_cents: 300000 };
+  const ready = (thin) => ({ status: 'ready', snapshot: { n: 12, thin, price_band: band, comparables: [] } });
+  const html = renderHome({ csrf: 'c', refreshedAt: null, credits: { balance: 1, perBrief: 1, history: [{ reason: 'welcome' }] },
+    context: { client: { name: 'C' }, projects: [], requests: [{ reference: 'REQ00009', title: 'T', agency: 'A', status: 'requested', created_at: '2026-11-21T02:00:00Z' }] },
+    matches: [
+      { tender: { tender_no: 'GOOD1', title: 'Good fit', agency: 'A' }, check: ready(false), fit: { within_capacity: true } },
+      { tender: { tender_no: 'BIG1', title: 'Too big', agency: 'A' }, check: ready(false), fit: { within_capacity: false } },
+      { tender: { tender_no: 'SOON1', title: 'Closing', agency: 'A' }, check: ready(false), tooClose: true },
+      { tender: { tender_no: 'FEW1', title: 'Few awards', agency: 'A' }, check: { status: 'insufficient_comparables', snapshot: {} } },
+    ] });
+  const row = (no) => html.slice(html.indexOf(no), html.indexOf('</li>', html.indexOf(no)));
+  assert.match(row('GOOD1'), /class="btn outline" href="\/checkout\?tender=GOOD1">Reviewed brief · free/);
+  assert.match(row('BIG1'), /Free price check<\/button><\/form><a class="small" href="\/checkout\?tender=BIG1">/, 'too big: the price check leads');
+  assert.match(row('SOON1'), /Closes too soon for a brief/);
+  assert.doesNotMatch(row('SOON1'), /checkout/);
+  assert.match(row('FEW1'), /Too few past awards for a brief/);
+  assert.match(html, /usually ready by Mon 23 Nov/, 'a Saturday request is usually ready the next business day');
+  const credits = renderCredits({ company: 'C', csrf: 'c', credits: { balance: 1, perBrief: 1, history: [{ reason: 'welcome', delta: 1 }], packs: [{ credits: 1, cents: 2900 }, { credits: 20, cents: 39900 }] } });
+  assert.match(credits, /That credit is your free first brief/);
+  assert.doesNotMatch(credits, /cr-pack best/, 'no pack is pushed before the free brief is used');
 });

@@ -73,6 +73,37 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 .wrap.wide{max-width:74rem;gap:2.75rem}
+.ck-side{display:grid;gap:1.25rem;align-content:start;min-width:0}
+.hm-list>li+li{border-top:1px solid var(--line)}
+.hm-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1.25rem;align-items:start;padding:1rem 1.25rem}
+.hm-body{display:grid;gap:.3rem;min-width:0}
+.hm-title{font-weight:600;line-height:1.4}
+.hm-body .meta{font-size:.8125rem;color:var(--muted)}
+.hm-price{font-weight:600;font-variant-numeric:tabular-nums;font-size:.9375rem}
+.hm-price.muted{font-weight:400;font-size:.875rem}
+.hm-fit{font-size:.8125rem;color:var(--muted)}.hm-fit .warn,.hm-soon{color:var(--warn);font-weight:600}
+.hm-actions{display:grid;gap:.35rem;justify-items:end}
+.hm-actions form{margin:0}
+.hm-actions button.link-button{border:0;background:none;min-height:0;padding:.2rem 0;color:var(--accent-dark);font-weight:500;font-size:.8125rem}
+.hm-actions button.link-button:hover{text-decoration:underline;background:none}
+details.hm-paste{border-top:1px solid var(--line)}
+details.hm-paste summary{cursor:pointer;padding:.85rem 1.25rem;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
+details.hm-paste .form{padding:0 1.25rem 1.25rem}
+.hm-credits{padding:1.25rem;display:grid;gap:.4rem}
+.hm-credits h2{font-size:1.0625rem}
+.hm-projects{display:grid}
+.hm-projects li{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.6rem 1rem;border-bottom:1px solid var(--line);font-size:.875rem}
+.hm-edit{padding:.75rem 1rem}
+.cr-heading{font-size:1.125rem;margin-bottom:.75rem}
+.cr-packs{display:grid;grid-template-columns:repeat(auto-fit,minmax(12rem,1fr));gap:1rem}
+.cr-pack{border:1px solid var(--line);border-radius:10px;padding:1.25rem;display:flex;flex-direction:column;gap:.35rem;background:#fff}
+.cr-pack.best{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.cr-pack h3{font-size:.9375rem;font-weight:600;color:var(--muted)}
+.cr-price{font-size:1.75rem;font-weight:650;letter-spacing:-.02em;font-variant-numeric:proportional-nums}
+.cr-each{font-size:.875rem;color:var(--muted);min-height:2.6em}
+.cr-pack form{margin-top:auto;padding-top:.5rem}.cr-pack button{width:100%;justify-content:center;min-height:2.5rem}
+.cr-test{margin-top:.85rem}
+@media (max-width:760px){.hm-row{grid-template-columns:1fr}.hm-actions{justify-items:start}}
 .top nav button.link{color:#2A364A;font-size:inherit;font-weight:500;padding:0}
 .top nav button.link:hover{background:none;text-decoration:underline}
 .ck-range,.lp-range,.rp-range,.lp-prices dd{font-variant-numeric:proportional-nums}
@@ -308,25 +339,37 @@ export function layout({ title, csrf, company, body, signedIn, wide = false, on 
 export const thinLine = (n, cents) => `${plural(n, 'comparable award')}${cents.length ? `, ${roughSpread(cents)}` : ''}`;
 const thinTile = (n, cents) => `<div class="stats"><div class="stat wide"><span class="big">${esc(thinLine(n, cents))}</span><span class="label">Too few or too varied for quartiles: treat these as a rough guide</span></div></div>`;
 
-function tenderList(tenders, csrf, { matches } = {}) {
-  if (!tenders.length) return '<p class="empty"><strong>No open tenders yet.</strong>GeBIZ lists new tenders each working day; this list grows as they are published.</p>';
-  return `<ul class="tenders">${tenders.map((item) => {
+function tenderList(tenders, csrf, { matches, free } = {}) {
+  if (!tenders.length) return '<p class="empty"><strong>No open tenders in your categories right now.</strong>GeBIZ lists new tenders each working day. Check one that isn\'t listed below.</p>';
+  return `<ul class="hm-list">${tenders.map((item) => {
     const tender = item.tender ?? item;
     const snap = item.check?.snapshot;
     const summary = !item.check ? (matches ? 'Run the free price check to see comparable awards' : '') : item.check.status !== 'ready' ? 'Too few comparable awards for a price range'
       : snap.thin ? `${thinLine(snap.n, (snap.comparables ?? []).map((c) => c.total_awarded_cents))} · a rough guide only`
-        : `Middle half of past awards: ${wholeSgd(snap.price_band.low_cents)} to ${wholeSgd(snap.price_band.high_cents)} (median ${wholeSgd(snap.price_band.median_cents)}, ${plural(snap.n, 'award')})`;
-    const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
-      item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
-      item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
+        : `Past awards ${wholeSgd(snap.price_band.low_cents)} to ${wholeSgd(snap.price_band.high_cents)} · median ${wholeSgd(snap.price_band.median_cents)} · ${plural(snap.n, 'award')}`;
+    // Fit, as one plain line: being in their categories and within capacity is the normal case on this page, so only
+    // related projects are said, and only what is off is flagged (in amber text, not a pill).
+    const fit = item.fit ? [item.fit.category_match === false ? ['warn', 'Outside your categories'] : null,
+      item.fit.within_capacity === false ? ['warn', 'Median is above your largest contract'] : null,
+      item.fit.related_projects ? ['', plural(item.fit.related_projects, 'related checked project')] : null].filter(Boolean) : [];
+    const soon = item.closesInDays !== undefined && item.closesInDays <= 3 ? `<span class="hm-soon">${item.closesInDays === 0 ? 'closes today' : `in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}`}</span>` : '';
     const parts = tenderParts(tender.title);
     const rowFacts = parts.facts.filter((f) => f.label !== 'Lot');
-    return `<li><div><strong>${esc(parts.headline)}</strong>${rowFacts.length ? `<span class="tt-facts tt-row">${factsLine(rowFacts)}</span>` : ''}
-<span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}${item.closesInDays !== undefined && item.closesInDays <= 3 ? ` <span class="chip warning">Closes in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}</span>` : ''}</span>
-${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
-<div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
-${!matches ? '' : item.taken ? '<span class="muted small">Not available for a reviewed brief right now.</span>' : item.ownRequest ? `<a class="btn outline" href="/requests/${esc(item.ownRequest)}">View your brief</a>`
-    : item.check?.status === 'ready' ? `<a class="btn primary" href="/checkout?tender=${encodeURIComponent(tender.tender_no)}">Reviewed brief · 1 credit</a>` : ''}</div></li>`;
+    // The brief is the main action only where it is worth a credit: enough awards, within the company's capacity and
+    // not closing too soon. Elsewhere the price check leads, and the row says why there is no brief, or offers it second.
+    const briefLabel = free ? 'Reviewed brief · free' : 'Reviewed brief · 1 credit';
+    const briefHref = `/checkout?tender=${encodeURIComponent(tender.tender_no)}`;
+    const weak = item.check?.status === 'ready' && (snap.thin || item.fit?.within_capacity === false);
+    const why = !matches || item.ownRequest || item.taken ? '' : item.tooClose ? 'Closes too soon for a brief'
+      : item.check && item.check.status !== 'ready' ? 'Too few past awards for a brief' : '';
+    const primary = !matches ? '' : item.taken ? '<span class="muted small">Not available for a reviewed brief right now.</span>'
+      : item.ownRequest ? `<a class="btn outline" href="/requests/${esc(item.ownRequest)}">View your brief</a>`
+        : !why && item.check?.status === 'ready' && !weak ? `<a class="btn outline" href="${briefHref}">${briefLabel}</a>` : '';
+    const second = matches && !why && weak && !item.ownRequest && !item.taken ? `<a class="small" href="${briefHref}">${briefLabel}</a>` : '';
+    return `<li class="hm-row"><div class="hm-body"><strong class="hm-title">${esc(parts.headline)}</strong>${rowFacts.length ? `<span class="tt-facts tt-row">${factsLine(rowFacts)}</span>` : ''}
+<span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}${soon ? `, ${soon}` : ''}` : ''}</span>
+${summary ? `<p class="hm-price${item.check?.status === 'ready' && !snap.thin ? '' : ' muted'}">${esc(summary)}</p>` : ''}${fit.length ? `<p class="hm-fit">${fit.map(([kind, text]) => `<span${kind ? ` class="${kind}"` : ''}>${esc(text)}</span>`).join('<span aria-hidden="true"> · </span>')}</p>` : ''}</div>
+<div class="hm-actions">${primary}<form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit"${primary ? ' class="link-button"' : ''}>${primary ? 'See the price check' : 'Free price check'}</button></form>${second}${why ? `<span class="muted small">${why}</span>` : ''}</div></li>`;
   }).join('')}</ul>`;
 }
 
@@ -460,7 +503,7 @@ export function renderLanding({ tenders, refreshedAt, csrf, example, proof, pric
 ${rest.length ? `<details class="lp-more"><summary>Show ${plural(rest.length, 'more open tender')}</summary><ul class="lp-list">${rest.map((row) => closingRow(row, csrf)).join('')}</ul></details>` : ''}
 <p class="lp-foot">ITQ is an invitation to quote (smaller, quicker buys); ITT is an invitation to tender (larger, formal ones).</p>`;
   const free = prices && prices.welcome >= prices.perBrief;
-  const packs = (prices?.packs ?? []).map((pack) => `<div><dt>${esc(plural(pack.credits, 'brief'))}</dt><dd>${esc(wholeSgd(pack.cents))}</dd>${pack.credits > 1 ? `<small>${esc(wholeSgd(Math.round(pack.cents / pack.credits)))} a brief</small>` : '<small>one credit</small>'}</div>`).join('');
+  const packs = (prices?.packs ?? []).map((pack) => `<div><dt>${esc(plural(pack.credits, 'brief'))}</dt><dd>${esc(wholeSgd(pack.cents))}</dd>${pack.credits > 1 ? `<small>${esc(formatSgd(Math.round(pack.cents / pack.credits)))} a brief</small>` : '<small>one credit</small>'}</div>`).join('');
   return layout({ title: 'Know the prices before you bid', csrf, wide: true, body: `<section class="lp-hero">
 <div><h1 class="lp-h1">Know the prices before you bid.</h1>
 <p class="lp-intro">Is this GeBIZ tender worth your time? See what similar government contracts were actually awarded for.</p>
@@ -627,21 +670,35 @@ const statusText = { requested: 'In review: usually within one business day', dr
 const chipText = { requested: 'In review', drafted: 'In review', needs_info: 'Needs your reply', approved: 'Brief ready', declined: 'Declined', cancelled: 'Cancelled' };
 const statusChip = { requested: 'progress', drafted: 'progress', needs_info: 'warning', approved: 'done', declined: 'danger', cancelled: '' };
 
-export function renderHome({ context, matches, refreshedAt, csrf, flash }) {
+export function renderHome({ context, matches, refreshedAt, csrf, flash, credits }) {
   const { client, projects, requests } = context;
-  const projectRows = projects.length ? `<ul class="feed">${projects.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>
-${p.verified ? '<span class="chip done">✓ Checked</span>' : '<span class="chip warning">Not checked yet</span>'}</div>
-<span class="meta">${esc([p.agency, p.value_cents !== null ? wholeSgd(p.value_cents) : null, p.gebiz_tender_no].filter(Boolean).join(' · '))}</span></li>`).join('')}</ul>
+  const history = credits?.history ?? [];
+  const free = Boolean(credits) && credits.balance >= (credits.perBrief ?? 1) && history.some((h) => h.reason === 'welcome') && !history.some((h) => h.reason === 'purchase' || h.reason === 'brief');
+  const checked = projects.filter((p) => p.verified).length;
+  const projectRows = projects.length ? `<ul class="hm-projects">${projects.map((p) => `<li><span>${esc(p.title)}</span>
+${p.verified ? '<span class="chip done">✓ Checked</span>' : '<span class="chip warning">Not checked yet</span>'}</li>`).join('')}</ul>
 ${projects.some((p) => !p.verified) ? '<p class="note">Not checked yet: we check these against GeBIZ before a brief can cite them.</p>' : ''}`
-    : '<p class="empty">No past projects yet.</p>';
-  const requestRows = requests.length ? `<ul class="feed">${requests.map((r) => `<li><div class="line"><a href="/requests/${esc(r.reference)}"><strong>${esc(r.title)}</strong></a>
-<span class="chip ${statusChip[r.status]}">${esc(chipText[r.status])}</span></div><span class="meta">${esc(r.reference)} · ${esc(r.agency ?? '')}</span></li>`).join('')}</ul>`
-    : '<p class="empty">No briefs yet. Ask for one on any open tender.</p>';
-  return layout({ title: 'Home', csrf, company: client.name, body: `${banner(flash, 'ok')}<div><h1>Good ${greeting()}, ${esc(client.name)}</h1>
+    : '<p class="empty">No past projects yet. Add them so your briefs can cite your track record.</p>';
+  const requestRows = requests.length ? `<section class="panel" aria-labelledby="hm-briefs"><header><h2 id="hm-briefs">Your briefs</h2></header><ul class="feed">${requests.map((r) => `<li><div class="line"><a href="/requests/${esc(r.reference)}"><strong>${esc(tenderParts(r.title).headline)}</strong></a>
+<span class="chip ${statusChip[r.status]}">${esc(chipText[r.status])}</span></div><span class="meta">${esc(r.reference)} · ${esc(r.agency ?? '')}${['requested', 'drafted'].includes(r.status) && r.created_at ? ` · usually ready by ${esc(nextBusinessDay(r.created_at))}` : ''}</span></li>`).join('')}</ul></section>` : '';
+  const creditCard = credits ? `<section class="panel hm-credits" aria-labelledby="hm-credit-h"><h2 id="hm-credit-h">${free ? 'Your first brief is free' : `You have ${creditWord(credits.balance)}`}</h2>
+<p class="small muted">${free ? 'Pick a tender with a price range and ask for a reviewed brief.' : `A reviewed brief uses ${creditWord(credits.perBrief ?? 1)}.`}</p>
+<p><a class="${credits.balance < (credits.perBrief ?? 1) ? 'btn primary' : 'small'}" href="/credits">${credits.balance < (credits.perBrief ?? 1) ? 'Buy credits' : 'Credits and history'}</a></p></section>` : '';
+  return layout({ title: 'Home', csrf, company: client.name, body: `${banner(flash, 'ok')}<div class="ck-head"><h1>Good ${greeting()}, ${esc(client.name)}</h1>
 <p class="sub">Open tenders in your categories, with what similar contracts were awarded for.</p></div>
-<div class="grid"><section class="panel"><header><h2>Open tenders for you</h2><span class="muted small">Updated ${esc(when(refreshedAt))}</span></header>${tenderList(matches, csrf, { matches: true })}</section>
-<div class="stack-gap"><section class="panel"><header><h2>Your briefs</h2></header>${requestRows}</section>
-<section class="panel"><header><h2>Your projects</h2><a class="small" href="/profile">Edit profile</a></header>${projectRows}</section>${pasteForm(csrf)}</div></div>` });
+<div class="ck-grid"><div class="ck-main">${requestRows}
+<section class="panel" aria-labelledby="hm-tenders"><header><h2 id="hm-tenders">Tenders for you</h2><span class="muted small">Updated ${esc(when(refreshedAt))}</span></header>${tenderList(matches, csrf, { matches: true, free })}
+<details class="hm-paste"><summary>Check a tender that isn't listed</summary>${pasteFields(csrf)}</details></section></div>
+<aside class="ck-side">${creditCard}
+<section class="panel" aria-labelledby="hm-projects-h"><header><h2 id="hm-projects-h">Your projects</h2><span class="muted small">${checked} of ${projects.length} checked</span></header>${projectRows}
+<p class="hm-edit"><a class="small" href="/profile">Edit profile and add projects</a></p></section></aside></div>` });
+}
+// One business day after the request, skipping weekends (public holidays are not known here, so this is "usually").
+const weekdayDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', weekday: 'short', day: 'numeric', month: 'short' });
+function nextBusinessDay(from) {
+  const date = new Date(from);
+  do date.setUTCDate(date.getUTCDate() + 1); while ([0, 6].includes(new Date(date.getTime() + 8 * 3600000).getUTCDay()));
+  return weekdayDay.format(date);
 }
 function greeting() {
   const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', hour: '2-digit', hour12: false }).format(new Date()));
@@ -663,7 +720,7 @@ export function renderCheckout({ tender, company, csrf, refusal, terms, category
 <section class="panel co-card" aria-labelledby="co-heading"><header><h2 id="co-heading">Your reviewed brief</h2><span class="muted small">for ${esc(company)}</span></header>
 <dl class="co-lines">${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>Cost</dt><dd>${free ? 'Free: your first brief' : `Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}`}</dd></div>
 <div><dt>Ready</dt><dd>Usually within one business day, after a person reviews it</dd></div>
-<div><dt>If we decline</dt><dd>The credit comes back</dd></div></dl>
+<div><dt>If we decline</dt><dd>${free ? 'Your free brief comes back' : 'The credit comes back'}</dd></div></dl>
 ${gaps.length ? `<div class="co-gaps" role="note"><p><strong>${free ? 'Before you use your free brief' : 'Before you spend a credit'}</strong></p><ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
 <p class="small"><a href="/profile">Improve your profile</a> or go ahead below.</p></div>` : ''}
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
@@ -684,18 +741,26 @@ ${outside ? `<p class="banner">This tender is outside the categories in your pro
 const reasonText = { welcome: 'Welcome credit', purchase: 'Bought credits', brief: 'Reviewed brief', refund: 'Credit returned', adjustment: 'Adjustment' };
 export function renderCredits({ company, csrf, credits, notice, noticeKind = 'bad' }) {
   const sgd = formatSgd;
+  const perBrief = credits.perBrief ?? 1;
   const list = credits.packs.find((p) => p.credits === 1)?.cents;
   const saving = (pack) => (list && pack.credits > 1 ? Math.round((1 - pack.cents / (pack.credits * list)) * 100) : 0);
-  const packs = credits.packs.map((pack) => `<li><div><strong>${creditWord(pack.credits)}</strong><span class="meta">${pack.credits === 1 ? sgd(pack.cents)
-    : `${sgd(pack.cents)} · ${sgd(Math.round(pack.cents / pack.credits))} a credit${saving(pack) > 0 ? ` · save ${saving(pack)}%` : ''}`}</span></div>
-<div class="row-actions"><form method="post" action="/credits/buy">${hidden('csrf', csrf)}${hidden('credits', pack.credits)}<button class="primary" type="submit">Buy ${pack.credits}</button></form></div></li>`).join('');
+  const briefs = (pack) => Math.floor(pack.credits / perBrief);
+  // Each pack says what it buys in briefs and what one brief costs in S$, because a "credit" means nothing on its own.
+  const ledger = credits.history ?? [];
+  const free = ledger.some((h) => h.reason === 'welcome') && !ledger.some((h) => h.reason === 'purchase' || h.reason === 'brief') && credits.balance >= perBrief;
+  // Nobody who has not yet read a brief is steered to the biggest pack.
+  const best = (pack) => !free && saving(pack) > 0 && saving(pack) === Math.max(...credits.packs.map(saving));
+  const packs = credits.packs.map((pack) => `<li class="cr-pack${best(pack) ? ' best' : ''}">
+<h3>${creditWord(pack.credits)}</h3><p class="cr-price num">${sgd(pack.cents)}</p>
+<p class="cr-each">${briefs(pack) === 1 ? 'One reviewed brief' : `${briefs(pack)} reviewed briefs · ${sgd(Math.round(pack.cents / briefs(pack)))} a brief`}${saving(pack) > 0 ? ` · save ${saving(pack)}%` : ''}</p>
+<form method="post" action="/credits/buy">${hidden('csrf', csrf)}${hidden('credits', pack.credits)}<button class="${best(pack) ? 'primary' : ''}" type="submit">Buy ${creditWord(pack.credits)}</button></form></li>`).join('');
   const history = credits.history.length ? `<ul class="feed">${credits.history.map((h) => `<li><div class="line"><strong>${esc(h.reason === 'purchase' ? `Bought ${creditWord(h.delta)}` : reasonText[h.reason] ?? h.reason)}</strong>
-<span class="num ${h.delta > 0 ? 'plus' : 'minus'}">${h.delta > 0 ? '+' : ''}${h.delta}</span></div><span class="meta">${esc(day(h.created_at))}${h.reference ? ` · ${esc(h.reference)} · ${esc(h.title ?? '')}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No credit activity yet.</p>';
-  return layout({ title: 'Credits', csrf, company, body: `${banner(notice, noticeKind)}<div><h1>You have ${creditWord(credits.balance)}</h1>
-<p class="sub">A reviewed brief uses ${creditWord(credits.perBrief)}. Credits don't expire, and a declined request gives its credit back.</p></div>
-<p class="testmode" role="note">Test mode: no card is charged</p>
-<div class="grid"><section class="panel"><header><h2>Buy credits</h2></header><ul class="tenders">${packs}</ul></section>
-<section class="panel"><header><h2>History</h2></header>${history}</section></div>` });
+<span class="num ${h.delta > 0 ? 'plus' : 'minus'}">${h.delta > 0 ? '+' : ''}${h.delta}</span></div><span class="meta">${esc(day(h.created_at))}${h.reference ? ` · ${esc(h.reference)} · ${esc(tenderParts(h.title ?? '').headline)}` : ''}</span></li>`).join('')}</ul>` : '<p class="empty">No credit activity yet.</p>';
+  return layout({ title: 'Credits', csrf, company, body: `${banner(notice, noticeKind)}<div class="ck-head"><h1>You have ${creditWord(credits.balance)}</h1>
+<p class="sub">${free ? 'That credit is your free first brief. ' : ''}A reviewed brief uses ${creditWord(perBrief)}. Credits don't expire, and a declined request gives its credit back.</p></div>
+<div class="ck-grid"><div class="ck-main"><section aria-labelledby="cr-buy"><h2 id="cr-buy" class="cr-heading">Buy credits</h2><ul class="cr-packs">${packs}</ul>
+<p class="cr-test small muted">Test mode: no card is charged. Credits are added straight away.</p></section></div>
+<aside class="ck-side"><section class="panel"><header><h2>History</h2></header>${history}</section></aside></div>` });
 }
 
 const statusChipFor = { met: ['done', '✓ Met'], partly_met: ['warning', '◐ Partly met'], gap: ['danger', '✕ Gap'] };
