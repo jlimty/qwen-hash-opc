@@ -191,7 +191,7 @@ test('a pasted tender goes through checkout too', async () => {
 test('checkout needs an account', async () => {
   const response = await browser('10.0.0.6').get('/checkout?tender=RPO000ETQ26000129');
   assert.equal(response.status, 303);
-  assert.equal(response.location, `${base}/signup`);
+  assert.equal(response.location, `${base}/signup?next=${encodeURIComponent('/checkout?tender=RPO000ETQ26000129')}`);
 });
 
 test("a customer cannot open another customer's request", async () => {
@@ -748,4 +748,52 @@ test('display titles drop GeBIZ boilerplate and capitals but keep acronyms and p
   const { displayTitle } = await import('../src/customer-view.mjs');
   assert.equal(displayTitle('INVITATION TO QUOTE FOR THE PROVISION OF CLEANING SERVICES AT TAMAN JURONG FOR MOH'), 'Cleaning services at Taman Jurong for MOH');
   assert.equal(displayTitle('Audit services for a council'), 'Audit services for a council');
+});
+
+test('the tender a visitor checked comes back after sign-up and profile, at its checkout', async () => {
+  const b = browser('10.0.4.1');
+  await b.get('/');
+  const check = await b.post('/check', { tender_no: 'RPO000ETQ26000129', terms: 'audit' });
+  const href = /href="([^"]*\/signup\?next=[^"]+)"/.exec(check.text)?.[1].replaceAll('&amp;', '&');
+  assert.ok(href, 'the free brief button carries the tender');
+  const signup = await b.get(href.slice(base.length));
+  assert.match(signup.text, /Next: your free brief/);
+  assert.match(signup.text, /Audit Certification Services/);
+  assert.match(signup.text, /Your first reviewed brief is free/);
+  assert.ok(b.jar.get('td_next'), 'the tender is kept while they sign up');
+  const email = `next-${randomBytes(3).toString('hex')}@sme.example`;
+  const made = await b.post('/signup', { email, password: 'a long password', name: 'Owner' });
+  assert.equal(made.location, `${base}/profile`);
+  await b.get('/profile');
+  const saved = await b.post('/profile', { name: `Nextco ${randomBytes(3).toString('hex')}`, uen: testUen(), capabilities: 'Audits.', categories: 'other', team_size: '4', max_contract: '300,000' });
+  assert.equal(saved.status, 303);
+  assert.match(saved.location, new RegExp(`^${base}/checkout\\?tender=RPO000ETQ26000129&terms=audit`));
+  const checkout = await b.get(saved.location.slice(base.length));
+  assert.equal(checkout.status, 200);
+  assert.match(checkout.text, /RPO000ETQ26000129/);
+  assert.equal(b.jar.get('td_next'), undefined, 'reaching checkout clears the saved tender');
+  // Signing in again later goes home, not back to the old tender.
+  assert.equal((await b.post('/signout', {})).status, 303);
+  await b.get('/signin');
+  assert.equal((await b.post('/signin', { email, password: 'a long password' })).location, `${base}/home`);
+});
+
+test('sign-in with a saved tender lands on its checkout; a pasted tender comes back by title', async () => {
+  const b = await signedUpCustomer('Yarrow');
+  const pasted = `/checkout?${new URLSearchParams({ title: 'Audit certification for a museum board', agency: 'Agency M', terms: 'audit', category: 'other' })}`;
+  const page = await b.get(pasted);
+  assert.equal(page.status, 200);
+  assert.match(page.text, /Audit certification for a museum board/);
+  const visitor = browser('10.0.4.2');
+  const signin = await visitor.get(`/signin?next=${encodeURIComponent('/checkout?tender=RPO000ETQ26000129')}`);
+  assert.equal(signin.status, 200);
+  assert.ok(visitor.jar.get('td_next'));
+});
+
+test('only a checkout path inside the app is kept as the next page', async () => {
+  for (const next of ['https://evil.example/checkout?x=1', '//evil.example', '/home', '/checkout?x=1\\\\evil']) {
+    const b = browser('10.0.4.3');
+    await b.get(`/signup?next=${encodeURIComponent(next)}`);
+    assert.equal(b.jar.get('td_next'), undefined, next);
+  }
 });

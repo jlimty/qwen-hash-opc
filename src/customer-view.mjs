@@ -73,6 +73,13 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 .wrap.wide{max-width:74rem;gap:2.75rem}
+.su-grid{display:grid;grid-template-columns:minmax(0,30rem) minmax(0,20rem);gap:1.25rem;align-items:start}
+.su-aside{padding:1.25rem;display:grid;gap:.75rem}
+.su-aside h2{font-size:1rem}
+.su-tender{font-weight:600;line-height:1.4}
+.su-steps{margin:0;padding-left:1.25rem;display:grid;gap:.35rem;font-size:.875rem;color:var(--muted)}
+.su-price{font-size:.875rem}
+@media (max-width:760px){.su-grid{grid-template-columns:1fr}}
 .rp-hero{overflow:hidden}
 .rp-verdict{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;padding:1.1rem 1.5rem;border-bottom:1px solid var(--line)}
 .rp-verdict.bid{background:var(--ok-bg);color:var(--ok)}.rp-verdict.nobid{background:var(--warn-bg);color:var(--warn)}
@@ -382,7 +389,8 @@ ${snap.top_agencies?.length ? `<p class="ck-who">Bought by ${esc(snap.top_agenci
     : company
       ? (tender.tender_no && !tender.pasted ? `<a class="btn primary" href="/checkout?${esc(checkoutQuery)}">Ask for a reviewed brief · 1 credit</a>`
         : `<form method="post" action="/checkout/start">${hidden('csrf', csrf)}${keep}${hidden('terms', termsValue)}${hidden('category', category)}<button class="primary" type="submit">Ask for a reviewed brief · 1 credit</button></form>`)
-      : '<a class="btn primary" href="/signup">Get your first brief free</a><p class="small muted">Create an account with your work email and company UEN.</p>';
+      : `<a class="btn primary" href="/signup?next=${esc(encodeURIComponent(tender.tender_no && !tender.pasted ? `/checkout?${checkoutQuery}`
+        : `/checkout?${new URLSearchParams({ title: tender.title ?? '', agency: tender.agency ?? '', terms: termsValue, category }).toString()}`))}">Get your first brief free</a><p class="small muted">Create an account with your work email and company UEN. We bring you back to this tender.</p>`;
   const meta = [tender.agency ? esc(tender.agency) : '', tender.tender_no && !tender.pasted ? `<span class="num">${esc(tender.tender_no)}</span>` : '',
     tender.closes_at ? `<span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''].filter(Boolean).join(' · ');
   return layout({ title: 'Price check', csrf, company, wide: true, body: `<div class="ck-head"><h1>${esc(displayTitle(tender.title))}</h1>${meta ? `<p class="sub">${meta}</p>` : ''}</div>
@@ -394,20 +402,27 @@ ${banner(notice, 'ok')}
 <div class="ck-next">${next}</div><p class="small"><a href="/sample">See a sample brief</a></p></aside></div>` });
 }
 
-export function renderSignup({ csrf, message }) {
-  return layout({ title: 'Create an account', csrf, body: `<section class="panel narrow"><header><h2>Create an account</h2></header>
+export function renderSignup({ csrf, message, pending, prices }) {
+  const free = prices && prices.welcome >= prices.perBrief;
+  const aside = `<aside class="panel su-aside" aria-labelledby="su-next"><h2 id="su-next">${pending ? 'Next: your free brief' : 'What you get'}</h2>
+${pending ? `<p class="su-tender">${esc(displayTitle(pending.title))}</p>` : ''}
+<ol class="su-steps"><li>Confirm your email</li><li>Tell us about your company, with its UEN</li><li>${pending ? 'Back to this tender to ask for your brief' : 'Pick a tender and ask for a reviewed brief'}</li></ol>
+${prices ? `<p class="su-price">${free ? `Your first reviewed brief is free, one per company. After that, ${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.` : `${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.`}</p>` : ''}
+<p class="small"><a href="/sample">See a sample brief</a></p></aside>`;
+  return layout({ title: 'Create an account', csrf, body: `<div class="su-grid"><section class="panel"><header><h2>Create an account</h2></header>
 <form class="form" method="post" action="/signup">${hidden('csrf', csrf)}${banner(message)}
 <label for="name">Your name</label><input id="name" name="name" autocomplete="name" maxlength="100" required>
 <label for="email">Work email</label><input id="email" name="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
 <span class="hint">At least 8 characters.</span>
 <div><button class="primary" type="submit">Create account</button></div>
-<p class="small">Already have an account? <a href="/signin">Sign in</a></p></form></section>` });
+<p class="small">Already have an account? <a href="/signin">Sign in</a></p></form></section>${aside}</div>` });
 }
 
-export function renderCheckEmail({ csrf, email }) {
+export function renderCheckEmail({ csrf, email, pending }) {
   return layout({ title: 'Check your email', csrf, body: `<section class="panel narrow"><header><h2>Check your email</h2></header>
 <div class="form"><p>We sent a link to <strong>${esc(email)}</strong>. Open it to confirm your email, then sign in to set up your company.</p>
+${pending ? `<p>After that we bring you back to <strong>${esc(displayTitle(pending.title))}</strong> for your free brief.</p>` : ''}
 <p class="small muted">No email after a few minutes? Check spam, or sign in and we will send a new link.</p>
 <div><a class="btn primary" href="/signin">Go to sign in</a></div></div></section>` });
 }

@@ -146,6 +146,23 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     const company = customer ? (await customer.context()).client.name : undefined;
     if (customer) balance = (await customer.credits()).balance;
     const sessionCookie = (session) => `td_customer=${encodeURIComponent(session)}; ${cookieFlags}; Max-Age=${sessionSeconds}`;
+    // The tender a visitor was looking at when they chose to sign up: kept for a day in its own cookie, through sign-up,
+    // email confirmation, sign-in and the profile, then the customer lands on that tender's checkout. Only a checkout
+    // path inside this app is ever kept, so it cannot redirect anywhere else.
+    const safeNext = (value) => { const v = String(value ?? ''); return v.startsWith('/checkout?') && v.length <= 1500 && !/[\\\s]|\/\//.test(v) ? v : undefined; };
+    let savedNext;
+    try { savedNext = safeNext(decodeURIComponent(cookieValue(cookieHeader, 'td_next') ?? '')); } catch { savedNext = undefined; }
+    const keepNext = (value) => `td_next=${encodeURIComponent(value)}; ${cookieFlags}; Max-Age=86400`;
+    const dropNext = `td_next=; Max-Age=0; ${cookieFlags}`;
+    async function pendingTender(next) {
+      if (!next) return undefined;
+      const params = new URLSearchParams(next.slice(next.indexOf('?') + 1));
+      const row = params.get('tender') ? await getOpenTender(database, params.get('tender')) : undefined;
+      const title = row?.title ?? params.get('title');
+      return title ? { title } : undefined;
+    }
+    const signupPage = async (status, { message, next = savedNext, cookies = [] } = {}) => html(status,
+      renderSignup({ csrf, message, pending: await pendingTender(next), prices: await creditSettings(database).catch(() => undefined) }), { cookies });
 
     let form;
     if (post) {
@@ -200,21 +217,30 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     }
 
     if (path === '/sample' && !post) return html(200, renderSample({ csrf, company }));
-    if (path === '/signup' && !post) return customer ? redirect('/home') : html(200, renderSignup({ csrf }));
+    if (path === '/signup' && !post) {
+      const next = safeNext(url.searchParams.get('next')) ?? savedNext;
+      if (customer) return redirect(next ?? '/home', { cookies: next ? [dropNext] : [] });
+      return signupPage(200, { next, cookies: next && next !== savedNext ? [keepNext(next)] : [] });
+    }
     if (path === '/signup' && post) {
       let result;
       try { result = await auth.signUp({ email: form.get('email'), password: form.get('password'), name: form.get('name'), callbackPath: `${basePath}/signin` }); } catch { result = { ok: false, message: 'Sign-up is unavailable right now. Try again shortly.' }; }
-      if (!result.ok) return html(400, renderSignup({ csrf, message: result.message }));
+      if (!result.ok) return signupPage(400, { message: result.message });
       // Email verification on: the account exists but signs in only after the link is clicked.
-      if (!result.session) return html(200, renderCheckEmail({ csrf, email: String(form.get('email') ?? '').trim() }));
+      if (!result.session) return html(200, renderCheckEmail({ csrf, email: String(form.get('email') ?? '').trim(), pending: await pendingTender(savedNext) }));
       return redirect('/profile', { cookies: [sessionCookie(result.session)] });
     }
-    if (path === '/signin' && !post) return customer ? redirect('/home') : html(200, renderSignin({ csrf }));
+    if (path === '/signin' && !post) {
+      const next = safeNext(url.searchParams.get('next'));
+      if (customer) return redirect(next ?? savedNext ?? '/home');
+      return html(200, renderSignin({ csrf }), { cookies: next ? [keepNext(next)] : [] });
+    }
     if (path === '/signin' && post) {
       let result;
       try { result = await auth.signIn({ email: form.get('email'), password: form.get('password') }); } catch { result = { ok: false, message: 'Sign-in is unavailable right now. Try again shortly.' }; }
       if (!result.ok) return html(401, renderSignin({ csrf, message: result.message }));
-      return redirect('/home', { cookies: [sessionCookie(result.session)] });
+      // A customer with no profile yet is sent to it first; the saved tender waits until the profile is done.
+      return redirect(savedNext ?? '/home', { cookies: [sessionCookie(result.session)] });
     }
     if (path === '/signout' && post) {
       if (rawSession) { try { await auth.signOut(decodeURIComponent(rawSession)); } catch { /* a malformed cookie is simply cleared */ } }
@@ -222,7 +248,10 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     }
 
     // Everything below needs a signed-in account.
-    if (!userId) return redirect(path === '/checkout' || path === '/checkout/start' ? '/signup' : '/signin');
+    if (!userId) {
+      if (path === '/checkout' && !post && safeNext(`${path}${url.search}`)) return redirect(`/signup?next=${encodeURIComponent(`${path}${url.search}`)}`);
+      return redirect(path === '/checkout' || path === '/checkout/start' ? '/signup' : '/signin');
+    }
     // Profile help: look up the company's own GeBIZ awards and (for a new profile) read pasted text into a draft.
     // It only fills the form; the customer checks and saves it.
     if (path === '/profile/assist' && post) {
@@ -259,7 +288,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       }
       const created = await desk.registerCustomer(userId, parsed.profile);
       if (created.outcome !== 'allowed') return html(400, renderProfile({ csrf, message: created.reason, values }));
-      return redirect('/home');
+      return redirect(savedNext ?? '/home', { cookies: savedNext ? [dropNext] : [] });
     }
     if (!customer) return redirect('/profile');
 
@@ -286,9 +315,12 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     if ((path === '/checkout' && !post) || path === '/checkout/start') {
       const params = post ? form : url.searchParams;
       let tender;
-      if (!post) {
+      if (!post && !url.searchParams.get('tender') && url.searchParams.get('title')) {
+        // A pasted tender carried through sign-up: its title and agency come back in the link (the pasted text does not).
+        tender = { pasted: true, title: String(url.searchParams.get('title')).trim().slice(0, 300), agency: String(url.searchParams.get('agency') ?? '').trim().slice(0, 250), text: '' };
+      } else if (!post) {
         tender = await getOpenTender(database, String(url.searchParams.get('tender') ?? ''));
-        if (!tender) return redirect('/home');
+        if (!tender) return redirect('/home', { cookies: savedNext ? [dropNext] : [] });
       } else {
         const title = String(form.get('title') ?? '').trim().slice(0, 300);
         if (!title) return redirect('/home');
@@ -307,7 +339,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
       const gaps = profileGaps({ client: profile.client, projects: profile.projects, terms });
       const outside = !profile.client.categories.includes(category);
       return html(200, renderCheckout({ tender, company, csrf, refusal, terms, category, gaps, outside, credits: await customer.credits(),
-        requirements: post ? String(form.get('requirements') ?? '').slice(0, 4000) : '' }));
+        requirements: post ? String(form.get('requirements') ?? '').slice(0, 4000) : '' }), { cookies: savedNext ? [dropNext] : [] });
     }
     if (path === '/checkout' && post) {
       const tenderNo = String(form.get('tender_no') ?? '').trim();
