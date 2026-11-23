@@ -797,3 +797,41 @@ test('only a checkout path inside the app is kept as the next page', async () =>
     assert.equal(b.jar.get('td_next'), undefined, next);
   }
 });
+
+test('long GeBIZ titles split into a headline and labelled facts; short ones stay whole', async () => {
+  const { tenderParts } = await import('../src/customer-view.mjs');
+  const polyclinic = tenderParts('INVITATION TO QUOTE FOR THE PROVISION OF REGISTERED INSPECTOR (ARCHITECTURAL) CONSULTANCY SERVICES FOR THE PROPOSED 4-STOREY POLYCLINIC AND KIDNEY DIALYSIS CENTRE WITH 1 BASEMENT ON LOT 05141C MK 06 AT TAMAN JURONG, SINGAPORE');
+  assert.equal(polyclinic.headline, 'Registered inspector (architectural) consultancy services');
+  assert.deepEqual(polyclinic.facts, [{ label: 'For', value: 'Proposed 4-storey polyclinic and kidney dialysis centre with 1 basement' },
+    { label: 'At', value: 'Taman Jurong' }, { label: 'Lot', value: '05141C MK 06' }]);
+  const audit = tenderParts('Quotation for Provision of Audit Certification Services for a period of 2 years with an option to extend for another year for OFN');
+  assert.equal(audit.headline, 'Audit Certification Services');
+  assert.deepEqual(audit.facts.find((f) => f.label === 'Period'), { label: 'Period', value: '2 years, option to extend another year' });
+  assert.deepEqual(tenderParts('Audit certification for a museum board'), { headline: 'Audit certification for a museum board', facts: [] });
+});
+
+test('slow forms get a working state from a same-origin script the page policy allows', async () => {
+  const b = browser('10.0.4.9');
+  const landing = await b.get('/');
+  assert.match(landing.text, new RegExp(`<script src="${base}/app.js" defer></script>`));
+  assert.match(landing.headers.get('content-security-policy'), /script-src 'self'/);
+  const script = await b.get('/app.js');
+  assert.equal(script.status, 200);
+  assert.match(script.headers.get('content-type'), /javascript/);
+  assert.match(script.text, /Checking prices…/);
+});
+
+test('the new-profile form shows two project rows and folds the rest; checkout folds the optional requirements', async () => {
+  const b = browser('10.0.4.10');
+  await b.get('/signup');
+  await b.post('/signup', { email: `light-${randomBytes(3).toString('hex')}@sme.example`, password: 'a long password', name: 'Owner' });
+  const blank = await b.get('/profile');
+  const fold = blank.text.indexOf('<details class="more-projects"');
+  assert.ok(fold > blank.text.indexOf('name="project_title_1"') && fold < blank.text.indexOf('name="project_title_2"'));
+  const shopper = await signedUpCustomer('Lightco');
+  const tenderNo = `LIGHT${randomBytes(3).toString('hex').toUpperCase()}`;
+  await db.query(`INSERT INTO tender_desk.open_tenders (tender_no,title,agency,closes_at,gebiz_url,source_feed,category,terms)
+    VALUES ($1,'Audit services for a council','Agency A','2026-12-04T05:00:00Z','https://www.gebiz.gov.sg/x','Professional Services','other',$2)`, [tenderNo, ['audit']]);
+  const checkout = await shopper.get(`/checkout?tender=${tenderNo}&terms=audit`);
+  assert.match(checkout.text, /<details class="co-reqs"><summary>Add the tender's key requirements \(optional\)<\/summary>/);
+});

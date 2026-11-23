@@ -3,7 +3,7 @@
 // page's CSRF token, matched against a cookie scoped to this app.
 import { randomBytes } from 'node:crypto';
 import { consoleCss } from './console-css.mjs';
-import { assistantCss, creditWord, landingProof, layout, renderCheck, renderCheckEmail, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
+import { assistantCss, assistantJs, creditWord, landingProof, layout, renderCheck, renderCheckEmail, renderCheckout, renderCredits, renderSample, renderHome, renderLanding, renderProfile, renderRequest, renderSignin, renderSignup } from './customer-view.mjs';
 import { feedRefreshedAt, getOpenTender, listOpenTenders } from './gebiz-feed.mjs';
 import { cleanTerms, fitFacts, pastedTenderNo, priceCheck } from './price-check.mjs';
 import { parseReference } from './references.mjs';
@@ -21,7 +21,7 @@ const customerChecksPerHour = 60;
 const sessionSeconds = 7 * 24 * 60 * 60;
 const securityHeaders = {
   'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'same-origin',
-  'Content-Security-Policy': "default-src 'none'; style-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  'Content-Security-Policy': "default-src 'none'; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
 };
 const css = consoleCss + assistantCss;
 
@@ -62,7 +62,7 @@ export function profileFromForm(form) {
 export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, database, basePath = '', secureCookies = false, refresh, waitUntil, now = () => new Date() }) {
   const cookieFlags = `HttpOnly; SameSite=Lax; Path=${basePath || '/'}${secureCookies ? '; Secure' : ''}`;
   const checks = new Map();
-  const withBase = (html) => (basePath ? html.replaceAll('href="/', `href="${basePath}/`).replaceAll('action="/', `action="${basePath}/`) : html);
+  const withBase = (html) => (basePath ? html.replaceAll('href="/', `href="${basePath}/`).replaceAll('action="/', `action="${basePath}/`).replaceAll('src="/', `src="${basePath}/`) : html);
   const respond = (status, type, body, { headers = {}, cookies = [] } = {}) => {
     const response = new Response(body, { status, headers: { 'Content-Type': type, ...securityHeaders, ...headers } });
     for (const cookie of cookies) response.headers.append('Set-Cookie', cookie);
@@ -128,6 +128,7 @@ export function createCustomerHandler({ desk, dataset, auth, llm, models = {}, d
     const post = request.method === 'POST';
     if (request.method !== 'GET' && !post) return text(405, 'Method not allowed');
     if (path === '/app.css' && !post) return respond(200, 'text/css; charset=utf-8', css);
+    if (path === '/app.js' && !post) return respond(200, 'text/javascript; charset=utf-8', assistantJs);
     const cookieHeader = request.headers.get('cookie');
     const existingCsrf = cookieValue(cookieHeader, 'td_ccsrf');
     const csrf = /^[a-f0-9]{64}$/.test(existingCsrf ?? '') ? existingCsrf : randomBytes(32).toString('hex');

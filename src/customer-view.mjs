@@ -73,6 +73,33 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 .verdict.bid{background:var(--ok-bg);color:var(--ok)}
 .verdict.nobid{background:var(--warn-bg);color:var(--warn)}
 .wrap.wide{max-width:74rem;gap:2.75rem}
+.co-lines{display:grid;gap:.5rem;padding:1rem 1.25rem;margin:0}
+.co-lines div{display:grid;grid-template-columns:7rem minmax(0,1fr);gap:1rem}
+.co-lines dt{color:var(--muted);font-size:.875rem}.co-lines dd{margin:0;font-weight:500}
+.co-gaps{margin:0 1.25rem;padding:.75rem 1rem;border:1px solid #E8C27A;background:var(--warn-bg);border-radius:8px;display:grid;gap:.35rem}
+.co-gaps .bullets{padding:0 0 0 1.25rem;gap:.25rem}
+.co-card .form{padding:1rem 1.25rem 1.25rem}
+details.co-reqs summary{cursor:pointer;font-size:.875rem;font-weight:550;color:var(--accent-dark);padding:.25rem 0}
+details.co-reqs[open]{display:grid;gap:.5rem}
+.co-pay{min-height:2.75rem;padding:0 1.5rem;font-size:.9375rem}
+.co-contains{padding:0 0 0 1.25rem;font-size:.875rem;gap:.3rem}
+@media (max-width:760px){.co-lines div{grid-template-columns:1fr;gap:0}}
+.form .pair{display:grid;grid-template-columns:1fr 1fr;gap:.75rem 1rem}
+.form .field{display:grid;gap:.35rem;align-content:start}
+details.more-projects summary{cursor:pointer;padding:.5rem 0;font-size:.875rem;font-weight:550;color:var(--accent-dark)}
+@media (max-width:760px){.form .pair{grid-template-columns:1fr}}
+button.is-busy{cursor:progress;opacity:.8;gap:.5rem}
+button.is-busy:not(.lp-row)::before{content:"";width:.9em;height:.9em;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+.lp-row.is-busy{background:var(--side)}
+@keyframes spin{to{transform:rotate(1turn)}}
+@media (prefers-reduced-motion:reduce){button.is-busy::before{animation-duration:2.4s}}
+.tt-headline{text-wrap:balance}
+.tt-facts{display:flex;flex-wrap:wrap;gap:.25rem 1.25rem;margin-top:.35rem;font-size:.9375rem;color:var(--ink)}
+.tt-label{color:var(--muted);font-weight:600;margin-right:.15rem}
+.tt-fact{max-width:100%}
+.tt-row{font-size:.8125rem;gap:.15rem 1rem;margin-top:.25rem}
+.tt-row .tt-fact{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}
+.su-tender .tt-headline{font-weight:650;line-height:1.35}.su-tender .tt-facts{display:grid;gap:.2rem;font-size:.8125rem}
 .su-grid{display:grid;grid-template-columns:minmax(0,30rem) minmax(0,20rem);gap:1.25rem;align-items:start}
 .su-aside{padding:1.25rem;display:grid;gap:.75rem}
 .su-aside h2{font-size:1rem}
@@ -200,6 +227,40 @@ details.awards summary{cursor:pointer;padding:.75rem 1rem;font-weight:600;color:
 @media (max-width:760px){.stats{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0}.proj{grid-template-columns:1fr}.tenders li{grid-template-columns:1fr}.wrap{padding:1rem 1rem 3rem}.top{padding:.6rem 1rem}}
 `;
 
+// The one script on the customer pages, and only an enhancement: every form works without it. On submit it marks the
+// form busy, puts a "working" label on its button and ignores a second press, because the free check and the profile
+// assistant wait on the AI for a few seconds. Served from this app, so the page's CSP allows it as script-src 'self'.
+const busyLabels = [['/profile/assist', 'Reading and looking up GeBIZ…'], ['/checkout/start', 'Opening checkout…'], ['/checkout', 'Sending your request…'],
+  ['/check', 'Checking prices…'], ['/signup', 'Creating your account…'], ['/signin', 'Signing in…'], ['/profile', 'Saving…'], ['/credits/buy', 'Buying…'], ['/resubmit', 'Resubmitting…']];
+export const assistantJs = `const labels = ${JSON.stringify(busyLabels)};
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement) || event.defaultPrevented) return;
+  if (form.dataset.sent) { event.preventDefault(); return; }
+  const path = new URL(form.action, location.href).pathname;
+  const label = labels.find(([end]) => path.endsWith(end));
+  if (!label) return;
+  form.dataset.sent = '1';
+  form.setAttribute('aria-busy', 'true');
+  const button = event.submitter || form.querySelector('button[type=submit], button:not([type])');
+  if (!button) return;
+  button.setAttribute('aria-disabled', 'true');
+  button.classList.add('is-busy');
+  const target = button.querySelector('.lp-cta, .lp-median') || button;
+  target.dataset.label = target.textContent;
+  target.textContent = label[1];
+});
+addEventListener('pageshow', (event) => {
+  if (!event.persisted) return;
+  for (const form of document.querySelectorAll('form[data-sent]')) {
+    delete form.dataset.sent;
+    form.removeAttribute('aria-busy');
+    for (const el of form.querySelectorAll('[data-label]')) { el.textContent = el.dataset.label; delete el.dataset.label; }
+    for (const b of form.querySelectorAll('.is-busy')) { b.classList.remove('is-busy'); b.removeAttribute('aria-disabled'); }
+  }
+});
+`;
+
 const dateOnly = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric' });
 const dateTime = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 export const day = (value) => (value ? dateOnly.format(new Date(value)) : '');
@@ -218,7 +279,7 @@ export function layout({ title, csrf, company, body, signedIn, wide = false }) {
     : '<a href="/sample">Sample brief</a><a href="/signin">Sign in</a><a class="btn primary" href="/signup">Create an account</a>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} · Tender Desk</title><link rel="stylesheet" href="/app.css"></head><body>
+<title>${esc(title)} · Tender Desk</title><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head><body>
 <header class="top"><a class="brand" href="/">${mark}<span>Tender Desk</span></a><nav aria-label="Main">${company ? `<span class="muted small">${esc(company)}</span>` : ''}${nav}</nav></header>
 <main class="wrap${wide ? ' wide' : ''}">${body}</main></body></html>`;
 }
@@ -238,7 +299,8 @@ function tenderList(tenders, csrf, { matches } = {}) {
     const fit = item.fit ? [item.fit.category_match ? 'In your categories' : null,
       item.fit.within_capacity === false ? 'Median is above your largest contract' : item.fit.within_capacity ? 'Within your capacity' : null,
       item.fit.related_projects ? `${plural(item.fit.related_projects, 'related verified project')}` : null].filter(Boolean).join(' · ') : '';
-    return `<li><div><strong>${esc(displayTitle(tender.title))}</strong>
+    const parts = tenderParts(tender.title);
+    return `<li><div><strong>${esc(parts.headline)}</strong>${parts.facts.length ? `<span class="tt-facts tt-row">${factsLine(parts.facts)}</span>` : ''}
 <span class="meta">${esc(tender.agency)} · <span class="num">${esc(tender.tender_no)}</span>${tender.closes_at ? ` · closes ${esc(day(tender.closes_at))}` : ''}${item.closesInDays !== undefined && item.closesInDays <= 3 ? ` <span class="chip warning">Closes in ${item.closesInDays} day${item.closesInDays === 1 ? '' : 's'}</span>` : ''}</span>
 ${summary ? `<span class="meta">${esc(summary)}</span>` : ''}${fit ? `<span class="meta">${esc(fit)}</span>` : ''}</div>
 <div class="row-actions"><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', tender.tender_no)}<button type="submit">Free price check</button></form>
@@ -265,6 +327,49 @@ export function displayTitle(raw) {
   }
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
+// GeBIZ titles pack the service, the site, the place and the contract period into one sentence. Split the common
+// patterns into a short headline and labelled facts; anything that does not match stays in the headline, unchanged.
+const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
+const tidy = (text) => text.replace(/\s+/g, ' ').replace(/^[\s,;:-]+|[\s,;:-]+$/g, '').trim();
+export function tenderParts(raw) {
+  const whole = displayTitle(raw);
+  // Short titles already read well; only long ones are split.
+  if (whole.length <= 70) return { headline: whole, facts: [] };
+  let rest = whole;
+  const facts = [];
+  // Contract period: "(2-year firm period + 1 year optional period)" or "for a period of 2 years with an option to extend for another year".
+  const bracket = /\s*\(([^()]*\b(?:years?|months?)\b[^()]*)\)/i.exec(rest);
+  if (bracket) { facts.push({ label: 'Period', value: tidy(bracket[1]) }); rest = rest.replace(bracket[0], ''); }
+  const period = /,?\s*for\s+(?:a\s+)?(?:contract\s+)?period\s+of\s+([^,;()]+?)(?:\s+with\s+(?:an?\s+)?option\s+to\s+(?:extend|renew)\s+(?:for\s+)?([^,;()]+?))?(?=\s+for\s|\s+at\s|[,;]|$)/i.exec(rest);
+  if (period) {
+    facts.push({ label: 'Period', value: `${capital(tidy(period[1]))}${period[2] ? `, option to extend ${tidy(period[2])}` : ''}` });
+    rest = rest.replace(period[0], '');
+  }
+  const option = /,?\s*and\s+an?\s+option\s+for\s+(.+)$/i.exec(rest);
+  if (option) { facts.push({ label: 'Option', value: capital(tidy(option[1])) }); rest = rest.replace(option[0], ''); }
+  const lot = /\s*on\s+lot\s+([0-9a-z]+(?:\s+mk\s*\d+)?)/i.exec(rest);
+  if (lot) rest = rest.replace(lot[0], '');
+  const place = /\s+at\s+([^,()]+?)(?:,\s*singapore)?$/i.exec(rest);
+  const placed = place && place[1].split(' ').length <= 5;
+  if (placed) rest = rest.replace(place[0], '');
+  // What the work is for: "<service> for ..." or "<service> to ...", else the first "for ..." after a few words.
+  const purpose = /^(.{3,}?\b(?:services?|works?|systems?|solutions?|consultancy|supply|maintenance|management|delivery|production))\s+(for|to)\s+(?:the\s+|an?\s+)?(.+)$/i.exec(rest)
+    ?? /^(.{12,}?)\s+(for)\s+(?:the\s+|an?\s+)?(.+)$/i.exec(rest);
+  let headline = rest;
+  if (purpose) {
+    headline = purpose[1];
+    facts.unshift({ label: capital(purpose[2].toLowerCase()), value: capital(tidy(purpose[3])) });
+  }
+  if (placed) facts.push({ label: 'At', value: capital(tidy(place[1])) });
+  if (lot) facts.push({ label: 'Lot', value: lot[1].toUpperCase() });
+  headline = capital(tidy(headline));
+  return headline.split(' ').length >= 2 ? { headline, facts } : { headline: whole, facts: [] };
+}
+const factsLine = (facts) => facts.map((f) => `<span class="tt-fact"><span class="tt-label">${esc(f.label)}</span> ${esc(f.value)}</span>`).join('');
+export const titleBlock = (raw, tag = 'h1') => {
+  const { headline, facts } = tenderParts(raw);
+  return `<${tag} class="tt-headline">${esc(headline)}</${tag}>${facts.length ? `<p class="tt-facts">${factsLine(facts)}</p>` : ''}`;
+};
 const tenderKind = (tenderNo) => (/ETQ/.test(tenderNo ?? '') ? 'ITQ' : /ETT/.test(tenderNo ?? '') ? 'ITT' : '');
 const shortDay = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short' });
 const yearOf = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Singapore', year: 'numeric' });
@@ -274,10 +379,11 @@ const arrow = '<svg class="lp-arrow" viewBox="0 0 24 24" fill="none" stroke="cur
 function closingRow(row, csrf) {
   const closes = row.closes_at ? new Date(row.closes_at) : undefined;
   const kind = tenderKind(row.tender_no);
+  const parts = tenderParts(row.title);
   const right = row.median_cents ? `<span class="lp-median num"><strong>${wholeSgd(row.median_cents)}</strong><span>median award</span></span>` : '<span class="lp-cta">Check price</span>';
   return `<li><form method="post" action="/check">${hidden('csrf', csrf)}${hidden('tender_no', row.tender_no)}<button class="lp-row" type="submit">
 <span class="lp-close num">${closes ? `<strong>${esc(shortDay.format(closes))}</strong><span>${esc(yearOf.format(closes))} · closes</span>` : '<strong>Open</strong><span>no closing date</span>'}</span>
-<span class="lp-body"><span class="lp-title">${esc(displayTitle(row.title))}</span><span class="lp-meta"><span>${esc(row.agency)}</span>${kind ? `<span class="lp-kind">${kind}</span>` : ''}<span class="lp-ref num">${esc(row.tender_no)}</span></span></span>
+<span class="lp-body"><span class="lp-title">${esc(parts.headline)}</span>${parts.facts.length ? `<span class="tt-facts tt-row">${factsLine(parts.facts)}</span>` : ''}<span class="lp-meta"><span>${esc(row.agency)}</span>${kind ? `<span class="lp-kind">${kind}</span>` : ''}<span class="lp-ref num">${esc(row.tender_no)}</span></span></span>
 ${right}${arrow}</button></form></li>`;
 }
 
@@ -393,7 +499,7 @@ ${snap.top_agencies?.length ? `<p class="ck-who">Bought by ${esc(snap.top_agenci
         : `/checkout?${new URLSearchParams({ title: tender.title ?? '', agency: tender.agency ?? '', terms: termsValue, category }).toString()}`))}">Get your first brief free</a><p class="small muted">Create an account with your work email and company UEN. We bring you back to this tender.</p>`;
   const meta = [tender.agency ? esc(tender.agency) : '', tender.tender_no && !tender.pasted ? `<span class="num">${esc(tender.tender_no)}</span>` : '',
     tender.closes_at ? `<span class="nowrap">closes ${esc(day(tender.closes_at))}</span>` : ''].filter(Boolean).join(' · ');
-  return layout({ title: 'Price check', csrf, company, wide: true, body: `<div class="ck-head"><h1>${esc(displayTitle(tender.title))}</h1>${meta ? `<p class="sub">${meta}</p>` : ''}</div>
+  return layout({ title: 'Price check', csrf, company, wide: true, body: `<div class="ck-head">${titleBlock(tender.title)}${meta ? `<p class="sub">${meta}</p>` : ''}</div>
 ${banner(notice, 'ok')}
 <div class="ck-grid"><div class="ck-main"><section class="panel ck-result" aria-label="Free price check">${answer}${refine}</section>${awards}
 <p class="ck-limits">${esc(priceLimits)}</p></div>
@@ -405,7 +511,7 @@ ${banner(notice, 'ok')}
 export function renderSignup({ csrf, message, pending, prices }) {
   const free = prices && prices.welcome >= prices.perBrief;
   const aside = `<aside class="panel su-aside" aria-labelledby="su-next"><h2 id="su-next">${pending ? 'Next: your free brief' : 'What you get'}</h2>
-${pending ? `<p class="su-tender">${esc(displayTitle(pending.title))}</p>` : ''}
+${pending ? `<div class="su-tender">${titleBlock(pending.title, 'p')}</div>` : ''}
 <ol class="su-steps"><li>Confirm your email</li><li>Tell us about your company, with its UEN</li><li>${pending ? 'Back to this tender to ask for your brief' : 'Pick a tender and ask for a reviewed brief'}</li></ol>
 ${prices ? `<p class="su-price">${free ? `Your first reviewed brief is free, one per company. After that, ${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.` : `${esc(wholeSgd(prices.priceCents))} a brief, or less in packs.`}</p>` : ''}
 <p class="small"><a href="/sample">See a sample brief</a></p></aside>`;
@@ -422,7 +528,7 @@ ${prices ? `<p class="su-price">${free ? `Your first reviewed brief is free, one
 export function renderCheckEmail({ csrf, email, pending }) {
   return layout({ title: 'Check your email', csrf, body: `<section class="panel narrow"><header><h2>Check your email</h2></header>
 <div class="form"><p>We sent a link to <strong>${esc(email)}</strong>. Open it to confirm your email, then sign in to set up your company.</p>
-${pending ? `<p>After that we bring you back to <strong>${esc(displayTitle(pending.title))}</strong> for your free brief.</p>` : ''}
+${pending ? `<p>After that we bring you back to <strong>${esc(tenderParts(pending.title).headline)}</strong> for your free brief.</p>` : ''}
 <p class="small muted">No email after a few minutes? Check spam, or sign in and we will send a new link.</p>
 <div><a class="btn primary" href="/signin">Go to sign in</a></div></div></section>` });
 }
@@ -440,11 +546,16 @@ export function renderProfile({ csrf, message, notice, noticeKind = 'ok', values
   const v = (name) => esc(values[name] ?? '');
   const chosen = new Set(values.categories ?? []);
   const rows = existing ? 3 : 6;
-  const projects = Array.from({ length: rows }, (_, i) => `<div class="proj">
+  // Two project rows show (one when adding to an existing profile); the rest wait behind "Add more", opened when filled.
+  const shown = existing ? 1 : 2;
+  const filledLater = Array.from({ length: rows - shown }, (_, i) => i + shown).some((i) => ['title', 'agency', 'value', 'gebiz'].some((f) => String(values[`project_${f}_${i}`] ?? '').trim()));
+  const projectRow = (_, i) => `<div class="proj">
 <input aria-label="Project ${i + 1} title" name="project_title_${i}" placeholder="Project title" maxlength="250" value="${v(`project_title_${i}`)}">
 <input aria-label="Project ${i + 1} agency" name="project_agency_${i}" placeholder="Agency or client" maxlength="250" value="${v(`project_agency_${i}`)}">
 <input aria-label="Project ${i + 1} value in S$" name="project_value_${i}" placeholder="Value S$" inputmode="decimal" value="${v(`project_value_${i}`)}">
-<input aria-label="Project ${i + 1} GeBIZ tender number" name="project_gebiz_${i}" placeholder="GeBIZ tender no." maxlength="100" value="${v(`project_gebiz_${i}`)}"></div>`).join('');
+<input aria-label="Project ${i + 1} GeBIZ tender number" name="project_gebiz_${i}" placeholder="GeBIZ tender no." maxlength="100" value="${v(`project_gebiz_${i}`)}"></div>`;
+  const all = Array.from({ length: rows }, projectRow);
+  const projects = `${all.slice(0, shown).join('')}<details class="more-projects"${filledLater ? ' open' : ''}><summary>Add more projects</summary>${all.slice(shown).join('')}</details>`;
   const listed = existing?.length ? `<ul class="feed">${existing.map((p) => `<li><div class="line"><strong>${esc(p.title)}</strong>${p.verified ? '<span class="chip done">✓ Checked</span>' : '<span class="chip warning">Not checked yet</span>'}</div></li>`).join('')}</ul>` : '';
   return layout({ title: 'Company profile', csrf, company, signedIn: true, body: `<div><h1>${existing ? 'Your company profile' : 'Tell us about your company'}</h1><p class="sub">${existing ? 'Changes apply to your next matches and briefs.' : 'You do this once. We use it to match tenders and to write your briefs.'}</p></div>
 ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></header><form class="form" method="post" action="/profile/assist">${hidden('csrf', csrf)}
@@ -462,13 +573,13 @@ ${existing ? `<section class="panel"><header><h2>Find my GeBIZ awards</h2></head
 <span class="hint">Our AI reads it into the form below, and we look up GeBIZ awards under your company name. Nothing is saved until you check it and press Save.</span>
 <div><button type="submit">Fill in the form</button></div></form></section>`}
 <section class="panel"><form class="form" method="post" action="/profile">${hidden('csrf', csrf)}${banner(message)}${notice ? banner(notice, noticeKind) : ''}
-<label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}>
-<label for="uen">UEN</label><input id="uen" name="uen" maxlength="10" autocapitalize="characters" ${existing ? 'readonly' : 'required'} value="${v('uen')}"><span class="hint">${existing ? 'To correct your UEN, contact Tender Desk.' : 'Your company\'s Unique Entity Number, as registered with ACRA. One account per company.'}</span>
+<div class="pair"><div class="field"><label for="cname">Company name</label><input id="cname" name="name" maxlength="150" required value="${v('name')}"${existing ? ' readonly' : ''}></div>
+<div class="field"><label for="uen">UEN</label><input id="uen" name="uen" maxlength="10" autocapitalize="characters" ${existing ? 'readonly' : 'required'} value="${v('uen')}"><span class="hint">${existing ? 'To correct it, contact Tender Desk.' : 'As registered with ACRA. One account per company.'}</span></div></div>
 <label for="capabilities">What your company does</label><textarea id="capabilities" name="capabilities" rows="3" maxlength="4000" required>${v('capabilities')}</textarea>
 <fieldset><legend>Categories you bid in</legend><div class="cats">${tenderCategories.map((c) => `<label><input type="checkbox" name="categories" value="${c}"${chosen.has(c) ? ' checked' : ''}>${esc(categoryNames[c])}</label>`).join('')}</div></fieldset>
-<label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}"><span class="hint">People who would work on a contract, including subcontractors you use regularly.</span>
-<label for="max">Largest single contract you could take on (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">${values.largest_mentioned ? `Your text mentions a contract of S$${esc(values.largest_mentioned)}. ` : ''}We compare this with past award sizes to flag tenders that may be too big.</span>
-<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count. For government work, add the GeBIZ tender number so we can check it against public award records; for private work we may ask for proof. Only checked projects can be cited in a brief.</span><span class="hint">After you save, we check each project against GeBIZ award records (a tender number makes this fastest) and mark it ✓ Checked here.</span>${listed}${projects}</fieldset>
+<div class="pair"><div class="field"><label for="team">Team size</label><input id="team" name="team_size" inputmode="numeric" required value="${v('team_size')}"><span class="hint">Including subcontractors you use regularly.</span></div>
+<div class="field"><label for="max">Largest contract you could take on (S$)</label><input id="max" name="max_contract" inputmode="decimal" required value="${v('max_contract')}"><span class="hint">${values.largest_mentioned ? `Your text mentions S$${esc(values.largest_mentioned)}. ` : ''}Used to flag tenders that may be too big.</span></div></div>
+<fieldset><legend>${existing ? 'Add past projects' : 'Past projects'}</legend><span class="hint">Private-sector projects count too. Add the GeBIZ tender number for government work: we check projects against award records, and only checked projects can be cited in a brief.</span>${listed}${projects}</fieldset>
 <div><button class="primary" type="submit">Save profile</button></div></form></section>` });
 }
 
@@ -504,23 +615,28 @@ export function renderCheckout({ tender, company, csrf, refusal, terms, category
   const keep = tender.pasted ? `${hidden('title', tender.title)}${hidden('agency', tender.agency)}${hidden('text', tender.text)}` : hidden('tender_no', tender.tender_no);
   const perBrief = credits?.perBrief ?? 1;
   const short = credits && credits.balance < perBrief;
-  return layout({ title: 'Checkout', csrf, company, body: `<div><p class="eyebrow">Reviewed brief</p><h1>${esc(tender.title)}</h1>
-<p class="sub">${esc(tender.agency ?? '')}${tender.pasted ? '' : ` · <span class="num">${esc(tender.tender_no)}</span>`}</p></div>
-${refusal ? banner(refusal) : `${banner(notice)}
-${gaps.length ? `<section class="panel"><header><h2>Before you spend a credit</h2><span class="muted small">A brief is only as good as your profile</span></header><div class="form">
-<ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
-<div><a class="btn outline" href="/profile">Improve your profile</a> <span class="muted small">or go ahead below.</span></div></div></section>` : ''}
-<section class="panel"><dl class="props"><div><dt>Brief</dt><dd>Bid or no-bid, a suggested price range when there are enough comparable awards, who usually wins, a requirements check and questions to ask</dd></div>
-${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>For</dt><dd>${esc(company)}</dd></div><div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
-<div><dt>When</dt><dd>Usually within one business day, after a person reviews it. If we decline it, the credit comes back.</dd></div>
-<div><dt>Example</dt><dd><a href="/sample">See a sample brief</a></dd></div></dl>
+  const meta = [tender.agency ? esc(tender.agency) : '', tender.pasted ? '' : `<span class="num">${esc(tender.tender_no)}</span>`].filter(Boolean).join(' · ');
+  // One card: what it costs, when it arrives, anything to fix first, and the one button. Requirements are optional and fold away.
+  const card = refusal ? banner(refusal) : `${banner(notice)}
+<section class="panel co-card" aria-labelledby="co-heading"><header><h2 id="co-heading">Your reviewed brief</h2><span class="muted small">for ${esc(company)}</span></header>
+<dl class="co-lines">${tender.closes_at ? `<div><dt>Closes</dt><dd>${esc(day(tender.closes_at))}</dd></div>` : ''}<div><dt>Cost</dt><dd>Uses ${creditWord(perBrief)} · you have ${credits ? credits.balance : '?'}</dd></div>
+<div><dt>Ready</dt><dd>Usually within one business day, after a person reviews it</dd></div>
+<div><dt>If we decline</dt><dd>The credit comes back</dd></div></dl>
+${gaps.length ? `<div class="co-gaps" role="note"><p><strong>Before you spend a credit</strong></p><ul class="bullets">${gaps.map((g) => `<li>${esc(g.message)}</li>`).join('')}</ul>
+<p class="small"><a href="/profile">Improve your profile</a> or go ahead below.</p></div>` : ''}
 ${short ? `<div class="form"><p class="banner">You need ${creditWord(perBrief)} for a reviewed brief.</p><div><a class="btn primary" href="/credits">Buy credits</a></div></div>`
     : `<form class="form" method="post" action="/checkout">${hidden('csrf', csrf)}${keep}${hidden('terms', (terms ?? []).join(', '))}${hidden('category', category)}
-<label for="requirements">Key requirements from the tender <span class="hint">(optional, up to 4000 characters: we check each one against your projects)</span></label>
-<textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(requirements ?? '')}</textarea>
+<details class="co-reqs"${requirements ? ' open' : ''}><summary>Add the tender's key requirements (optional)</summary>
+<label for="requirements">Key requirements from the tender <span class="hint">(up to 4000 characters: we check each one against your projects)</span></label>
+<textarea id="requirements" name="requirements" rows="5" maxlength="4000">${esc(requirements ?? '')}</textarea></details>
 ${outside ? `<p class="banner">This tender is outside the categories in your profile. A brief may well say not to bid, and the credit is not returned for that.</p>
 <label class="tick"><input type="checkbox" name="confirm_outside" value="yes" required> I understand and still want a brief on this tender</label>` : ''}
-<div><button class="primary" type="submit">Use ${creditWord(perBrief)}</button></div></form>`}</section>`}
+<div><button class="primary co-pay" type="submit">Use ${creditWord(perBrief)}</button></div></form>`}</section>`;
+  return layout({ title: 'Checkout', csrf, company, wide: true, body: `<div class="ck-head">${titleBlock(tender.title)}${meta ? `<p class="sub">${meta}</p>` : ''}</div>
+<div class="ck-grid"><div class="ck-main">${card}</div>
+<aside class="panel ck-offer" aria-labelledby="co-what"><h2 id="co-what">What the brief contains</h2>
+<ul class="bullets co-contains"><li>Bid or no-bid, and why</li><li>A suggested price range, when there are enough comparable awards</li><li>Who usually wins this work</li><li>Your requirements checked against your projects</li><li>Questions to ask the agency</li></ul>
+<p class="small"><a href="/sample">See a sample brief</a></p></aside></div>
 <p><a href="/home">Back to home</a></p>` });
 }
 
@@ -626,7 +742,7 @@ ${request.status === 'requested' ? `<form method="post" action="/requests/${esc(
   const steps = stage === undefined ? '' : `<ol class="steps">${['Requested', request.status === 'needs_info' ? 'Needs your reply' : 'In review', 'Brief ready'].map((label, at) =>
     `<li class="${at < stage ? 'done' : at === stage ? `current${request.status === 'needs_info' ? ' waiting' : ''}` : ''}"${at === stage ? ' aria-current="step"' : ''}>${label}</li>`).join('')}</ol>`;
   const paidBanner = justPaid ? `<p class="banner ok" role="status">Request received · 1 credit spent · ${esc(request.reference)} · ${esc(day(request.created_at))}</p>` : '';
-  return layout({ title: request.reference, csrf, company, body: `<div class="ck-head"><h1>${esc(displayTitle(request.title))}</h1>
+  return layout({ title: request.reference, csrf, company, body: `<div class="ck-head">${titleBlock(request.title)}
 <p class="sub">${request.reference === 'SAMPLE' ? '' : `<span class="num">${esc(request.reference)}</span> · `}${esc(request.agency ?? '')}${request.source === 'feed' ? ` · <span class="num">${esc(request.tender_no)}</span>` : ''}${request.closes_at ? ` · <span class="nowrap">closes ${esc(day(request.closes_at))}</span>` : ''}</p></div>
 ${paidBanner}${steps}${body}<p><a href="/home">Back to home</a></p>` });
 }
